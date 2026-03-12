@@ -92,8 +92,19 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
-   ALPHAHEDGE — zinc palette (neutral dark, zero blue tint)
-   ══════════════════════════════════════════════════════════════ */
+   URJAA — zinc palette (neutral dark, zero blue tint)
+   ──────────────────────────────────────────────────────────────
+   zinc-950   #09090b   body / deepest base
+   zinc-900   #18181b   panels / sidebar / cards
+   zinc-800   #27272a   insets / toolbar / inputs
+   zinc-700   #3f3f46   border highlight
+   zinc-600   #52525b   disabled / placeholder text
+   zinc-400   #a1a1aa   muted / secondary text
+   zinc-50    #fafafa   primary text
+   accent     #FF9800   amber
+   green      #10b981   emerald
+   red        #f43f5e   rose
+═══════════════════════════════════════════════════════════════ */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -107,31 +118,32 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg-base:       #0d0d0d;
-  --bg-panel:      #141414;
-  --bg-bar:        #141414;
-  --bg-inset:      #1a1a1a;
-  --border:        rgba(255, 255, 255, 0.08);
-  --border-hi:     rgba(255, 255, 255, 0.12);
-  --accent:        #FF9800;
+  /* TradingView-style tokens — refined pro-dark tint */
+  --bg-base:       #0d0d0d;   /* deeper main content background */
+  --bg-panel:      #141414;   /* sidebar / header / panels */
+  --bg-bar:        #141414;   /* toolbar / navbar */
+  --bg-inset:      #1a1a1a;   /* insets / inputs */
+  --border:        rgba(255, 255, 255, 0.08);   /* softer dividers / borders */
+  --border-hi:     rgba(255, 255, 255, 0.12);   /* highlighted borders */
+  --accent:        #FF9800;   /* TradingView amber */
   --accent-dim:    rgba(255, 152, 0, 0.10);
   --accent-border: rgba(255, 152, 0, 0.35);
-  --text-hi:       #E2E8F0;
-  --text-mid:      #9CA3AF;
-  --text-lo:       #4B5563;
-  --green:         #2ebd85;
-  --red:           #f23645;
+  --text-hi:       #E2E8F0;   /* brighter primary text for contrast against deep bg */
+  --text-mid:      #9CA3AF;   /* readable secondary text */
+  --text-lo:       #4B5563;   /* placeholder / disabled */
+  --green:         #2ebd85;   /* TradingView green */
+  --red:           #f23645;   /* TradingView red */
 
-  /* shadcn/ui CSS variables */
-  --background: 0 0% 5%;
-  --foreground: 210 20% 90%;
-  --card: 0 0% 8%;
+  /* shadcn/ui CSS variables — adapted for deep dark theme */
+  --background: 0 0% 5%;            /* #0d0d0d */
+  --foreground: 210 20% 90%;        /* #E2E8F0 */
+  --card: 0 0% 8%;                  /* #141414 */
   --card-foreground: 210 20% 90%;
-  --popover: 0 0% 8%;
+  --popover: 0 0% 8%;               /* #141414 */
   --popover-foreground: 210 20% 90%;
-  --primary: 36 100% 50%;
+  --primary: 36 100% 50%;           /* #FF9800 */
   --primary-foreground: 0 0% 10%;
-  --secondary: 0 0% 10%;
+  --secondary: 0 0% 10%;            /* #1a1a1a */
   --secondary-foreground: 210 20% 90%;
   --muted: 0 0% 10%;
   --muted-foreground: 215 14% 60%;
@@ -139,10 +151,10 @@
   --accent-foreground: 0 0% 10%;
   --destructive: 355 81% 56%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 15%;
+  --border: 0 0% 15%;               /* ~rgba(255,255,255,0.1) */
   --input: 0 0% 15%;
   --ring: 36 100% 50%;
-  --radius: 0.5rem;
+  --radius: 0.5rem;                 /* slightly more rounded by default */
   --sidebar: rgba(13, 13, 13, 0.7);
   --sidebar-foreground: #E2E8F0;
   --sidebar-primary: #FF9800;
@@ -165,6 +177,12 @@ body {
   overflow: hidden;
 }
 
+#root {
+  position: relative;
+  min-height: 100vh;
+  background: var(--bg-base);
+}
+
 ::selection {
   @apply bg-amber-500/20 text-amber-100;
 }
@@ -183,6 +201,7 @@ body {
   --glass-shadow-deep: 0 24px 80px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.12) inset;
 }
 
+/* ── Surface classes ─────────────────────────────────────────── */
 .glass {
   background: var(--glass-panel-bg);
   backdrop-filter: var(--glass-blur);
@@ -219,6 +238,8 @@ body {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
 }
+
+/* ── Sidebar glass ────────────────────────────────────────────── */
 .glass-sidebar {
   background: rgba(23, 23, 23, 0.92);
   backdrop-filter: var(--glass-blur-strong);
@@ -226,6 +247,8 @@ body {
   border-right: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
+
+/* ── shadcn sidebar panel glass ──────────────────────────────── */
 [data-sidebar="sidebar"] {
   background: rgba(23, 23, 23, 0.92);
   backdrop-filter: var(--glass-blur-strong);
@@ -233,6 +256,8 @@ body {
   border-right: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
+
+/* ── Navbar / top-bar glass ───────────────────────────────────── */
 .glass-navbar {
   background: rgba(23, 23, 23, 0.95);
   backdrop-filter: var(--glass-blur);
@@ -240,6 +265,8 @@ body {
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 1px 0 rgba(255,255,255,0.12), 0 4px 20px rgba(0,0,0,0.35);
 }
+
+/* ── Container / card glass ───────────────────────────────────── */
 .glass-container {
   background: var(--glass-panel-bg);
   backdrop-filter: var(--glass-blur);
@@ -247,6 +274,8 @@ body {
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
+
+/* ── Dropdown ────────────────────────────────────────────────── */
 .glass-dropdown {
   background: rgba(15, 18, 28, 0.72);
   backdrop-filter: var(--glass-blur-strong);
@@ -255,11 +284,23 @@ body {
   box-shadow: var(--glass-shadow-deep);
 }
 
-.search-result-row:hover { background: rgba(255, 255, 255, 0.05); }
-.chart-search-row:hover { background: rgba(255, 255, 255, 0.05) !important; }
-.labeled-select-option:hover { background: rgba(255, 255, 255, 0.05) !important; }
-.oi-select-option:hover { background: rgba(255, 255, 255, 0.05) !important; }
+.search-result-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
 
+.chart-search-row:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.labeled-select-option:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.oi-select-option:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ── Active nav item ──────────────────────────────────────────── */
 [data-active=true],
 [data-sidebar="menu-button"][data-active=true] {
   background: #2b2b2b !important;
@@ -273,8 +314,10 @@ body {
   font-family: var(--font-family-sans);
 }
 
+/* ── Divider ──────────────────────────────────────────────────── */
 .glass-divider { border: 0; border-top: 1px solid #2a2a2a; }
 
+/* ── Tabs ─────────────────────────────────────────────────────── */
 .tab-active {
   background: var(--accent-dim);
   border: 1px solid var(--accent-border);
@@ -299,6 +342,7 @@ body {
   border-color: #2a2a2a;
 }
 
+/* ── Input ────────────────────────────────────────────────────── */
 .glass-input {
   background: #2a2a2a;
   border: 1px solid #2a2a2a;
@@ -314,19 +358,24 @@ body {
   background: #2a2a2a;
 }
 
+/* ── Hide number input spinners ──────────────────────────────── */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
 
+/* ── Scrollbars ───────────────────────────────────────────────── */
 ::-webkit-scrollbar        { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: #333333; border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: #4A4E5C; }
 
-.chart-mono, .chart-mono * {
+/* ── Chart monospace ──────────────────────────────────────────── */
+.chart-mono,
+.chart-mono * {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif !important;
 }
 
+/* ── Button reset ─────────────────────────────────────────────── */
 button {
   border: none;
   background: none;
@@ -337,6 +386,7 @@ button {
 }
 button:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
 
+/* ── Search modal animations ─────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -345,6 +395,8 @@ button:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
+
+/* ── Price flash ──────────────────────────────────────────────── */
 @keyframes flash-up {
   0%   { background: rgba(16,185,129,0.28); }
   100% { background: transparent; }
@@ -356,6 +408,7 @@ button:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 
 .flash-up   { animation: flash-up   0.6s ease-out forwards; }
 .flash-down { animation: flash-down 0.6s ease-out forwards; }
 
+/* ── Amber blink cursor ───────────────────────────────────────── */
 @keyframes blink-cursor {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
@@ -396,3 +449,4 @@ button:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+
