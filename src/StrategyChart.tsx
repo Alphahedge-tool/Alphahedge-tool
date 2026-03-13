@@ -574,20 +574,93 @@ const INITIAL_VISIBLE = 120;
 const UNDERLYING_COLOR  = '#60a5fa';
 const UNDERLYING_COLORS = ['#60a5fa', '#fb923c', '#34d399', '#a78bfa', '#f472b6'];
 
-// Convert any expiry format to YYYYMMDD (required by Nubra WS subscription)
-const MONTH_MAP: Record<string, string> = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12' };
-function toYYYYMMDD(exp: string): string {
-  if (/^\d{8}$/.test(exp)) return exp;
-  const m = exp.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
-  if (m) { const yy = m[3].length === 2 ? `20${m[3]}` : m[3]; return `${yy}${MONTH_MAP[m[2]] ?? '00'}${m[1].padStart(2,'0')}`; }
-  const m2 = exp.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m2) return `${m2[1]}${m2[2]}${m2[3]}`;
-  return exp;
-}
 const CE_COLORS    = ['#2ebd85', '#4ade80', '#86efac', '#a3e635'];
 const PE_COLORS    = ['#f23645', '#fb923c', '#f472b6', '#e879f9'];
 const DELTA_COLORS = ['#f59e0b', '#fbbf24', '#fcd34d'];
 const IV_COLORS    = ['#a78bfa', '#c4b5fd', '#ddd6fe'];
+const ATM_IV_COLOR = '#f97316';
+
+// ── ATM IV helpers (mirrors OIProfileView) ────────────────────────────────────
+function expiryToMs(exp: string): number {
+  // YYYYMMDD → ms
+  if (/^\d{8}$/.test(exp)) {
+    return Date.UTC(+exp.slice(0,4), +exp.slice(4,6)-1, +exp.slice(6,8));
+  }
+  // "DD Mon YY" e.g. "17 Mar 26"
+  const MMAP: Record<string,number> = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  const m = exp.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
+  if (m) {
+    const yy = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    return Date.UTC(yy, MMAP[m[2]] ?? 0, +m[1]);
+  }
+  // "YYYY-MM-DD"
+  const m2 = exp.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m2) return Date.UTC(+m2[1], +m2[2]-1, +m2[3]);
+  return 0;
+}
+
+function toNubraChainValue(underlying: string, expiryMs: number): string {
+  const d = new Date(expiryMs);
+  const yyyy = d.toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' });
+  const mm   = d.toLocaleString('en-IN', { month: '2-digit', timeZone: 'Asia/Kolkata' });
+  const dd   = d.toLocaleString('en-IN', { day: '2-digit', timeZone: 'Asia/Kolkata' });
+  return `${underlying}_${yyyy}${mm}${dd}`;
+}
+
+async function fetchAtmIvChart(
+  underlying: string,
+  exchange: string,
+  expiryMs: number,
+  startDateStr: string,
+): Promise<LineData[]> {
+  const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+  const deviceId     = localStorage.getItem('nubra_device_id') ?? 'web';
+  const rawCookie    = localStorage.getItem('nubra_raw_cookie') ?? '';
+  if (!sessionToken) return [];
+
+  const chainValue = toNubraChainValue(underlying, expiryMs);
+  // 09:15 IST = 03:45 UTC
+  const startDate = `${startDateStr}T03:45:00.000Z`;
+  // end = now in IST, capped at 15:30 IST (10:00 UTC) for the current day
+  const nowUtc = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const nowIst = new Date(nowUtc.getTime() + istOffsetMs);
+  const istHHMM = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+  const marketCloseIst = 15 * 60 + 30; // 15:30
+  const endDate = istHHMM > marketCloseIst
+    ? `${nowIst.toISOString().slice(0, 10)}T10:00:00.000Z` // 15:30 IST = 10:00 UTC
+    : nowUtc.toISOString();
+
+  const res = await fetch('/api/nubra-timeseries', {
+    method: 'POST',
+    headers: {
+      'x-session-token': sessionToken,
+      'x-device-id':     deviceId,
+      'x-raw-cookie':    rawCookie,
+      'Content-Type':    'application/json',
+    },
+    body: JSON.stringify({
+      chart: 'ATM_Volatility_vs_Spot',
+      query: [{
+        exchange,
+        type: 'CHAIN',
+        values: [chainValue],
+        fields: ['atm_iv'],
+        interval: '1m',
+        intraDay: false,
+        realTime: false,
+        startDate,
+        endDate,
+      }],
+    }),
+  });
+  if (!res.ok) return [];
+  const json = await res.json();
+  const pts: { ts: number; v: number }[] =
+    json?.result?.[0]?.values?.[0]?.[chainValue]?.atm_iv ?? [];
+  // ts is in nanoseconds → divide by 1e9 for Unix seconds (lightweight-charts Time)
+  return pts.map(p => ({ time: Math.round(p.ts / 1e9) as unknown as Time, value: p.v * 100 }));
+}
 
 function optionColor(type: 'CE' | 'PE', idx: number) {
   return type === 'CE' ? CE_COLORS[idx % CE_COLORS.length] : PE_COLORS[idx % PE_COLORS.length];
@@ -648,10 +721,12 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [showMtm,     setShowMtm]     = useState(true);
   const [showDelta,   setShowDelta]   = useState(false);
   const [showIv,      setShowIv]      = useState(false);
+  const [showAtmIv,   setShowAtmIv]   = useState(false);
   const showDeltaRef = useRef(showDelta);
   const showIvRef    = useRef(showIv);
   showDeltaRef.current = showDelta;
   showIvRef.current    = showIv;
+  const atmIvSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
 
   const uniqueLegs = legs.filter((leg, i, arr) =>
     arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
@@ -887,7 +962,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           priceScaleId: scaleId,
         }, 0));
         chart.priceScale(scaleId).applyOptions({
-          position: 'right',
           scaleMargins: { top: 0.04, bottom: 0.52 },
           visible: true,
           borderColor: '#2a2a2a',
@@ -1425,7 +1499,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const t = nowUnix as unknown as Time;
       const ltp   = d.ltp != null && d.ltp > 0 ? d.ltp / 100 : 0;
       const delta = d.delta ?? 0;
-      const iv    = d.iv != null && d.iv > 0 ? d.iv : 0;
+      const iv    = d.iv != null && d.iv > 0 ? d.iv * 100 : 0;
 
       const freshLegs = legsRef.current.filter((leg, i, arr) =>
         arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
@@ -1632,7 +1706,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       }
       if (showIvRef.current && snap.iv != null) {
         const ivPts = acc.ivs.get(info.legKey) ?? [];
-        upsert(ivPts, ss.ivs.get(info.legKey) ?? null, { time: t, value: snap.iv });
+        upsert(ivPts, ss.ivs.get(info.legKey) ?? null, { time: t, value: snap.iv * 100 });
         acc.ivs.set(info.legKey, ivPts);
       }
       maybeAutoScroll();
@@ -1655,7 +1729,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         }
         if (showIvRef.current && md.iv != null) {
           const ivPts = acc.ivs.get(info.legKey) ?? [];
-          upsert(ivPts, ss.ivs.get(info.legKey) ?? null, { time: t, value: md.iv });
+          upsert(ivPts, ss.ivs.get(info.legKey) ?? null, { time: t, value: md.iv * 100 });
           acc.ivs.set(info.legKey, ivPts);
         }
         maybeAutoScroll();
@@ -1821,6 +1895,73 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     }
   }, [showIv, legsKey, ocSymbol, ocExchange, isHistoricalMode, 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── ATM IV chart (timeseries) — one series per underlying ────────────────
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !chartReady) return;
+
+    const seriesMap = atmIvSeriesRef.current;
+
+    if (!showAtmIv) {
+      for (const s of seriesMap.values()) { try { chart.removeSeries(s); } catch { /**/ } }
+      seriesMap.clear();
+      return;
+    }
+
+    const underlyingInfos = resolveUnderlyings().filter(u => u.source !== 'MCX');
+    if (underlyingInfos.length === 0) return;
+
+    const today = lastTradingDay();
+    const startDate = (uniqueLegs.map(l => l.entryDate).filter(Boolean).sort().at(0) ?? today) as string;
+    const now = Date.now();
+    const ATM_IV_COLORS = [ATM_IV_COLOR, '#06b6d4', '#84cc16'];
+
+    // Remove series for underlyings no longer present
+    for (const sym of seriesMap.keys()) {
+      if (!underlyingInfos.find(u => u.symbol === sym)) {
+        try { chart.removeSeries(seriesMap.get(sym)!); } catch { /**/ }
+        seriesMap.delete(sym);
+      }
+    }
+
+    for (const [idx, u] of underlyingInfos.entries()) {
+      // Nearest expiry for legs of this underlying
+      const legsForUnderlying = uniqueLegs.filter(l => l.symbol === u.symbol || uniqueLegs.every(x => x.symbol === l.symbol));
+      const sortedExpiries = [...new Set(legsForUnderlying.map(l => l.expiry))]
+        .map(e => ({ expiry: e, ms: expiryToMs(e) }))
+        .filter(x => x.ms > 0)
+        .sort((a, b) => Math.abs(a.ms - now) - Math.abs(b.ms - now));
+      if (sortedExpiries.length === 0) continue;
+      const { ms: expiryMs } = sortedExpiries[0];
+
+      // Create series if not yet exists for this underlying
+      if (!seriesMap.has(u.symbol)) {
+        const color = ATM_IV_COLORS[idx % ATM_IV_COLORS.length];
+        const s = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 2,
+          priceScaleId: `atm-iv-${u.symbol}`,
+          title: `ATM IV ${u.symbol}`,
+        }, 2);
+        s.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+        seriesMap.set(u.symbol, s);
+      }
+
+      fetchAtmIvChart(u.symbol, u.exchange, expiryMs, startDate)
+        .then(pts => {
+          const s = seriesMap.get(u.symbol);
+          if (pts.length && s) s.setData(sortDedup(pts));
+        })
+        .catch(e => console.warn(`[StrategyChart] ATM IV fetch failed (${u.symbol})`, e.message));
+    }
+
+    return () => {
+      for (const s of seriesMap.values()) { try { chart.removeSeries(s); } catch { /**/ } }
+      seriesMap.clear();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAtmIv, chartReady, uniqueLegs.map(l => `${l.symbol}:${l.expiry}`).join(','), ocSymbol, ocExchange]);
+
   const hasContent = (!!ocSymbol || uniqueLegs.length > 0) && uniqueLegs.length > 0;
 
   return (
@@ -1843,7 +1984,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '6px 10px', borderRadius: 8,
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
-              fontSize: 14, fontWeight: 700, color: '#CBD5E1', letterSpacing: '0.02em',
+              fontSize: 13, fontWeight: 600, color: '#CBD5E1', letterSpacing: '0.01em',
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 17l5-6 4 4 6-8 3 3" />
@@ -1892,6 +2033,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               { key: 'mtm',     label: 'MTM',     color: '#26a69a',         on: showMtm,     set: setShowMtm },
               { key: 'delta',   label: 'Delta',   color: DELTA_COLORS[0],  on: showDelta,   set: setShowDelta },
               { key: 'iv',      label: 'IV',      color: IV_COLORS[0],     on: showIv,      set: setShowIv },
+              { key: 'atm-iv',  label: 'ATM IV',  color: ATM_IV_COLOR,     on: showAtmIv,   set: setShowAtmIv },
             ] as const).map(({ key, label, on, set }) => (
               <button
                 key={key}
@@ -1968,8 +2110,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                 <path d="M5 12l7-7 7 7"/>
                 <line x1="4" y1="20" x2="20" y2="20"/>
               </svg>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#D1D4DC', letterSpacing: '0.06em' }}>POSITIONS</span>
-              <span style={{ fontSize: 10, color: '#565A6B' }}>{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 13, fontWeight: 400, color: '#D1D4DC', letterSpacing: '0.06em', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>POSITIONS</span>
+              <span style={{ fontSize: 13, fontWeight: 400, color: '#565A6B', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
             </div>
             <button
               onClick={() => setShowPositions(false)}
@@ -1991,7 +2133,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
             borderBottom: '1px solid rgba(255,255,255,0.06)',
           }}>
             {['B/S', 'Instrument', 'Lots', 'Entry', 'Time'].map((h, i) => (
-              <span key={i} style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</span>
+              <span key={i} style={{ fontSize: 13, fontWeight: 400, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i >= 2 ? 'right' : 'left', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>{h}</span>
             ))}
           </div>
 
@@ -2021,7 +2163,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                     background: isBuy ? 'rgba(38,166,154,0.18)' : 'rgba(242,54,69,0.18)',
                     border: `1px solid ${isBuy ? 'rgba(38,166,154,0.45)' : 'rgba(242,54,69,0.45)'}`,
                   }}>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: isBuy ? '#26a69a' : '#f23645', letterSpacing: '0.05em' }}>
+                    <span style={{ fontSize: 13, fontWeight: 400, color: isBuy ? '#26a69a' : '#f23645', letterSpacing: '0.05em', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                       {isBuy ? 'BUY' : 'SELL'}
                     </span>
                   </div>
@@ -2029,26 +2171,26 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                   {/* Instrument */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: legColor, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                       {leg.strike} <span style={{ color: leg.type === 'CE' ? '#26a69a' : '#f23645' }}>{leg.type}</span>
                     </span>
-                    <span style={{ fontSize: 9, color: '#4B5563', fontWeight: 500 }}>
+                    <span style={{ fontSize: 13, fontWeight: 400, color: '#4B5563', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                       {leg.expiry ? `${leg.expiry.slice(6, 8)}/${leg.expiry.slice(4, 6)}` : ''}
                     </span>
                   </div>
 
                   {/* Lots */}
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textAlign: 'right', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 13, fontWeight: 400, color: '#9CA3AF', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                     ×{leg.lots}
                   </span>
 
                   {/* Entry price */}
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#E2E8F0', textAlign: 'right', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                     ₹{leg.price.toFixed(2)}
                   </span>
 
                   {/* Entry time */}
-                  <span style={{ fontSize: 10, color: leg.entryTime ? '#e0a800' : '#374151', textAlign: 'right', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 13, fontWeight: 400, color: leg.entryTime ? '#e0a800' : '#374151', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
                     {leg.entryTime ? leg.entryTime.slice(0, 5) : '—'}
                   </span>
                 </div>
