@@ -924,6 +924,12 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     const incoming: Leg[] = (item?.legs ?? []).map((l: any) => ({
       ...l,
       id: ++legIdRef.current,
+      price:      l.price,
+      entrySpot:  l.entrySpot,
+      entryDate:  l.entryDate,
+      entryTime:  l.entryTime,
+      currLtp:    0,   // will be filled by orderbook fetch or live feed
+      currGreeks: l.currGreeks ?? { delta: 0, theta: 0, vega: 0, gamma: 0, iv: 0 },
     }));
     setStrategyLegs(prev => ({ ...prev, [activeStrategy]: incoming }));
     setLegs(incoming);
@@ -934,6 +940,33 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     if (firstEx) setChartExchange(firstEx);
     if (item?.oc_asset_type) setOcAssetType(item.oc_asset_type);
     setCloudOpen(false);
+
+    // If WS not connected, fetch live LTP via orderbook API for each leg
+    const wsOpen = mtmWsRef.current?.readyState === WebSocket.OPEN;
+    if (!wsOpen) {
+      const token    = localStorage.getItem('nubra_session_token') ?? '';
+      const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
+      if (token) {
+        incoming.forEach(leg => {
+          if (!leg.refId) return;
+          fetch(`/api/nubra-orderbook?ref_id=${leg.refId}&levels=1`, {
+            headers: { 'x-session-token': token, 'x-device-id': deviceId },
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              const ltp = data?.orderBook?.ltp;
+              if (!ltp) return;
+              const liveLtp = ltp / 100; // paisa → rupees
+              setLegs(prev => prev.map(l => l.id === leg.id ? { ...l, currLtp: liveLtp } : l));
+              setStrategyLegs(prev => ({
+                ...prev,
+                [activeStrategy]: (prev[activeStrategy] ?? []).map(l => l.id === leg.id ? { ...l, currLtp: liveLtp } : l),
+              }));
+            })
+            .catch(() => {/* silent */});
+        });
+      }
+    }
   }, [activeStrategy]);
 
   const handleDeleteStrategy = useCallback(async (id?: string) => {
@@ -2421,6 +2454,70 @@ export default function App() {
   const [setupTempToken, setSetupTempToken] = useState('');
 
   const nubraLoggedIn = !!nubraSession;
+
+  // ── Dhan ──────────────────────────────────────────────────────────────────
+  const [dhanAccessToken, setDhanAccessToken] = useState(() => localStorage.getItem('dhan_access_token') ?? '');
+  const [dhanLoggedIn, setDhanLoggedIn]       = useState(() => !!localStorage.getItem('dhan_access_token'));
+  const [showDhanPanel, setShowDhanPanel]     = useState(false);
+  const [dhanLoading, setDhanLoading]         = useState(false);
+  const [dhanError, setDhanError]             = useState('');
+  const [dhanLoginUrl, setDhanLoginUrl]       = useState('');
+  const [dhanTokenInput, setDhanTokenInput]   = useState('');
+
+  const handleDhanGenerateConsent = async () => {
+    setDhanLoading(true); setDhanError(''); setDhanLoginUrl('');
+    try {
+      const res = await fetch('/api/dhan-consent', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to generate consent');
+      setDhanLoginUrl(data.loginUrl);
+    } catch (e: unknown) {
+      setDhanError((e as Error).message);
+    } finally {
+      setDhanLoading(false);
+    }
+  };
+
+  const handleDhanConsumeToken = async () => {
+    if (!dhanTokenInput.trim()) return;
+    setDhanLoading(true); setDhanError('');
+    try {
+      const res = await fetch('/api/dhan-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tokenId: dhanTokenInput.trim() }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to get access token');
+      localStorage.setItem('dhan_access_token', data.accessToken);
+      setDhanAccessToken(data.accessToken);
+      setDhanLoggedIn(true);
+      setShowDhanPanel(false);
+      setDhanTokenInput('');
+    } catch (e: unknown) {
+      setDhanError((e as Error).message);
+    } finally {
+      setDhanLoading(false);
+    }
+  };
+
+  const handleDhanAutoLogin = async () => {
+    setDhanLoading(true); setDhanError('');
+    try {
+      const res = await fetch('/api/dhan-autologin', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? JSON.stringify(data));
+      localStorage.setItem('dhan_access_token', data.accessToken);
+      setDhanAccessToken(data.accessToken);
+      setDhanLoggedIn(true);
+      setShowDhanPanel(false);
+    } catch (e: unknown) {
+      setDhanError((e as Error).message);
+    } finally {
+      setDhanLoading(false);
+    }
+  };
+
+  const handleDhanLogout = () => {
+    localStorage.removeItem('dhan_access_token');
+    setDhanAccessToken(''); setDhanLoggedIn(false); setDhanLoginUrl(''); setDhanError('');
+  };
   const hasSecret = !!nubraTotpSecret;
 
   // ── Basket state (lifted to App so navbar can show it) ──────────────────
@@ -2883,6 +2980,28 @@ export default function App() {
                   <Btn variant="indigo" onClick={() => { localStorage.setItem('nubra_raw_cookie', cookieInput.trim()); setShowCookieInput(false); }}>Save</Btn>
                   <Btn variant="ghost" onClick={() => setShowCookieInput(false)}><IconClose /></Btn>
                 </div>
+              </div>
+            )}
+
+            {/* Dhan */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <StatusDot status={dhanLoggedIn ? 'ok' : 'off'} />
+                <span className="text-[11px] font-medium text-[#787B86]">{dhanLoggedIn ? 'Dhan ✓' : 'Dhan'}</span>
+              </div>
+              <Btn variant={dhanLoggedIn ? 'green' : 'default'} onClick={() => dhanLoggedIn ? handleDhanLogout() : setShowDhanPanel(v => !v)} title="Dhan login">
+                <IconBolt />
+              </Btn>
+            </div>
+
+            {showDhanPanel && (
+              <div className="flex flex-col gap-1.5 pt-1">
+                <div className="flex gap-1">
+                  <Btn variant="indigo" loading={dhanLoading} onClick={handleDhanAutoLogin}>Auto</Btn>
+                  <Btn variant="ghost" onClick={() => { setShowDhanPanel(false); setDhanError(''); }}><IconClose /></Btn>
+                </div>
+                {dhanLoading && <span className="text-[11px] text-[#787B86] animate-pulse px-1">Logging in…</span>}
+                {dhanError && <span className="text-[10px] text-[#f23645] px-1">{dhanError}</span>}
               </div>
             )}
 

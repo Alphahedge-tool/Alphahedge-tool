@@ -4,7 +4,257 @@
  * BasketOrder — Zerodha-style basket order panel
  * DOM book floats as a small panel attached to the left side of the basket.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+// ── Margin types ──────────────────────────────────────────────────────────────
+interface LegMargin {
+  ref_id: number;
+  span: number;
+  exposure: number;
+  total_margin: number;
+}
+interface MarginResult {
+  total_margin: number;
+  span: number;
+  exposure: number;
+  margin_benefit: number;
+  premium_payable?: number;
+  leg_margin?: LegMargin[];
+}
+
+
+async function callEvaluateApi(sessionToken: string, deviceId: string, body: object): Promise<any> {
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
+  const res = await fetch('/api/nubra-evaluate', {
+    method: 'POST',
+    headers: {
+      'x-session-token': sessionToken,
+      'x-device-id': deviceId,
+      'x-raw-cookie': rawCookie,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  console.log('[nubra evaluate raw]', JSON.stringify(json));
+  return json;
+}
+
+function fromPaisa(v: any): number { return ((v ?? 0) as number) / 100; }
+
+async function fetchMargin(legs: BasketLeg[]): Promise<MarginResult | null> {
+  const sessionToken = localStorage.getItem('nubra_session_token');
+  const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
+  if (!sessionToken) return null;
+
+  const validLegs = legs.filter(l => l.refId);
+  if (validLegs.length === 0) return null;
+
+  // Use the first leg's entrySpot as custom_spot (in paisa)
+  const customSpot = Math.round((validLegs[0].entrySpot ?? 0) * 100);
+
+  const makeEvaluateLeg = (l: BasketLeg) => ({
+    ref_id:   l.refId!,
+    price:    Math.round(l.price * 100),
+    quantity: l.lots,
+    lot_size: l.lotSize,
+    buy:      l.action === 'B',
+    sell:     l.action === 'S',
+    exchange: 'NSE',
+  });
+
+  try {
+    // Single evaluate call for all legs (1 leg or many)
+    const result = await callEvaluateApi(sessionToken, deviceId, {
+      custom_spot:   customSpot,
+      expiry_offset: 4,
+      payoff:        true,
+      legs:          validLegs.map(makeEvaluateLeg),
+    });
+    if (!result) return null;
+
+    const m = result.margins;
+    if (!m) return null;
+
+    // Per-leg breakdown comes from margins.legs in the combined response
+    const legMargins: LegMargin[] = validLegs.map(l => {
+      const lm = (m.legs ?? []).find((x: any) => x.ref_id === l.refId);
+      return {
+        ref_id:       l.refId!,
+        span:         fromPaisa(lm?.span),
+        exposure:     fromPaisa(lm?.exposure),
+        total_margin: fromPaisa(lm?.total),
+      };
+    });
+
+    return {
+      total_margin:    fromPaisa(m.required),
+      span:            fromPaisa(m.span),
+      exposure:        fromPaisa(m.exposure),
+      margin_benefit:  fromPaisa(m.benefit),
+      premium_payable: fromPaisa(m.premium_recievable),
+      leg_margin:      legMargins,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fmtMargin(v: number) {
+  return v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+}
+
+// ── Margin Breakdown component ────────────────────────────────────────────────
+function MarginBreakdown({ legs }: { legs: BasketLeg[] }) {
+  const [margin, setMargin] = useState<MarginResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchMargin(legs);
+    setMargin(result);
+    setLoading(false);
+  }, [legs.map(l => `${l.refId}:${l.lots}:${l.action}`).join(',')]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return (
+    <div style={{ padding: '10px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ width: 8, height: 8, border: '1.5px solid rgba(255,255,255,0.15)', borderTopColor: '#60a5fa', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+      <span style={{ fontSize: 11, color: '#565A6B' }}>Calculating margin…</span>
+    </div>
+  );
+
+  if (!margin) return null;
+
+  return (
+    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* Title row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 4px' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', letterSpacing: '0.04em' }}>Margin Breakdown</span>
+        {margin.margin_benefit > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#26a69a' }}>
+            Margin Benefit: {fmtMargin(margin.margin_benefit)}
+          </span>
+        )}
+      </div>
+
+      {/* Summary card */}
+      <div style={{
+        margin: '0 20px 8px',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 7,
+        overflow: 'hidden',
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '12px 16px' }}>
+          {[
+            { label: 'Span', value: fmtMargin(margin.span) },
+            { label: 'Exposure', value: fmtMargin(margin.exposure) },
+            { label: 'Total Margin', value: fmtMargin(margin.total_margin) },
+            { label: 'Premium Payable', value: fmtMargin(margin.premium_payable ?? 0) },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 500, marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0', fontFamily: 'monospace' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Per-leg toggle */}
+      {margin.leg_margin && margin.leg_margin.length > 0 && (
+        <>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
+              padding: '4px 0 8px', color: '#565A6B',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+
+          {expanded && (
+            <div style={{ margin: '0 20px 10px', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 7, overflow: 'hidden' }}>
+              {/* Table header */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '36px 1fr 90px 68px 90px 90px 100px',
+                padding: '6px 12px', background: '#333',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                {['B/S', 'Instrument', 'Strike', 'Qty', 'Span', 'Exposure', 'Total Margin'].map((h, i) => (
+                  <span key={i} style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</span>
+                ))}
+              </div>
+
+              {/* Rows */}
+              {margin.leg_margin!.map((lm, i) => {
+                const leg = legs.find(l => l.refId === lm.ref_id);
+                if (!leg) return null;
+                const isBuy = leg.action === 'B';
+                return (
+                  <div key={i} style={{
+                    display: 'grid', gridTemplateColumns: '36px 1fr 90px 68px 90px 90px 100px',
+                    alignItems: 'center', padding: '7px 12px',
+                    borderBottom: i < margin.leg_margin!.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                  }}>
+                    {/* B/S */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 18, borderRadius: 4,
+                      background: isBuy ? 'rgba(38,166,154,0.18)' : 'rgba(242,54,69,0.18)',
+                      border: `1px solid ${isBuy ? 'rgba(38,166,154,0.45)' : 'rgba(242,54,69,0.45)'}`,
+                    }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, color: isBuy ? '#26a69a' : '#f23645' }}>
+                        {isBuy ? 'B' : 'S'}
+                      </span>
+                    </div>
+
+                    {/* Instrument */}
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {fmtExpiry(leg.expiry)}
+                    </span>
+
+                    {/* Strike */}
+                    <span style={{ fontSize: 11, color: '#E2E8F0', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {leg.strike} <span style={{ color: leg.type === 'CE' ? '#26a69a' : '#f23645' }}>{leg.type}</span>
+                    </span>
+
+                    {/* Qty */}
+                    <span style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {leg.lots * leg.lotSize}
+                    </span>
+
+                    {/* Span */}
+                    <span style={{ fontSize: 11, color: '#E2E8F0', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {fmtMargin(lm.span)}
+                    </span>
+
+                    {/* Exposure */}
+                    <span style={{ fontSize: 11, color: '#E2E8F0', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {fmtMargin(lm.exposure)}
+                    </span>
+
+                    {/* Total Margin */}
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#E2E8F0', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {fmtMargin(lm.total_margin)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export interface BasketLegGreeks {
   delta: number; theta: number; vega: number; gamma: number; iv: number;
@@ -597,6 +847,9 @@ export default function BasketOrder({ legs, onRemove, onUpdateLots, onUpdateLeg,
           ));
         })()}
       </div>
+
+      {/* Margin Breakdown */}
+      <MarginBreakdown legs={legs} />
 
       {/* Footer */}
       <div style={{
