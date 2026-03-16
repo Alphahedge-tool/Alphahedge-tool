@@ -2,11 +2,14 @@
   "name": "alphahedge-option",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev --webpack -p 8888",
-    "dev:turbo": "next dev --turbo -p 8888",
-    "build": "next build --webpack",
-    "start": "next start -p 8888",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:fast": "vite build",
+    "preview": "vite preview",
+    "start": "concurrently \"vite preview\" \"npm run server\"",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint",
     "server": "node --experimental-strip-types server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\""
@@ -40,7 +43,6 @@
     "lodash": "^4.17.23",
     "lucide-react": "^0.576.0",
     "marked": "^17.0.4",
-    "next": "16.1.6",
     "otplib": "^13.3.0",
     "pako": "^2.1.0",
     "playwright": "^1.58.2",
@@ -63,11 +65,13 @@
     "@types/pako": "^2.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "daisyui": "^5.5.19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.0.0",
+    "vite-plugin-node-polyfills": "^0.25.0"
   }
 }

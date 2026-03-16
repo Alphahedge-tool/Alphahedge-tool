@@ -14,6 +14,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createChart, LineSeries, LineStyle, type IChartApi, type ISeriesApi } from 'lightweight-charts';
 import { Button, Select, DateInput, NumberInput, TextInput, Badge } from './components/ui';
 import { useDhanInstruments, DHAN_EXPIRY_CODE } from './useDhanInstruments';
+import s from './HistoricalWorkspace.module.css';
 
 const LS_DHAN_JWT = 'dhan_jwt';
 
@@ -193,7 +194,7 @@ function DualChart({ ceIvData, peIvData, midIvData, spotData, symbol, visible, i
     spotSeriesRef.current?.applyOptions({ visible: visible.spot });
   }, [visible]);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return <div ref={containerRef} className={s.chartContainer} />;
 }
 
 // ─── Worker result type ───────────────────────────────────────────────────────
@@ -434,18 +435,16 @@ export default function HistoricalWorkspace() {
   const isReady = instrStatus === 'ready' || instrStatus === 'cache-hit';
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#171717', color: '#e5e7eb' }}>
+    <div className={s.root}>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="glass-bar flex items-center gap-2.5 px-3.5 py-2 shrink-0 flex-wrap">
+      <div className={`glass-bar ${s.toolbar}`}>
 
-        <span className="text-[11px] font-bold text-amber-400 tracking-[0.08em] uppercase whitespace-nowrap">
-          Historical Workspace
-        </span>
-        <div className="w-px h-[18px] bg-[#2a2a2a] shrink-0" />
+        <span className={s.title}>Historical Workspace</span>
+        <div className={s.sep} />
 
         {/* ── Instrument search ─────────────────────────────────────────────── */}
-        <div className="relative" ref={dropRef}>
+        <div className={s.searchWrap} ref={dropRef}>
           <TextInput
             ref={inputRef as any}
             value={query}
@@ -457,37 +456,36 @@ export default function HistoricalWorkspace() {
 
           {/* Dropdown */}
           {showDrop && results.length > 0 && (
-            <div className="absolute top-[calc(100%+3px)] left-0 w-[480px] bg-[#171717] border border-[#2a2a2a] rounded-md z-[100] overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.65)]">
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#2a2a2a]">
-                <span className="text-[10px] text-amber-400 font-bold tracking-[0.1em] uppercase">SYMBOL SEARCH</span>
-                <button type="button" onClick={() => setShowDrop(false)} className="text-[#52525b] hover:text-[#D1D4DC] px-1 text-sm">✕</button>
+            <div className={s.dropdown}>
+              <div className={s.dropdownHeader}>
+                <span className={s.dropdownHeaderLabel}>SYMBOL SEARCH</span>
+                <button type="button" onClick={() => setShowDrop(false)} className={s.dropdownClose}>✕</button>
               </div>
-              <div className="grid px-3 py-1 border-b border-[#2a2a2a] bg-[#171717]" style={{ gridTemplateColumns: '1fr 100px 80px 60px' }}>
+              <div className={s.dropdownColHeaders}>
                 {['SYMBOL', 'TYPE', 'SEGMENT', 'SEG ID'].map(h => (
-                  <span key={h} className="text-[9px] text-[#52525b] tracking-[0.08em] uppercase">{h}</span>
+                  <span key={h} className={s.colHeader}>{h}</span>
                 ))}
               </div>
-              <div style={{ maxHeight: '52vh', overflowY: 'auto' }}>
+              <div className={s.dropdownList}>
                 {results.map((entry, i) => {
                   const meta = RANK_META[entry.rank] ?? RANK_META[4];
                   return (
                     <div
                       key={i}
                       onMouseDown={() => selectInstrument(entry)}
-                      className="grid px-3 py-1.5 cursor-pointer border-b border-white/[0.03] transition-colors hover:bg-amber-500/[0.07]"
-                      style={{ gridTemplateColumns: '1fr 100px 80px 60px' }}
+                      className={s.resultRow}
                     >
-                      <div className="flex items-baseline gap-1.5 overflow-hidden">
-                        <span className="text-[12px] font-bold text-[#e5e7eb] font-mono whitespace-nowrap">
+                      <div className={s.resultSymbolGroup}>
+                        <span className={s.resultSymbol}>
                           <Hl text={entry.underlying_symbol} q={query} />
                         </span>
-                        <span className="text-[10px] text-white/30 overflow-hidden text-ellipsis whitespace-nowrap">
+                        <span className={s.resultName}>
                           <Hl text={entry.display_name} q={query} />
                         </span>
                       </div>
-                      <span className="text-[9px] font-bold tracking-[0.06em] font-mono flex items-center" style={{ color: meta.color }}>{meta.label}</span>
-                      <span className="text-[10px] text-indigo-400 font-mono flex items-center">{entry.segment_key}</span>
-                      <span className="text-[10px] text-white/40 font-mono flex items-center">{entry.u_seg_id}</span>
+                      <span className={s.resultType} style={{ color: meta.color }}>{meta.label}</span>
+                      <span className={s.resultSegment}>{entry.segment_key}</span>
+                      <span className={s.resultSegId}>{entry.u_seg_id}</span>
                     </div>
                   );
                 })}
@@ -503,30 +501,30 @@ export default function HistoricalWorkspace() {
           </Badge>
         )}
 
-        <div className="w-px h-[18px] bg-[#2a2a2a] shrink-0" />
+        <div className={s.sep} />
 
         <GlassDateInput label="Start" value={startDate} onChange={setStartDate} />
         <GlassDateInput label="End"   value={endDate}   onChange={setEndDate} />
 
-        <div className="w-px h-[18px] bg-[#2a2a2a] shrink-0" />
+        <div className={s.sep} />
 
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-[#52525b] uppercase tracking-[0.08em]">Interval</span>
+        <div className={s.fieldGroup}>
+          <span className={s.fieldLabel}>Interval</span>
           <GlassSelect value={interval} onChange={setInterval} options={INTERVALS.map(v => ({ label: v, value: v }))} />
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-[#52525b] uppercase tracking-[0.08em]">Expiry</span>
+        <div className={s.fieldGroup}>
+          <span className={s.fieldLabel}>Expiry</span>
           <GlassSelect value={expFlag} onChange={setExpFlag} options={EXP_FLAGS.map(v => ({ label: v === 'W' ? 'Weekly' : 'Monthly', value: v }))} />
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-[#52525b] uppercase tracking-[0.08em]">Exp Code</span>
+        <div className={s.fieldGroup}>
+          <span className={s.fieldLabel}>Exp Code</span>
           <GlassSelect value={expCode} onChange={setExpCode} options={EXP_CODES.map(o => ({ label: o.label, value: String(o.value) }))} />
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-[#52525b] uppercase tracking-[0.08em]">Strike Pos</span>
+        <div className={s.fieldGroup}>
+          <span className={s.fieldLabel}>Strike Pos</span>
           <NumberInput
             value={String(strikePos)}
             onValueChange={v => setStrikePos(v)}
@@ -537,10 +535,10 @@ export default function HistoricalWorkspace() {
           />
         </div>
 
-        <div className="flex-1" />
+        <div className={s.spacer} />
 
         {elapsed !== null && !loading && (
-          <span className="text-[10px] text-white/30">{elapsed}ms</span>
+          <span className={s.elapsedText}>{elapsed}ms</span>
         )}
 
         {loading ? (
@@ -557,7 +555,7 @@ export default function HistoricalWorkspace() {
 
       {/* ── Error ───────────────────────────────────────────────────────────── */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400 bg-red-500/[0.08] border-b border-red-500/20 shrink-0">
+        <div className={s.errorBar}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           {error}
         </div>
@@ -565,42 +563,42 @@ export default function HistoricalWorkspace() {
 
       {/* ── Series toggles ───────────────────────────────────────────────────── */}
       {hasData && (
-        <div className="flex items-center gap-1.5 px-3.5 py-1.5 shrink-0 border-b border-[#2a2a2a] bg-[#171717]">
-          {SERIES_META.map(s => (
+        <div className={s.seriesBar}>
+          {SERIES_META.map(sm => (
             <button
-              key={s.key}
+              key={sm.key}
               type="button"
-              onMouseDown={e => { e.preventDefault(); toggleSeries(s.key); }}
-              className="px-2 py-0.5 rounded text-[10px] font-bold font-mono tracking-[0.06em] uppercase border transition-colors"
+              onMouseDown={e => { e.preventDefault(); toggleSeries(sm.key); }}
+              className={s.seriesBtn}
               style={{
-                border: `1px solid ${visible[s.key] ? s.color : 'rgba(255,255,255,0.12)'}`,
-                background: visible[s.key] ? `${s.color}22` : 'rgba(0,0,0,0.5)',
-                color: visible[s.key] ? s.color : 'rgba(255,255,255,0.25)',
+                border: `1px solid ${visible[sm.key] ? sm.color : 'rgba(255,255,255,0.12)'}`,
+                background: visible[sm.key] ? `${sm.color}22` : 'rgba(0,0,0,0.5)',
+                color: visible[sm.key] ? sm.color : 'rgba(255,255,255,0.25)',
               }}
             >
-              {s.label}
+              {sm.label}
             </button>
           ))}
         </div>
       )}
 
       {/* ── Chart / empty state ──────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className={s.chartArea}>
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10 gap-2.5">
+          <div className={s.loadingOverlay}>
             <svg className="animate-spin h-4 w-4 text-[#787B86]" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-[12px] text-white/40">Fetching data…</span>
+            <span className={s.loadingText}>Fetching data…</span>
           </div>
         )}
         {!hasData && !loading && !error && (
-          <div className="flex items-center justify-center h-full">
+          <div className={s.emptyState}>
             <div className="text-center">
-              <p className="text-[#3f3f46] text-[12px] tracking-[0.1em] uppercase">SELECT AN INSTRUMENT AND FETCH DATA</p>
+              <p className={s.emptyText}>SELECT AN INSTRUMENT AND FETCH DATA</p>
               {!isReady && (
-                <p className="text-[#2a2a2a] text-[11px] mt-1.5 tracking-[0.06em]">Dhan instruments: {instrStatus}…</p>
+                <p className={s.emptySubtext}>Dhan instruments: {instrStatus}…</p>
               )}
             </div>
           </div>

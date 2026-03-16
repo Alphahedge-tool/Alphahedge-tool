@@ -1,0 +1,572 @@
+/* OptionChain.module.css */
+
+/* ── Root ─────────────────────────────────────────────────── */
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1d1a17;
+  color: #D1D5DB;
+  position: relative;
+}
+
+/* ── Settings modal ───────────────────────────────────────── */
+.settingsOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.settingsCard {
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 300px;
+  padding: 18px 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.settingsTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #E2E8F0;
+}
+.settingsCloseBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  display: flex;
+  padding: 2px;
+}
+
+/* Checkbox row (static parts — background/border are dynamic) */
+.cbCheckbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+/* col label — color is dynamic (colVis) */
+.cbLabel {
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.headerSymbol {
+  font-size: 18px;
+  font-weight: 800;
+  color: #E2E8F0;
+  letter-spacing: 0.04em;
+}
+.headerSpot {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4F8EF7;
+  background: rgba(79, 142, 247, 0.1);
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(79, 142, 247, 0.2);
+}
+.headerMcxBadge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.1);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.headerExpLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6B7280;
+}
+.gearBtn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #817E7E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  transition: background 0.15s;
+}
+.closeBtn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #9CA3AF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+/* ── Expiry row ───────────────────────────────────────────── */
+.expiryRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+.expiryRowScrollable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.expiryLabel {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.expirySelectWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.expirySelect {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #E2E8F0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 32px 5px 12px;
+  cursor: pointer;
+  outline: none;
+  letter-spacing: 0.02em;
+  min-width: 110px;
+}
+.expirySelectChevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #6B7280;
+}
+.expiryNoData {
+  font-size: 11px;
+  color: #3D4150;
+}
+/* MCX expiry pill buttons */
+.expiryBtn {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.expiryBtnActive {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #f97316;
+}
+.expiryBtnInactive {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #6B7280;
+}
+
+/* ── Table scroll container ───────────────────────────────── */
+.tableScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.tableEmpty {
+  padding: 60px;
+  text-align: center;
+  font-size: 13px;
+  color: #3D4150;
+}
+
+/* ── Skeleton loader ── */
+.skeletonWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  width: 100%;
+}
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.skeletonCell {
+  border-radius: 3px;
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  animation: skOcPulse 1.3s ease-in-out infinite;
+  animation-delay: var(--sk-d, 0s);
+  flex-shrink: 0;
+}
+.skeletonStrike {
+  background: rgba(255,255,255,0.10);
+  animation-delay: 0s !important;
+}
+@keyframes skOcPulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1;   }
+}
+.table {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-panel);
+}
+
+/* Super-header row */
+.superHeaderRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.thCall {
+  text-align: center;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #e0a800;
+  letter-spacing: 0.08em;
+  background: #333333;
+}
+.thStrike {
+  text-align: center;
+  padding: 10px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9CA3AF;
+  background: #333333;
+}
+.thPut {
+  text-align: center;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #818cf8;
+  letter-spacing: 0.08em;
+  background: #333333;
+}
+
+/* Sub-header row */
+.subHeaderRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── ATM divider row ──────────────────────────────────────── */
+.atmDividerSide {
+  padding: 2px 0;
+  border-top: 1px dashed rgba(224, 168, 0, 0.4);
+  background: rgba(224, 168, 0, 0.03);
+}
+.atmDividerCenter {
+  text-align: center;
+  padding: 2px 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #e0a800;
+  border-top: 1px dashed rgba(224, 168, 0, 0.4);
+  background: rgba(224, 168, 0, 0.03);
+}
+
+/* ── Body rows ────────────────────────────────────────────── */
+.dataRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* ── Overlays ─────────────────────────────────────────────── */
+.bsOverlay {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border-radius: 5px;
+}
+.overlayBtnPointer {
+  pointer-events: auto;
+}
+.bsOverlay button {
+  pointer-events: auto;
+}
+
+/* ── Qty Popup ────────────────────────────────────────────── */
+.popup {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 230px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.popupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* action badge (BUY/SELL) — color/bg are dynamic */
+.popupActionBadge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+.popupStrike {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+/* CE/PE type badge — color/bg/border are dynamic */
+.popupTypeBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.popupSpacer {
+  flex: 1;
+}
+.popupCloseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6B7280;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.popupLtpRow {
+  font-size: 11px;
+  color: #6B7280;
+}
+.popupLtpValue {
+  color: #e5e7eb;
+  font-weight: 600;
+}
+.popupQtyRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.popupQtyLabel {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 600;
+  flex: 1;
+}
+.popupStepper {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.popupStepBtn {
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: #9CA3AF;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.popupQtyInput {
+  width: 54px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #E2E8F0;
+  background: transparent;
+  border: none;
+  outline: none;
+  -moz-appearance: textfield;
+}
+/* Confirm button — color/bg/border/cursor are dynamic (fetching state + type) */
+.popupConfirmBtn {
+  padding: 7px 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ── CalendarPicker ───────────────────────────────────────── */
+.calRoot {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.calDateSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.calDateHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.calDateLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9CA3AF;
+}
+.calDateValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: #E2E8F0;
+}
+.calDateInput {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #E2E8F0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.calTimeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.calTimeLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9CA3AF;
+}
+.calTimeInputRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.calTimeInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #E2E8F0;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+}
+.calTimeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.calTimeSlotBtn {
+  padding: 6px 0;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+.calTimeSlotSelected {
+  background: rgba(255, 152, 0, 0.18);
+  border: 1px solid rgba(255, 152, 0, 0.6);
+  color: #FF9800;
+}
+.calTimeSlotUnselected {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9CA3AF;
+}
+
+/* ── Greek value colours (static, not computed) ───────────── */
+.valGray  { color: #9CA3AF; }
+.valTeal  { color: #26a69a; }
+.valRed   { color: #f23645; }
+.valWhite { color: #C0C0C0; font-weight: 700; }
+.valWhiteBold { color: #E2E8F0; font-weight: 600; }
+/* chg%/oichg% color is dynamic (pos/neg) — kept inline */

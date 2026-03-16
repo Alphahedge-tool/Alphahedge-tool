@@ -1,0 +1,779 @@
+/* ── StrategyChart.module.css ─────────────────────────────────────────────────── */
+
+/* Root wrapper */
+.root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #171717;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Empty / no-content overlay */
+.emptyOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: #3D4150;
+  pointer-events: none;
+}
+
+.emptyLabel {
+  font-size: 12px;
+}
+
+/* Header block (both rows) */
+.header {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Row 1: title bar ── */
+.titleBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.titleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  font-weight: 600;
+  color: #CBD5E1;
+  letter-spacing: 0.01em;
+}
+
+.titleSep {
+  font-size: 10px;
+  color: #3D4150;
+}
+
+.underlyingSymbol {
+  font-size: 11px;
+  font-weight: 600;
+  /* color is set inline per symbol */
+}
+
+.metaText {
+  font-size: 10px;
+  color: #565A6B;
+}
+
+.metaDot {
+  font-size: 10px;
+  color: #565A6B;
+}
+
+.dateRange {
+  font-size: 10px;
+  color: #565A6B;
+  font-family: monospace;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Spinner — loadingMore */
+.spinnerRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.spinnerDotSmall {
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+.spinnerDotLarge {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+.spinnerLabel {
+  font-size: 10px;
+  color: #565A6B;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.errorText {
+  font-size: 10px;
+  color: #f23645;
+}
+
+.refreshBtn {
+  font-size: 10px;
+  font-weight: 800;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+
+.refreshBtn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ── Row 2: toggle toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.toolbarShowLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #525866;
+  letter-spacing: 0.08em;
+  margin-right: 2px;
+}
+
+/* Toggle button base */
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+
+.toggleBtnOff {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9CA3AF;
+}
+
+.toggleBtnOn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #E2E8F0;
+}
+
+/* Dot inside toggle button */
+.toggleDotOff {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.toggleDotOn {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #E2E8F0;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Positions toggle button */
+.positionsBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+
+.positionsBtnOff {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9CA3AF;
+}
+
+.positionsBtnOn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #E2E8F0;
+}
+
+.positionsCountBadgeOff {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9CA3AF;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 2px;
+}
+
+.positionsCountBadgeOn {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.14);
+  color: #E2E8F0;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 2px;
+}
+
+/* Chart container */
+.chartContainer {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Tracking labels — small card per series, GPU-smooth on move ── */
+.trackLabel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 30;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #0e0e12;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 2px solid var(--track-color, #4a9eff);
+  border-radius: 0 5px 5px 0;
+  padding: 5px 10px 5px 8px;
+  min-width: 90px;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+  font-family: 'Work Sans', system-ui, sans-serif;
+}
+
+.trackLabelName {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.trackLabelValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: #E8EAED;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/* ── Magnifier tooltip (pinned top, slides horizontally) ── */
+.tooltip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  top: 0;
+  /* left set inline */
+  background: rgba(10, 10, 12, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 7px 11px 8px;
+  min-width: 148px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  font-family: 'Work Sans', system-ui, sans-serif;
+  transition: opacity 0.06s, left 0s;
+}
+
+.tooltipHidden {
+  opacity: 0;
+}
+
+.tooltipVisible {
+  opacity: 1;
+}
+
+/* Time stamp row */
+.tooltipTime {
+  font-size: 9px;
+  font-weight: 700;
+  color: #3D4150;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+/* Each data row */
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.tooltipRowLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #565A6B;
+  white-space: nowrap;
+}
+
+.tooltipDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tooltipRowValue {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* MTM row is slightly larger */
+.tooltipMtmRow .tooltipRowValue {
+  font-size: 12px;
+}
+
+.tooltipDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 4px 0;
+}
+
+.tooltipMtmPos { color: #26a69a; }
+.tooltipMtmNeg { color: #f23645; }
+
+.tooltipSection { }
+.tooltipSectionLabel { display: none; } /* hidden — rows self-label via dot color */
+
+/* ── MTM compound button ── */
+.mtmWrap {
+  position: relative;
+  display: flex;
+}
+
+.mtmPill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px 7px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.mtmPillSingle {
+  border-radius: 999px;
+}
+
+.mtmPillMulti {
+  border-radius: 999px 0 0 999px;
+  border-right: none !important;
+}
+
+.mtmPillOff {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9CA3AF;
+}
+
+.mtmPillOn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #E2E8F0;
+}
+
+.mtmDotOff {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.mtmDotOn {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #26a69a;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Chevron trigger */
+.mtmChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  border-radius: 0 999px 999px 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mtmChevronOff {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9CA3AF;
+}
+
+.mtmChevronOn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #E2E8F0;
+}
+
+.mtmChevronActive {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.mtmChevronIcon {
+  transition: transform 0.15s;
+}
+
+.mtmChevronIconOpen {
+  transform: rotate(180deg);
+}
+
+/* Dropdown */
+.mtmDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 4px 0;
+  z-index: 50;
+  min-width: 190px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.mtmDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  background: transparent;
+}
+
+.mtmDropdownItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mtmDropdownItemActive {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mtmDropdownDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.mtmDropdownText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.mtmDropdownLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9CA3AF;
+}
+
+.mtmDropdownLabelActive {
+  color: #E2E8F0;
+}
+
+.mtmDropdownSub {
+  font-size: 10px;
+  color: #3D4150;
+}
+
+.mtmDropdownCheck {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Positions overlay ── */
+.positionsOverlay {
+  position: absolute;
+  top: 80px;
+  right: 12px;
+  z-index: 20;
+  background: #1a1714;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  min-width: 360px;
+  max-width: 480px;
+}
+
+.positionsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.positionsHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.positionsTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #D1D4DC;
+  letter-spacing: 0.12em;
+}
+
+.positionsCount {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+}
+
+.positionsCloseBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #374151;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: color 0.1s;
+}
+
+.positionsCloseBtn:hover {
+  color: #f23645;
+}
+
+/* Column headers */
+.positionsColHeaders {
+  display: grid;
+  grid-template-columns: 44px 1fr 52px 64px 64px;
+  padding: 5px 14px 4px;
+  background: #333333;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.positionsColHeader {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.positionsColHeaderLeft {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: left;
+}
+
+.positionsColHeaderRight {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: right;
+}
+
+/* Rows list */
+.positionsRows {
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
+.positionsRow {
+  display: grid;
+  grid-template-columns: 44px 1fr 52px 64px 64px;
+  align-items: center;
+  padding: 7px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.1s;
+  cursor: default;
+}
+
+.positionsRow:last-child {
+  border-bottom: none;
+}
+
+.positionsRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* B/S badge */
+.bsBadgeBuy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(38, 166, 154, 0.15);
+  border: 1px solid rgba(38, 166, 154, 0.4);
+}
+
+.bsBadgeSell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(242, 54, 69, 0.15);
+  border: 1px solid rgba(242, 54, 69, 0.4);
+}
+
+.bsLabelBuy {
+  font-size: 10px;
+  font-weight: 700;
+  color: #26a69a;
+  letter-spacing: 0.08em;
+}
+
+.bsLabelSell {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f23645;
+  letter-spacing: 0.08em;
+}
+
+/* Instrument cell */
+.instrumentCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.instrumentDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* background set inline per leg color */
+}
+
+.instrumentName {
+  font-size: 12px;
+  font-weight: 500;
+  color: #E2E8F0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.instrumentTypeCe {
+  color: #26a69a;
+}
+
+.instrumentTypePe {
+  color: #f23645;
+}
+
+.instrumentExpiry {
+  font-size: 11px;
+  font-weight: 400;
+  color: #4B5563;
+}
+
+/* Data cells */
+.lotsCell {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9CA3AF;
+  text-align: right;
+}
+
+.priceCell {
+  font-size: 12px;
+  font-weight: 500;
+  color: #E2E8F0;
+  text-align: right;
+}
+
+.timeCellWithTime {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e0a800;
+  text-align: right;
+}
+
+.timeCellNoTime {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  text-align: right;
+}

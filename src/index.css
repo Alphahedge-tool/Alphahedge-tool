@@ -6,6 +6,14 @@
   logs: false;
 }
 
+@font-face {
+  font-family: "CircularXXTT-Book";
+  src: local("CircularXXTT-Book"), local("CircularXX TT Book"), local("CircularXXTT Book"), local("CircularXX Book"), local("CircularXX");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --font-family-sans: 'Work Sans', -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
 
@@ -119,10 +127,10 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* TradingView-style tokens — refined pro-dark tint */
-  --bg-base:       #0d0d0d;   /* deeper main content background */
-  --bg-panel:      #141414;   /* sidebar / header / panels */
-  --bg-bar:        #141414;   /* toolbar / navbar */
-  --bg-inset:      #1a1a1a;   /* insets / inputs */
+  --bg-base:       #080808;   /* deeper main content background */
+  --bg-panel:      #0f0f0f;   /* sidebar / header / panels */
+  --bg-bar:        #0f0f0f;   /* toolbar / navbar */
+  --bg-inset:      #161616;   /* insets / inputs */
   --border:        rgba(255, 255, 255, 0.08);   /* softer dividers / borders */
   --border-hi:     rgba(255, 255, 255, 0.12);   /* highlighted borders */
   --accent:        #FF9800;   /* TradingView amber */
@@ -450,3 +458,26 @@ button:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+
+/* ── OptionChain global styles (hover/state selectors require global scope) ── */
+.oc-tbody tr.oc-row:hover td { background: rgba(255,255,255,0.03); }
+.oc-tbody tr.oc-row-atm td { background: rgba(224,168,0,0.04); }
+.oc-tbody tr.oc-row-atm:hover td { background: rgba(224,168,0,0.08); }
+.oc-tbody tr.oc-row-odd td { background: transparent; }
+.oc-tbody tr.oc-row-even td { background: rgba(255,255,255,0.015); }
+.oc-scroll { will-change: transform; }
+.oc-gear:hover { background: rgba(255,255,255,0.1) !important; }
+.oc-cb-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; user-select: none; }
+.oc-cb-row:last-child { border-bottom: none; }
+.oc-cb-row:hover { background: rgba(255,255,255,0.03); border-radius: 6px; }
+.oc-cb-row.drag-over { background: rgba(79,142,247,0.1); border-radius: 6px; }
+.oc-drag-handle { cursor: grab; opacity: 0.3; flex-shrink: 0; padding: 2px; }
+.oc-drag-handle:hover { opacity: 0.8; }
+.oc-ltp-cell { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.oc-ltp-btn-wrap { opacity: 0; pointer-events: none; transition: opacity 0.1s ease-in-out; }
+.oc-tbody tr.oc-row:hover .oc-ltp-btn-wrap { opacity: 1; pointer-events: auto; }
+.oc-btn { font-size: 11px; font-weight: 900; width: 22px; height: 22px; border-radius: 5px; border: none; cursor: pointer; letter-spacing: 0; line-height: 1; display: inline-flex; align-items: center; justify-content: center; transition: filter 0.1s ease; flex-shrink: 0; }
+.oc-btn:hover { filter: brightness(1.2); }
+.oc-btn:active { filter: brightness(0.9); }
+.oc-btn-b { background: #26a69a; color: #fff; }
+.oc-btn-s { background: #f23645; color: #fff; }

@@ -1,0 +1,532 @@
+/* CandleChart.module.css */
+
+/* ── Root ── */
+.root { background: #171717; }
+
+/* ── Toolbar ── */
+.toolbar {
+  height: 38px; flex-shrink: 0; display: flex; align-items: center;
+  padding: 0 8px; gap: 0;
+  background: #171717;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden; min-width: 0;
+}
+
+/* ── Symbol search button ── */
+.symbolBtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 10px;
+  background: #1A1E2B;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 6px; cursor: pointer;
+  flex-shrink: 0; min-width: 140px; max-width: 220px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.symbolBtn:hover {
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.04);
+}
+.symbolName {
+  font-size: 12px; font-weight: 600; color: #E2E8F0;
+  letter-spacing: 0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Toolbar divider ── */
+.tbSep { width: 1px; height: 16px; background: rgba(255,255,255,0.08); margin: 0 6px; flex-shrink: 0; }
+
+/* ── Status indicators ── */
+.statusWrap { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.spinner {
+  width: 10px; height: 10px;
+  border: 1.5px solid rgba(255,255,255,0.2); border-top-color: transparent;
+  border-radius: 50%; display: inline-block;
+  animation: cc-spin 0.7s linear infinite;
+}
+.spinnerHist {
+  width: 10px; height: 10px;
+  border: 1.5px solid rgba(255,152,0,0.5); border-top-color: transparent;
+  border-radius: 50%; display: inline-block;
+  animation: cc-spin 0.7s linear infinite;
+}
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+
+.loadingLabel { font-size: 10px; color: #5D606B; letter-spacing: 0.08em; font-weight: 600; }
+.histLabel    { font-size: 10px; color: rgba(255,152,0,0.6); letter-spacing: 0.08em; font-weight: 600; }
+.errLabel     { font-size: 10px; color: #f23645; flex-shrink: 0; font-weight: 600; letter-spacing: 0.06em; }
+
+.liveDot  { width: 6px; height: 6px; border-radius: 50%; background: #2ebd85; box-shadow: 0 0 6px #2ebd85; flex-shrink: 0; }
+.liveLabel { font-size: 10px; color: #2ebd85; font-weight: 600; letter-spacing: 0.08em; }
+
+/* ── Right-side toolbar group ── */
+.rightGroup { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+/* ── Generic indicator toggle button ── */
+.indicatorBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 4px; cursor: pointer;
+  font-size: 11px; font-weight: 400;
+  color: #787B86;
+  transition: all 0.12s; white-space: nowrap;
+}
+.indicatorBtn:hover { background: rgba(255,255,255,0.06); color: #C4C7D0; }
+
+/* VWAP active */
+.indicatorBtnVwapOn  { background: rgba(255,215,0,0.10); border-color: rgba(255,215,0,0.30); color: #FFD700; font-weight: 600; }
+/* TWAP active */
+.indicatorBtnTwapOn  { background: rgba(0,191,255,0.10); border-color: rgba(0,191,255,0.30); color: #00BFFF; font-weight: 600; }
+/* OI active */
+.indicatorBtnOiOn    { background: rgba(46,189,133,0.10); border-color: rgba(46,189,133,0.30); color: #2ebd85; font-weight: 600; }
+/* OC active */
+.indicatorBtnOcOn    { background: rgba(255,152,0,0.14); border-color: rgba(255,152,0,0.45); color: #FFB74D; font-weight: 700; height: 28px; padding: 0 10px; font-size: 11px; border-radius: 5px; }
+
+/* VWAP anchor picker button */
+.anchorBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 8px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 4px; cursor: pointer;
+  font-size: 10px; color: #6B6E7A;
+  transition: all 0.12s;
+}
+.anchorBtn:hover { background: rgba(255,255,255,0.06); color: #C4C7D0; }
+.anchorBtnOpen   { background: rgba(255,255,255,0.08); color: #FFD700; }
+
+/* Indicator checkbox square */
+.checkBox {
+  width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.checkBoxVwap     { border: 1.5px solid #3D4150; background: transparent; }
+.checkBoxVwapOn   { border: 1.5px solid #FFD700; background: rgba(255,215,0,0.18); }
+.checkBoxTwap     { border: 1.5px solid #3D4150; background: transparent; }
+.checkBoxTwapOn   { border: 1.5px solid #00BFFF; background: rgba(0,191,255,0.18); }
+.checkBoxOi       { border: 1.5px solid #3D4150; background: transparent; }
+.checkBoxOiOn     { border: 1.5px solid #2ebd85; background: rgba(46,189,133,0.18); }
+
+/* OI Settings gear button */
+.settingsBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 8px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 4px; cursor: pointer;
+  font-size: 11px; color: #6B6E7A;
+  transition: all 0.12s;
+}
+.settingsBtn:hover      { background: rgba(255,255,255,0.06); color: #C4C7D0; }
+.settingsBtnOpen        { background: rgba(255,255,255,0.08); color: #D1D4DC; }
+
+/* ── OC Tab button (floating on chart edge) ── */
+.ocTabBtn {
+  position: absolute; left: -22px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 44px;
+  background: #1a1a1a;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-right: none; border-radius: 6px 0 0 6px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: #9CA3AF;
+  transition: color 0.15s, background 0.15s; z-index: 10;
+}
+.ocTabBtnOpen { background: rgba(255,152,0,0.10); color: #FFB74D; }
+
+/* ── Chart wrapper ── */
+.chartWrapper  { position: relative; overflow: hidden; }
+.chartContainer { position: absolute; inset: 0; }
+
+/* ── Skeleton loader (shown while fetching) ── */
+.skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 20px 12px 28px;
+  background: #171717;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+.skeletonHidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden; /* stops animation CPU usage after fade */
+}
+.skeletonBar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%);
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+  animation-delay: var(--sk-delay, 0s);
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
+}
+.oiCanvas { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+.drawingCanvas  { position: absolute; inset: 0; pointer-events: none; z-index: 11; }
+.drawingOverlay { position: absolute; inset: 0; z-index: 12; }
+
+/* ── OHLC overlay ── */
+.ohlcOverlay {
+  position: absolute; top: 6px; left: 8px; z-index: 15;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px;
+  pointer-events: none;
+}
+.ohlcSymbol    { font-size: 13px; font-weight: 700; color: #E0E3EB; letter-spacing: 0.01em; white-space: nowrap; }
+.ohlcMeta      { color: #787B86; font-weight: 500; font-size: 11px; margin-left: 5px; }
+.ohlcLiveDot   { width: 7px; height: 7px; border-radius: 50%; background: #2ebd85; box-shadow: 0 0 6px #2ebd85; display: inline-block; flex-shrink: 0; }
+.ohlcValues    { display: flex; align-items: center; gap: 9px; font-family: "SF Mono","Fira Code","Cascadia Code",monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ohlcLabel     { color: #787B86; font-size: 11px; }
+.ohlcValueNeutral { color: #E0E3EB; margin-left: 3px; }
+.ohlcHigh      { color: #2ebd85; margin-left: 3px; }
+.ohlcLow       { color: #f23645; margin-left: 3px; }
+.ohlcChangePct { opacity: 0.75; }
+
+/* ── OI Tooltip ── */
+.oiTooltip {
+  position: absolute; width: 170px; z-index: 20;
+  pointer-events: none;
+  background: rgba(10,12,18,0.97);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 8px; padding: 10px 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  backdrop-filter: blur(16px);
+}
+.oiTooltipLabel  { font-size: 9px; font-weight: 700; color: #4A4E5C; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 2px; }
+.oiTooltipStrike { font-size: 16px; font-weight: 800; color: #FF9800; margin-bottom: 8px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.oiTooltipDivider { height: 1px; background: rgba(255,255,255,0.07); margin-bottom: 8px; }
+.oiTooltipRow    { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.oiTooltipRowLast { display: flex; justify-content: space-between; align-items: center; }
+.oiTooltipRowKey { font-size: 10px; font-weight: 600; color: #5D606B; letter-spacing: 0.08em; text-transform: uppercase; }
+.oiTooltipRowVal { font-size: 12px; font-weight: 700; font-family: "SF Mono","Fira Code",monospace; }
+.oiTooltipNeutral { color: #E0E3EB; }
+
+/* ── Option Chain Panel ── */
+.ocPanel {
+  background: #1d1a17; border-left: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0; position: relative; display: flex; flex-direction: column;
+  height: 100%; color: #D1D5DB;
+}
+.ocResizeHandle {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  cursor: col-resize; z-index: 20; background: transparent; transition: background 0.15s;
+}
+.ocResizeHandle:hover { background: rgba(79,142,247,0.45); }
+
+/* Metric modal overlay */
+.ocModalOverlay {
+  position: absolute; inset: 0; z-index: 50;
+  backdrop-filter: blur(6px); background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.ocModalCard {
+  background: #1f1f1f; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; width: 240px; padding: 18px 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.ocModalHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ocModalTitle  { font-size: 13px; font-weight: 700; color: #E2E8F0; }
+.ocModalClose  { background: transparent; border: none; cursor: pointer; color: #6b7280; display: flex; padding: 2px; }
+.ocModalList   { display: flex; flex-direction: column; gap: 2px; }
+.ocModalBtn {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 7px; border: none; cursor: pointer; text-align: left;
+}
+.ocModalBtnActive { background: rgba(249,115,22,0.15); color: #f97316; }
+.ocModalBtnDefault { background: transparent; color: #9CA3AF; }
+.ocModalCheck {
+  width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.ocModalCheckOn  { background: #f97316; border: 1.5px solid #f97316; }
+.ocModalCheckOff { background: transparent; border: 1.5px solid rgba(255,255,255,0.2); }
+.ocModalBtnLabel { font-size: 13px; font-weight: 500; }
+.ocModalBtnDesc  { font-size: 11px; color: #4B5563; margin-left: auto; }
+
+/* OC Header */
+.ocHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0; background: #1d1a17;
+}
+.ocHeaderLeft   { display: flex; align-items: center; gap: 8px; }
+.ocSymbol       { font-size: 13px; font-weight: 800; color: #E2E8F0; letter-spacing: 0.04em; }
+.ocSpotBadge    { font-size: 12px; font-weight: 700; color: #4F8EF7; background: rgba(79,142,247,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(79,142,247,0.2); }
+.ocHeaderRight  { display: flex; align-items: center; gap: 6px; }
+.ocMetricBadge  { font-size: 11px; font-weight: 700; color: #FF9800; background: rgba(255,152,0,0.1); padding: 2px 8px; border-radius: 5px; border: 1px solid rgba(255,152,0,0.2); letter-spacing: 0.04em; }
+.ocGearBtn {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; cursor: pointer; color: #817E7E;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; transition: background 0.15s;
+}
+.ocGearBtn:hover { background: rgba(255,255,255,0.1); }
+
+/* OC expiry row */
+.ocExpiryRow {
+  display: flex; align-items: center; gap: 8px; padding: 7px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.03); flex-shrink: 0;
+}
+.ocExpiryLabel { font-size: 10px; color: #6B7280; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+
+/* OC table scroll area */
+.ocTableScroll { flex: 1; overflow-y: auto; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; }
+.ocTableEmpty  { padding: 60px; text-align: center; font-size: 12px; color: #3D4150; }
+.ocTable       { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ocThead       { position: sticky; top: 0; z-index: 3; background: #1d1a17; }
+.ocHeadRowTop  { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.ocThCall      { text-align: center; padding: 8px 0; font-size: 12px; font-weight: 800; color: #e0a800; letter-spacing: 0.08em; background: #333333; }
+.ocThStrike    { text-align: center; padding: 8px 0; font-size: 11px; font-weight: 700; color: #9CA3AF; background: #333333; width: 72px; }
+.ocThPut       { text-align: center; padding: 8px 0; font-size: 12px; font-weight: 800; color: #818cf8; letter-spacing: 0.08em; background: #333333; }
+.ocHeadRowSub  { border-bottom: 1px solid rgba(255,255,255,0.08); }
+.ocThCallSub   { padding: 6px 10px; font-size: 10px; font-weight: 700; color: #9CA3AF; text-align: right; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(224,168,0,0.02); }
+.ocThStrikeSub { padding: 6px 10px; font-size: 10px; font-weight: 700; color: #9CA3AF; text-align: center; text-transform: uppercase; letter-spacing: 0.04em; background: #333333; width: 72px; }
+.ocThPutSub    { padding: 6px 10px; font-size: 10px; font-weight: 700; color: #9CA3AF; text-align: left; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(129,140,248,0.02); }
+.ocTdCall      { padding: 7px 10px; font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; color: #2ebd85; }
+.ocTdCallEmpty { color: #3D4150; }
+.ocTdStrike    { padding: 7px 10px; font-size: 12px; font-weight: 700; text-align: center; white-space: nowrap; background: #333333; color: #C0C0C0; width: 72px; }
+.ocTdStrikeAtm { color: #e0a800; }
+.ocTdPut       { padding: 7px 10px; font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; color: #f23645; }
+.ocTdPutEmpty  { color: #3D4150; }
+
+/* ── Metric/Expiry dropdown (shared portal style) ── */
+.dropdownMenu {
+  position: fixed; z-index: 9999;
+  background: #1f1f1f; border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset;
+  overflow: hidden;
+}
+.dropdownMenuHeader { padding: 8px 12px 6px; border-bottom: 1px solid #2a2a2a; }
+.dropdownMenuHeaderLabel { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #787B86; }
+.dropdownMenuList { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; padding: 4px; margin: 0; list-style: none; }
+.dropdownMenuItem {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 7px 10px; border-radius: 4px; border: none;
+  cursor: pointer; font-size: 12px; font-weight: 500;
+  background: transparent; color: #C4C7D0;
+  transition: background 0.1s, color 0.1s; gap: 8px;
+}
+.dropdownMenuItemActive { font-weight: 700; background: rgba(255,152,0,0.12); color: #FF9800; }
+.dropdownMenuItem:not(.dropdownMenuItemActive):hover { background: rgba(255,255,255,0.06); }
+.dropdownMenuItemDesc   { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.dropdownMenuItemSub    { font-size: 10px; font-weight: 400; color: #4A4E5C; }
+.dropdownMenuItemSubActive { color: rgba(255,152,0,0.6); }
+.dropdownMenuEmpty      { padding: 10px 12px; font-size: 12px; color: #4A4E5C; }
+
+/* View switcher dropdown */
+.viewDropdownMenu {
+  position: fixed; z-index: 9600;
+  background: rgba(17,20,28,0.97);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px; padding: 6px;
+  min-width: 168px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.4);
+  backdrop-filter: blur(16px);
+}
+.viewDropdownTitle { padding: 4px 8px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #4A4E5C; text-transform: uppercase; }
+.viewDropdownBtn {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px;
+  background: transparent; border: none; border-radius: 7px;
+  cursor: pointer; transition: background 0.1s;
+}
+.viewDropdownIcon {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+}
+.viewDropdownLabel { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.viewDropdownLabelText { font-size: 12px; font-weight: 600; color: #D1D4DC; letter-spacing: 0.02em; }
+
+/* ── OI Settings Modal ── */
+.oiSettingsPanel {
+  position: fixed; z-index: 9999; width: 300px;
+  background: rgba(18,20,28,0.97);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+.oiSettingsHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.oiSettingsHeaderLeft { display: flex; align-items: center; gap: 8px; }
+.oiSettingsTitle { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #D1D4DC; text-transform: uppercase; }
+.oiSettingsClose { background: none; border: none; cursor: pointer; color: #4A4E5C; padding: 2px; display: flex; align-items: center; }
+.oiSettingsClose:hover { color: #9B9EA8; }
+.oiSettingsBody { padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
+
+/* OI section labels */
+.oiSectionLabel { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #787B86; text-transform: uppercase; margin-bottom: 8px; }
+
+/* Expiry buttons */
+.oiExpiryWrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.oiExpiryBtn {
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 11px; font-weight: 600; font-family: monospace;
+  transition: all 0.12s;
+}
+.oiExpiryBtnActive   { border: 1px solid rgba(255,152,0,0.5); background: rgba(255,152,0,0.12); color: #FFB74D; }
+.oiExpiryBtnInactive { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); color: #9B9EA8; }
+.oiExpiryBtnInactive:hover { background: rgba(255,255,255,0.07); color: #D1D4DC; }
+
+/* Mode buttons */
+.oiModeBtn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left;
+  transition: all 0.15s;
+}
+.oiModeBtnActive   { border: 1px solid rgba(46,189,133,0.4); background: rgba(46,189,133,0.08); }
+.oiModeBtnInactive { border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.03); }
+.oiModeBtnInactive:hover { background: rgba(255,255,255,0.06); }
+.oiModeIcon        { flex-shrink: 0; display: flex; }
+.oiModeIconActive  { color: #2ebd85; }
+.oiModeIconInactive { color: #787B86; }
+.oiModeText        { flex: 1; }
+.oiModeLabel       { font-size: 12px; font-weight: 600; }
+.oiModeLabelActive { color: #D1D4DC; }
+.oiModeLabelInactive { color: #9B9EA8; }
+.oiModeSub         { font-size: 10px; color: #4A4E5C; margin-top: 1px; }
+
+/* GEX sub-options */
+.oiGexSubs { margin-top: 4px; margin-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.oiGexSubBtn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 6px; cursor: pointer; width: 100%; text-align: left;
+  transition: all 0.15s;
+}
+.oiGexSubBtnActive   { border: 1px solid rgba(129,140,248,0.4); background: rgba(129,140,248,0.1); }
+.oiGexSubBtnInactive { border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
+.oiGexSubBtnInactive:hover { background: rgba(255,255,255,0.05); }
+.oiGexDot        { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.oiGexDotActive  { background: #818cf8; }
+.oiGexDotInactive{ background: #333333; }
+.oiGexSubLabel   { font-size: 12px; font-weight: 600; }
+.oiGexSubLabelActive { color: #818cf8; }
+.oiGexSubLabelInactive { color: #9B9EA8; }
+.oiGexSubSub     { font-size: 10px; color: #4A4E5C; margin-top: 1px; font-family: monospace; }
+
+/* Color pickers */
+.oiColorRow  { display: flex; gap: 10px; }
+.oiColorLabel { flex: 1; cursor: pointer; }
+.oiColorName  { font-size: 10px; color: #787B86; margin-bottom: 5px; letter-spacing: 0.06em; }
+.oiColorSwatch {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+  background: rgba(255,255,255,0.03); cursor: pointer;
+}
+.oiColorDot   { width: 18px; height: 18px; border-radius: 4px; border: 2px solid rgba(255,255,255,0.15); flex-shrink: 0; }
+.oiColorHex   { font-size: 11px; font-family: monospace; color: #9B9EA8; }
+.oiColorInputHidden { opacity: 0; position: absolute; width: 0; height: 0; pointer-events: none; }
+.oiColorInputRange  { opacity: 0; width: 100%; height: 2px; cursor: pointer; margin-top: -2px; }
+
+/* Opacity slider */
+.oiOpacityHeader { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.oiOpacityVal    { font-size: 11px; font-weight: 600; color: #D1D4DC; font-family: monospace; }
+.oiOpacitySlider { width: 100%; accent-color: #2ebd85; cursor: pointer; height: 4px; }
+.oiOpacityHints  { display: flex; justify-content: space-between; margin-top: 3px; }
+.oiOpacityHint   { font-size: 9px; color: #4A4E5C; }
+
+/* ── VWAP Settings Panel ── */
+.vwapPanel {
+  position: fixed; z-index: 9999; width: 260px;
+  background: rgba(18,20,28,0.97);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+.vwapPanelHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.vwapPanelTitle { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #D1D4DC; text-transform: uppercase; }
+.vwapPanelClose { background: none; border: none; cursor: pointer; color: #4A4E5C; padding: 2px; display: flex; align-items: center; }
+.vwapPanelBody  { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.vwapAnchorBtn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left;
+  transition: all 0.15s;
+}
+.vwapAnchorBtnActive   { border: 1px solid rgba(255,215,0,0.40); background: rgba(255,215,0,0.08); }
+.vwapAnchorBtnInactive { border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.03); }
+.vwapAnchorBtnInactive:hover { background: rgba(255,255,255,0.06); }
+.vwapAnchorDot        { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.vwapAnchorDotActive  { background: #FFD700; }
+.vwapAnchorDotInactive{ background: #333333; }
+.vwapAnchorLabel      { font-size: 12px; font-weight: 600; }
+.vwapAnchorLabelActive { color: #FFD700; }
+.vwapAnchorLabelInactive { color: #9B9EA8; }
+.vwapAnchorSub        { font-size: 10px; color: #4A4E5C; margin-top: 1px; }
+
+/* ── Timeframe buttons row ── */
+.tfRow { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.tfBtn {
+  height: 28px; padding: 0 6px;
+  font-size: 13px; font-weight: 400;
+  color: #787B86;
+  background: transparent; border: none;
+  border-radius: 4px; cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+.tfBtn:hover { color: #D1D4DC; }
+.tfBtnActive { color: #D1D4DC; font-weight: 600; }
+
+/* ── Layout button (inline) ── */
+.layoutBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px; cursor: pointer;
+  color: #787B86;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.layoutBtn:hover { border-color: rgba(255,255,255,0.18); color: #C4C7D0; }
+.layoutBtnOpen {
+  background: rgba(255,152,0,0.10);
+  border-color: rgba(255,152,0,0.45);
+  color: #FF9800;
+}
+
+/* ── View switcher button ── */
+.viewSwitchBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  color: #9B9EA8;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.viewSwitchBtn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); color: #C4C7D0; }
+.viewSwitchBtnOpen {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.18);
+  color: #D1D4DC;
+}
+
+/* ── OI settings data-mode column ── */
+.oiModeColumn { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── Symbol search icon (flex-shrink: 0) ── */
+.searchIcon { flex-shrink: 0; }
+
+/* ── Anchor label span (tiny text in anchor button) ── */
+.anchorLabel { font-size: 9px; letter-spacing: 0.04em; font-weight: 500; }
+
+/* ── OC tab container ── */
+.ocTabContainer { position: relative; flex-shrink: 0; display: flex; }

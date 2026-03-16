@@ -14,8 +14,9 @@ import {
   type Time,
 } from 'lightweight-charts';
 import { useNubraInstruments, type NubraInstrument, type NubraLoadStatus } from './useNubraInstruments';
-import { Button, Input, DatePicker, Select, Spin } from 'antd';
+import { Button, DatePicker, Spin } from 'antd';
 import dayjs from 'dayjs';
+import s from './Backtest.module.css';
 
 type Tab = 'ALL' | 'STOCK' | 'INDEX' | 'IDX OPT' | 'IDX FUT' | 'EQ OPT' | 'EQ FUT' | 'NSE' | 'BSE';
 const TABS: Tab[] = ['ALL', 'STOCK', 'INDEX', 'IDX OPT', 'IDX FUT', 'EQ OPT', 'EQ FUT', 'NSE', 'BSE'];
@@ -68,7 +69,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <span style={{ color: '#f59e0b', fontWeight: 600 }}>{text.slice(idx, idx + query.length)}</span>
+      <span className={s.highlight}>{text.slice(idx, idx + query.length)}</span>
       {text.slice(idx + query.length)}
     </>
   );
@@ -87,14 +88,14 @@ function formatExpiry(expiry: string | null): string {
 }
 
 function StatusBadge({ status }: { status: NubraLoadStatus }) {
-  if (status.phase === 'idle') return <span className="text-white/30 text-xs">Not loaded</span>;
-  if (status.phase === 'checking') return <span className="text-yellow-400/70 text-xs">Checking cache...</span>;
-  if (status.phase === 'fetching') return <span className="text-yellow-400/70 text-xs">Fetching from Nubra...</span>;
-  if (status.phase === 'parsing') return <span className="text-yellow-400/70 text-xs">Parsing...</span>;
-  if (status.phase === 'storing') return <span className="text-yellow-400/70 text-xs">Caching...</span>;
-  if (status.phase === 'cache-hit') return <span className="text-green-400/70 text-xs">{status.total.toLocaleString()} instruments (cached)</span>;
-  if (status.phase === 'ready') return <span className="text-green-400/70 text-xs">{status.total.toLocaleString()} instruments</span>;
-  if (status.phase === 'error') return <span className="text-red-400/70 text-xs">{status.message}</span>;
+  if (status.phase === 'idle') return <span className={s.statusIdle}>Not loaded</span>;
+  if (status.phase === 'checking') return <span className={s.statusChecking}>Checking cache...</span>;
+  if (status.phase === 'fetching') return <span className={s.statusFetching}>Fetching from Nubra...</span>;
+  if (status.phase === 'parsing') return <span className={s.statusParsing}>Parsing...</span>;
+  if (status.phase === 'storing') return <span className={s.statusStoring}>Caching...</span>;
+  if (status.phase === 'cache-hit') return <span className={s.statusCacheHit}>{status.total.toLocaleString()} instruments (cached)</span>;
+  if (status.phase === 'ready') return <span className={s.statusReady}>{status.total.toLocaleString()} instruments</span>;
+  if (status.phase === 'error') return <span className={s.statusError}>{status.message}</span>;
   return null;
 }
 
@@ -246,8 +247,6 @@ async function fetchHistoricalData(
     if (stockChart) break;
   }
   if (!stockChart) throw new Error('No chart data found in response');
-
-  console.log('[backtest] stockChart fields:', Object.keys(stockChart), 'open:', stockChart.open?.length, 'high:', stockChart.high?.length, 'low:', stockChart.low?.length, 'close:', stockChart.close?.length, 'vol:', stockChart.cumulative_volume?.length);
 
   // Build candles from separate OHLC arrays
   const openArr: any[] = stockChart.open ?? [];
@@ -563,7 +562,6 @@ export default function Backtest() {
       const data = await fetchHistoricalData(selected, startISO, endISO, interval, intraDay);
 
       // Main chart — candles + volume + OI
-      console.log('[backtest] candles:', data.candles.length, 'first:', data.candles[0], 'last:', data.candles[data.candles.length - 1]);
       if (candleSeriesRef.current) candleSeriesRef.current.setData(data.candles);
       if (volumeSeriesRef.current) volumeSeriesRef.current.setData(data.volume);
 
@@ -699,16 +697,16 @@ export default function Backtest() {
   const noSession = useMemo(() => !localStorage.getItem('nubra_session_token'), []);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className={s.root}>
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-5 py-2.5 glass-bar">
+      <div className={`${s.topBar} glass-bar`}>
 
-        <span className="text-white/60 text-xs font-semibold uppercase tracking-wider">Backtest</span>
-        <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+        <span className={s.topBarLabel}>Backtest</span>
+        <span className={s.divider} />
         <StatusBadge status={status} />
 
         {noSession && (
-          <span className="text-amber-400/60 text-xs ml-2">Login to Nubra first (navbar)</span>
+          <span className={s.noSessionWarning}>Login to Nubra first (navbar)</span>
         )}
 
         {isReady && (
@@ -723,9 +721,9 @@ export default function Backtest() {
         )}
 
         {/* Search bar */}
-        <div className="relative w-[400px] ml-auto">
-          <div className="relative flex items-center">
-            <svg className="absolute left-3 w-3.5 h-3.5 text-white/25 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <div className={s.searchWrapper}>
+          <div className={s.searchInputRow}>
+            <svg className={s.searchIcon} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
@@ -737,8 +735,7 @@ export default function Backtest() {
               placeholder={isReady ? 'Search Nubra instrument...' : isLoading ? 'Loading instruments...' : 'Login to Nubra first'}
               disabled={!isReady}
               autoFocus
-              className="w-full text-white text-xs rounded-lg pl-8 pr-8 outline-none transition-all duration-150 disabled:opacity-30 glass-input"
-              style={{ padding: '7px 32px' }}
+              className={`${s.searchInput} glass-input`}
               onFocusCapture={e => (e.target as HTMLInputElement).style.borderColor = 'rgba(245,158,11,0.4)'}
               onBlurCapture={e => (e.target as HTMLInputElement).style.borderColor = '#2a2a2a'}
             />
@@ -756,12 +753,11 @@ export default function Backtest() {
 
           {/* Dropdown */}
           {showDropdown && query.trim() && (
-            <div ref={dropdownRef} className="absolute top-[calc(100%+6px)] left-0 w-[620px] shadow-2xl z-50 overflow-hidden glass-dropdown"
-              style={{}}>
+            <div ref={dropdownRef} className={`${s.dropdown} glass-dropdown`}>
 
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.07]">
-                <span className="text-white/80 font-semibold text-xs uppercase tracking-wider">Nubra Instruments</span>
+              <div className={s.dropdownHeader}>
+                <span className={s.dropdownTitle}>Nubra Instruments</span>
                 <Button
                   size="small"
                   type="text"
@@ -773,7 +769,7 @@ export default function Backtest() {
               </div>
 
               {/* Tabs */}
-              <div className="flex gap-1.5 px-4 py-2 border-b border-white/[0.06]">
+              <div className={s.dropdownTabs}>
                 {TABS.map(t => (
                   tab === t ? (
                     <Button
@@ -800,48 +796,42 @@ export default function Backtest() {
               </div>
 
               {/* Table header */}
-              <div className="grid grid-cols-[1fr_0.8fr_0.6fr_0.5fr_auto] px-4 py-1.5 border-b border-white/[0.05]">
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">Symbol</span>
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">Asset</span>
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">Expiry</span>
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">Strike</span>
-                <span className="text-[10px] text-white/30 uppercase tracking-wider text-right">Type</span>
+              <div className={s.tableHeader}>
+                <span className={s.tableHeaderCell}>Symbol</span>
+                <span className={s.tableHeaderCell}>Asset</span>
+                <span className={s.tableHeaderCell}>Expiry</span>
+                <span className={s.tableHeaderCell}>Strike</span>
+                <span className={s.tableHeaderCellRight}>Type</span>
               </div>
 
               {/* Results */}
-              <div style={{ maxHeight: '52vh', overflowY: 'auto' }}>
+              <div className={s.resultsList}>
                 {tabResults.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-white/25 text-sm">No results</div>
+                  <div className={s.noResults}>No results</div>
                 ) : (
                   tabResults.map((ins, idx) => (
                     <div key={ins.ref_id || `${ins.stock_name}-${idx}`}
                       onClick={() => handleSelect(ins)}
-                      className="grid grid-cols-[1fr_0.8fr_0.6fr_0.5fr_auto] px-4 py-2 cursor-pointer border-b border-white/[0.04] last:border-0 transition-colors hover:bg-white/[0.04]">
-                      <div className="text-xs text-white/90 font-mono truncate">
+                      className={s.resultRow}>
+                      <div className={s.resultSymbol}>
                         <Highlight text={ins.stock_name} query={query} />
                       </div>
-                      <div className="text-xs text-white/45 truncate">
+                      <div className={s.resultAsset}>
                         <Highlight text={ins.asset} query={query} />
                       </div>
-                      <div className="text-xs text-white/35 font-mono">
+                      <div className={s.resultExpiry}>
                         {formatExpiry(ins.expiry)}
                       </div>
-                      <div className="text-xs text-white/40 font-mono">
+                      <div className={s.resultStrike}>
                         {ins.strike_price != null ? (ins.strike_price / 100).toFixed(2) : '—'}
                       </div>
-                      <div className="flex items-center gap-1.5 justify-end">
+                      <div className={s.resultTypeBadges}>
                         {ins.option_type && ins.option_type !== 'N/A' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-                            style={{
-                              background: ins.option_type === 'CE' ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)',
-                              color: ins.option_type === 'CE' ? '#34d399' : '#f87171',
-                              border: `1px solid ${ins.option_type === 'CE' ? 'rgba(52,211,153,0.25)' : 'rgba(248,113,113,0.25)'}`,
-                            }}>
+                          <span className={ins.option_type === 'CE' ? s.optionTypeBadgeCe : s.optionTypeBadgePe}>
                             {ins.option_type}
                           </span>
                         )}
-                        <span className="text-[10px] px-1.5 py-0.5 rounded text-white/45"
-                          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                        <span className={s.derivTypeBadge}>
                           {ins.derivative_type}
                         </span>
                       </div>
@@ -856,45 +846,40 @@ export default function Backtest() {
 
       {/* Controls bar — only when instrument selected */}
       {selected && (
-        <div className="flex items-center gap-4 px-5 py-2 glass-bar">
+        <div className={`${s.controlsBar} glass-bar`}>
 
           {/* Selected instrument badge */}
-          <div className="flex items-center gap-2">
-            <span className="text-white/90 text-xs font-mono font-semibold">{selected.stock_name}</span>
+          <div className={s.instrumentBadge}>
+            <span className={s.instrumentName}>{selected.stock_name}</span>
             {selected.option_type && selected.option_type !== 'N/A' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-                style={{
-                  background: selected.option_type === 'CE' ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)',
-                  color: selected.option_type === 'CE' ? '#34d399' : '#f87171',
-                }}>
+              <span className={selected.option_type === 'CE' ? s.selectedCeBadge : s.selectedPeBadge}>
                 {selected.option_type}
               </span>
             )}
-            <span className="text-[10px] px-1.5 py-0.5 rounded text-white/40"
-              style={{ background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
+            <span className={s.selectedDerivTypeBadge}>
               {selected.derivative_type}
             </span>
             {selected.expiry && (
-              <span className="text-white/30 text-[10px] font-mono">{formatExpiry(selected.expiry)}</span>
+              <span className={s.selectedExpiry}>{formatExpiry(selected.expiry)}</span>
             )}
-            <span className="text-white/20 text-[10px]">{selected.exchange}</span>
+            <span className={s.selectedExchange}>{selected.exchange}</span>
           </div>
 
-          <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+          <span className={s.divider} />
 
           {/* Intraday toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <label className={s.intradayLabel}>
             <input type="checkbox" checked={intraDay}
               onChange={e => setIntraDay(e.target.checked)}
-              className="w-3 h-3" style={{ accentColor: '#f59e0b' }} />
-            <span className="text-white/50 text-[10px] uppercase tracking-wider">Intraday</span>
+              className={s.intradayCheckbox} />
+            <span className={s.intradayText}>Intraday</span>
           </label>
 
-          <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+          <span className={s.divider} />
 
           {/* Entry date */}
-          <div className="flex items-center gap-1">
-            <span className="text-white/30 text-[10px] uppercase">Entry</span>
+          <div className={s.dateGroup}>
+            <span className={s.dateLabel}>Entry</span>
             <DatePicker
               size="small"
               value={entryDate ? dayjs(entryDate) : null}
@@ -907,8 +892,8 @@ export default function Backtest() {
           </div>
 
           {/* Exit date */}
-          <div className="flex items-center gap-1">
-            <span className="text-white/30 text-[10px] uppercase">Exit</span>
+          <div className={s.dateGroup}>
+            <span className={s.dateLabel}>Exit</span>
             <DatePicker
               size="small"
               value={exitDate ? dayjs(exitDate) : null}
@@ -920,10 +905,10 @@ export default function Backtest() {
             />
           </div>
 
-          <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+          <span className={s.divider} />
 
           {/* Interval */}
-          <div className="flex items-center gap-1">
+          <div className={s.intervalGroup}>
             {INTERVALS.map(iv => (
               interval === iv ? (
                 <Button
@@ -949,13 +934,13 @@ export default function Backtest() {
             ))}
           </div>
 
-          <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+          <span className={s.divider} />
 
           {/* Greek toggles — only for OPT */}
           {showGreeks && (
             <>
-              <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
-              <div className="flex items-center gap-1">
+              <span className={s.divider} />
+              <div className={s.greekGroup}>
                 {GREEK_KEYS.map(key => {
                   const active = activeGreeks.has(key);
                   return (
@@ -980,7 +965,7 @@ export default function Backtest() {
             </>
           )}
 
-          <span style={{ width: 1, height: 16, background: "#2a2a2a", flexShrink: 0 }} />
+          <span className={s.divider} />
 
           {/* Reload */}
           <Button
@@ -995,42 +980,42 @@ export default function Backtest() {
           </Button>
 
           {liveConnected && (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-400/80">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className={s.liveIndicator}>
+              <span className={s.liveDot} />
               Live
             </span>
           )}
 
           {chartError && (
-            <span className="text-red-400/70 text-[10px] truncate max-w-[200px]" title={chartError}>{chartError}</span>
+            <span className={s.chartError} title={chartError}>{chartError}</span>
           )}
         </div>
       )}
 
       {/* Chart area */}
-      <div className="flex-1 flex flex-col p-3 min-h-0">
+      <div className={s.chartArea}>
         {selected ? (
-          <div className="glass-panel flex-1 rounded-xl overflow-hidden min-h-0">
-            <div ref={chartContainerRef} className="w-full h-full" />
+          <div className={`${s.chartPanel} glass-panel`}>
+            <div ref={chartContainerRef} className={s.chartContainer} />
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
+          <div className={s.emptyState}>
+            <div className={s.emptyStateInner}>
               {noSession ? (
                 <>
-                  <p className="text-white/20 text-sm">Login to Nubra from the navbar</p>
-                  <p className="text-white/10 text-xs mt-1">Instruments will load automatically after login</p>
+                  <p className={s.emptyStateText}>Login to Nubra from the navbar</p>
+                  <p className={s.emptyStateSubtext}>Instruments will load automatically after login</p>
                 </>
               ) : isReady ? (
                 <>
-                  <p className="text-white/20 text-sm">Search for a Nubra instrument above</p>
-                  <p className="text-white/10 text-xs mt-1">{(status as any).total?.toLocaleString()} instruments loaded</p>
+                  <p className={s.emptyStateText}>Search for a Nubra instrument above</p>
+                  <p className={s.emptyStateSubtext}>{(status as any).total?.toLocaleString()} instruments loaded</p>
                 </>
               ) : isLoading ? (
-                <p className="text-white/30 text-sm">Loading Nubra instruments...</p>
+                <p className={s.emptyStateLoading}>Loading Nubra instruments...</p>
               ) : status.phase === 'error' ? (
                 <>
-                  <p className="text-red-400/60 text-sm">{status.message}</p>
+                  <p className={s.emptyStateError}>{status.message}</p>
                   <Button
                     size="small"
                     type="text"

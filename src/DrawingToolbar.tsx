@@ -2,6 +2,8 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import s from './DrawingToolbar.module.css';
+import { cx } from './lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -561,34 +563,15 @@ interface DrawingToolbarProps {
   canUndo: boolean;
 }
 
-const SEP = () => (
-  <div style={{
-    height: 1,
-    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.10) 20%, rgba(255,255,255,0.10) 80%, transparent)',
-    margin: '2px 5px',
-    flexShrink: 0,
-  }} />
-);
+const SEP = () => <div className={s.sep} />;
 
 function ToolBtn({ tool, isActive, onClick, w = 32, h = 28 }: { tool: typeof TOOLS[0]; isActive: boolean; onClick: () => void; w?: number; h?: number }) {
   return (
     <button
       onClick={onClick}
       title={tool.title}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: w, height: h, borderRadius: 5, flexShrink: 0,
-        border: isActive ? '1.5px solid rgba(255,152,0,0.65)' : '1.5px solid transparent',
-        background: isActive
-          ? 'linear-gradient(135deg,rgba(255,152,0,0.20) 0%,rgba(255,152,0,0.09) 100%)'
-          : 'transparent',
-        color: isActive ? '#FFB74D' : '#8A8E9A',
-        cursor: 'pointer',
-        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-        position: 'relative',
-        boxShadow: isActive ? '0 0 6px rgba(255,152,0,0.15)' : 'none',
-        padding: 0,
-      }}
+      className={cx(s.toolBtn, isActive ? s.toolBtnActive : s.toolBtnInactive)}
+      style={{ width: w, height: h }}
       onMouseEnter={e => {
         if (!isActive) {
           const b = e.currentTarget as HTMLButtonElement;
@@ -607,14 +590,7 @@ function ToolBtn({ tool, isActive, onClick, w = 32, h = 28 }: { tool: typeof TOO
       }}
     >
       {tool.icon}
-      {isActive && (
-        <span style={{
-          position: 'absolute', bottom: 2, right: 2,
-          width: 3, height: 3, borderRadius: '50%',
-          background: '#FF9800',
-          boxShadow: '0 0 3px #FF9800',
-        }} />
-      )}
+      {isActive && <span className={s.toolBtnDot} />}
     </button>
   );
 }
@@ -639,31 +615,14 @@ export function DrawingToolbar({ activeTool, onToolChange, open, onToggle, drawi
   const btnW    = compact ? 28 : 32;
 
   return (
-    <div ref={rootRef} style={{
-      display: 'flex', flexDirection: 'row', alignItems: 'stretch',
-      flexShrink: 0, height: '100%',
-    }}>
+    <div ref={rootRef} className={s.root}>
       {/* Tools panel — full height sidebar */}
       {open && (
-        <div style={{
-          background: '#171717',
-          borderRight: '1px solid rgba(255,255,255,0.07)',
-          display: 'flex', flexDirection: 'column',
-          width: btnW + 8,
-          height: '100%',
-          overflow: 'hidden',
-        }}>
+        <div className={s.toolsPanel} style={{ width: btnW + 8 }}>
           {/* Scrollable tools area */}
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            scrollbarWidth: 'none',
-            padding: compact ? '4px 4px 2px' : '6px 4px 4px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
-          }}>
+          <div className={cx(s.toolsScroll, compact ? s.toolsScrollCompact : s.toolsScrollNormal)}>
             {groups.map((group, gi) => (
-              <div key={gi} style={{ display:'flex', flexDirection:'column', alignItems:'center', width:'100%' }}>
+              <div key={gi} className={s.toolGroup}>
                 {gi > 0 && <SEP />}
                 {group.map(tool => (
                   <ToolBtn
@@ -679,15 +638,11 @@ export function DrawingToolbar({ activeTool, onToolChange, open, onToggle, drawi
           </div>
 
           {/* Pinned bottom — undo + clear */}
-          <div style={{
-            flexShrink: 0,
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-            padding: compact ? '2px 4px' : '4px 4px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-          }}>
+          <div className={cx(s.bottomActions, compact ? s.bottomActionsCompact : s.bottomActionsNormal)}>
             <button
               onClick={onUndo} title="Undo (Ctrl+Z)" disabled={!canUndo}
-              style={{ display:'flex', alignItems:'center', justifyContent:'center', width:btnW, height:btnH, borderRadius:5, flexShrink:0, border:'1px solid transparent', background:'transparent', color:canUndo?'#8A8E9A':'#363840', cursor:canUndo?'pointer':'default', transition:'background 0.1s, color 0.1s', padding:0 }}
+              className={s.actionBtn}
+              style={{ width: btnW, height: btnH, color: canUndo ? '#8A8E9A' : '#363840', cursor: canUndo ? 'pointer' : 'default' }}
               onMouseEnter={e => { if (canUndo) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(255,255,255,0.08)'; b.style.color='#D1D4DC'; b.style.borderColor='rgba(255,255,255,0.12)'; }}}
               onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=canUndo?'#8A8E9A':'#363840'; b.style.borderColor='transparent'; }}
             >
@@ -697,7 +652,8 @@ export function DrawingToolbar({ activeTool, onToolChange, open, onToggle, drawi
             </button>
             <button
               onClick={onClearAll} title={drawingCount>0?`Clear all (${drawingCount})`:'No drawings'} disabled={drawingCount===0}
-              style={{ display:'flex', alignItems:'center', justifyContent:'center', width:btnW, height:btnH, borderRadius:5, flexShrink:0, border:'1px solid transparent', background:'transparent', color:drawingCount>0?'#c0404a':'#363840', cursor:drawingCount>0?'pointer':'default', transition:'background 0.1s, color 0.1s', padding:0 }}
+              className={s.actionBtn}
+              style={{ width: btnW, height: btnH, color: drawingCount > 0 ? '#c0404a' : '#363840', cursor: drawingCount > 0 ? 'pointer' : 'default' }}
               onMouseEnter={e => { if (drawingCount>0) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(242,54,69,0.13)'; b.style.color='#f23645'; b.style.borderColor='rgba(242,54,69,0.28)'; }}}
               onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=drawingCount>0?'#c0404a':'#363840'; b.style.borderColor='transparent'; }}
             >
@@ -714,15 +670,11 @@ export function DrawingToolbar({ activeTool, onToolChange, open, onToggle, drawi
       <button
         onClick={onToggle}
         title={open ? 'Hide drawing tools' : 'Drawing tools'}
+        className={s.toggleStrip}
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: compact ? 10 : 12, height: '100%', flexShrink: 0,
+          width: compact ? 10 : 12,
           background: open ? 'rgba(255,152,0,0.08)' : '#171717',
-          border: 'none',
-          borderRight: '1px solid rgba(255,255,255,0.07)',
-          cursor: 'pointer',
           color: open ? '#FF9800' : '#4A4E5C',
-          transition: 'color 0.15s, background 0.15s',
         }}
         onMouseEnter={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.16)':'rgba(255,255,255,0.06)'; b.style.color=open?'#FFB74D':'#9B9EA8'; }}
         onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.08)':'#171717'; b.style.color=open?'#FF9800':'#4A4E5C'; }}

@@ -1,0 +1,113 @@
+.root {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.toolsPanel {
+  background: #171717;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.toolsScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.toolsScrollNormal { padding: 6px 4px 4px; }
+.toolsScrollCompact { padding: 4px 4px 2px; }
+
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.sep {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10) 20%, rgba(255,255,255,0.10) 80%, transparent);
+  margin: 2px 5px;
+  flex-shrink: 0;
+}
+
+.bottomActions {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.bottomActionsNormal { padding: 4px 4px; }
+.bottomActionsCompact { padding: 2px 4px; }
+
+.toolBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  position: relative;
+  padding: 0;
+}
+.toolBtnInactive {
+  border: 1.5px solid transparent;
+  background: transparent;
+  color: #8a8e9a;
+  box-shadow: none;
+}
+.toolBtnActive {
+  border: 1.5px solid rgba(255, 152, 0, 0.65);
+  background: linear-gradient(135deg, rgba(255,152,0,0.20) 0%, rgba(255,152,0,0.09) 100%);
+  color: #ffb74d;
+  box-shadow: 0 0 6px rgba(255, 152, 0, 0.15);
+}
+.toolBtnDot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #ff9800;
+  box-shadow: 0 0 3px #ff9800;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+}
+
+.toggleStrip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex-shrink: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}

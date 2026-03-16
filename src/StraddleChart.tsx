@@ -24,6 +24,7 @@ import type { Instrument } from './useInstruments';
 import { useMarketDataMap } from './hooks/useMarketData';
 import { wsManager } from './lib/WebSocketManager';
 import { cx } from './lib/utils';
+import s from './StraddleChart.module.css';
 
 interface Props {
   instruments: Instrument[];
@@ -277,19 +278,7 @@ function fmtExpiry(ms: number) {
   return new Date(ms).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
-// ── Shared label style ────────────────────────────────────────────────────────
-const CTRL_LABEL: React.CSSProperties = {
-  display: 'block',
-  fontSize: 10,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.10em',
-  color: '#4B5563',
-  marginBottom: 6,
-  lineHeight: 1,
-  whiteSpace: 'nowrap',
-  fontFamily: 'inherit',
-};
+
 
 // ── UI components (shadcn/ui) ─────────────────────────────────────────────────
 function UnderlyingInput({ underlyings, value, onChange }: { underlyings: string[]; value: string; onChange: (v: string) => void }) {
@@ -317,16 +306,10 @@ function UnderlyingInput({ underlyings, value, onChange }: { underlyings: string
   };
 
   return (
-    <div className="flex flex-col shrink-0" ref={ref}>
-      <span style={CTRL_LABEL}>Underlying</span>
-      <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        height: 30, padding: '0 10px', width: 148,
-        background: '#1A1E2B', border: '1px solid rgba(255,255,255,0.09)',
-        borderRadius: 6, cursor: 'text', boxSizing: 'border-box',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-      }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+    <div className={s.underlyingWrap} ref={ref}>
+      <span className={s.ctrlLabel}>Underlying</span>
+      <div className={s.underlyingBox}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" className={s.underlyingIcon}>
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
         <input
@@ -335,24 +318,16 @@ function UnderlyingInput({ underlyings, value, onChange }: { underlyings: string
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => { onChange(e.target.value); openDrop(); }}
           onFocus={openDrop}
           placeholder="NIFTY…"
-          style={{
-            flex: 1, background: 'transparent', outline: 'none', border: 'none',
-            fontSize: 12, fontWeight: 500, color: '#E2E8F0', minWidth: 0,
-          }}
-          className="placeholder-[#374151]"
+          className={`${s.underlyingInput} placeholder-[#9CA3AF]`}
         />
       </div>
       {open && filtered.length > 0 && dropPos && createPortal(
-        <div style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 99999,
-          background: '#0F1117', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 8,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.9)', overflow: 'hidden' }}>
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+        <div className={s.dropdownShell} style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}>
+          <div className={s.dropdownList}>
             {filtered.map(u => (
               <div key={u}
                 onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange(u); setOpen(false); }}
-                style={{ padding: '8px 12px', fontSize: 12, fontWeight: 500, color: '#D1D5DB', cursor: 'pointer', transition: 'background 0.1s' }}
-                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'rgba(59,130,246,0.10)'}
-                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+                className={s.dropdownItem}
               >
                 {u}
               </div>
@@ -403,55 +378,36 @@ function LabeledSelect({ label, value, options, onChange, formatLabel, disabled 
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <span style={CTRL_LABEL}>{label}</span>
+    <div className={s.selectWrap}>
+      <span className={s.ctrlLabel}>{label}</span>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          minWidth: 110, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 10px', cursor: isDisabled ? 'not-allowed' : 'pointer',
-          border: `1px solid ${open ? 'rgba(59,130,246,0.45)' : 'rgba(255,255,255,0.09)'}`,
-          background: open ? 'rgba(59,130,246,0.08)' : '#1A1E2B',
-          boxShadow: open ? '0 0 0 3px rgba(59,130,246,0.10)' : 'none',
-          borderRadius: 6, opacity: isDisabled ? 0.35 : 1, boxSizing: 'border-box',
-          color: displayLabel ? '#E2E8F0' : '#374151', fontSize: 12, fontWeight: 500, gap: 6,
-          transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
-        } as React.CSSProperties}
+        className={cx(s.selectBtn, open && s.selectBtnOpen, isDisabled && s.selectBtnDisabled, displayLabel ? s.selectBtnHasValue : '')}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+        <span className={s.selectBtnText}>
           {displayLabel ?? 'Select…'}
         </span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: '#4B5563', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className={cx(s.selectChevron, open && s.selectChevronOpen)}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: '#0F1117', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.85)',
-          minWidth: 160, overflow: 'hidden',
-        }}>
-          <div style={{ padding: '7px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div ref={dropRef} className={s.selectDropdown} style={{ top: pos.top, left: pos.left }}>
+          <div className={s.selectSearchWrap}>
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={`Search ${label.toLowerCase()}…`}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '5px 9px',
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)',
-                borderRadius: 5, outline: 'none', fontSize: 12, color: '#E2E8F0',
-                fontFamily: 'inherit',
-              }}
+              className={s.selectSearchInput}
             />
           </div>
-          <div style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 0' }}>
+          <div className={s.selectOptionList}>
             {filtered.length === 0 && (
-              <div style={{ padding: '10px 12px', fontSize: 11, color: '#374151', textAlign: 'center' }}>No matches</div>
+              <div className={s.selectNoMatch}>No matches</div>
             )}
             {filtered.map(o => {
               const lbl = formatLabel ? formatLabel(o) : String(o);
@@ -459,19 +415,11 @@ function LabeledSelect({ label, value, options, onChange, formatLabel, disabled 
               return (
                 <div key={String(o)}
                   onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange(o); setOpen(false); setSearch(''); }}
-                  style={{
-                    padding: '7px 12px', cursor: 'pointer', fontSize: 12, fontWeight: isActive ? 600 : 400,
-                    color: isActive ? '#3B82F6' : '#D1D5DB',
-                    background: isActive ? 'rgba(59,130,246,0.10)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.05)'; }}
-                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                  className={cx(s.selectOption, isActive && s.selectOptionActive)}
                 >
                   <span>{lbl}</span>
                   {isActive && (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E5E7EB" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
                   )}
@@ -509,54 +457,32 @@ function IntervalButtons({ value, onChange }: { value: Interval; onChange: (v: I
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <span style={CTRL_LABEL}>Interval</span>
+    <div className={s.selectWrap}>
+      <span className={s.ctrlLabel}>Interval</span>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          minWidth: 72, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 10px', cursor: 'pointer',
-          border: `1px solid ${open ? 'rgba(59,130,246,0.45)' : 'rgba(255,255,255,0.09)'}`,
-          background: open ? 'rgba(59,130,246,0.08)' : '#1A1E2B',
-          boxShadow: open ? '0 0 0 3px rgba(59,130,246,0.10)' : 'none',
-          borderRadius: 6, boxSizing: 'border-box',
-          color: '#E2E8F0', fontSize: 12, fontWeight: 500, gap: 6,
-          transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
-        } as React.CSSProperties}
+        className={cx(s.intervalBtn, open && s.selectBtnOpen)}
       >
         <span>{value.label}</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: '#4B5563', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className={cx(s.selectChevron, open && s.selectChevronOpen)}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: '#0F1117', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.85)',
-          minWidth: 100, overflow: 'hidden', padding: '4px 0',
-        }}>
+        <div ref={dropRef} className={s.intervalDropdown} style={{ top: pos.top, left: pos.left }}>
           {INTERVALS.map(iv => {
             const isActive = iv.value === value.value;
             return (
               <div key={iv.value}
                 onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange(iv); setOpen(false); }}
-                style={{
-                  padding: '7px 14px', cursor: 'pointer', fontSize: 12, fontWeight: isActive ? 600 : 400,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  color: isActive ? '#3B82F6' : '#D1D5DB',
-                  background: isActive ? 'rgba(59,130,246,0.10)' : 'transparent',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.05)'; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                className={cx(s.intervalOption, isActive && s.intervalOptionActive)}
               >
                 <span>{iv.label}</span>
                 {isActive && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E5E7EB" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 )}
@@ -573,18 +499,17 @@ function IntervalButtons({ value, onChange }: { value: Interval; onChange: (v: I
 // Toggle group for CE/PE/OI visibility — unified pill container
 function ToggleGroup({ items }: { items: { label: string; active: boolean; color: string; onClick: () => void }[] }) {
   return (
-    <div style={{ display: 'flex', background: '#151920', borderRadius: 7, padding: 3, gap: 2 }}>
+    <div className={s.toggleGroup}>
       {items.map(({ label, active, color, onClick }) => (
         <button
           key={label}
           type="button"
           onClick={onClick}
+          className={s.toggleBtn}
           style={{
-            height: 24, padding: '0 9px', fontSize: 11, fontWeight: active ? 600 : 400,
-            cursor: 'pointer', transition: 'all 0.12s', lineHeight: 1, border: 'none',
-            borderRadius: 5, whiteSpace: 'nowrap',
+            fontWeight: active ? 600 : 400,
             background: active ? color + '22' : 'transparent',
-            color: active ? color : '#4B5563',
+            color: active ? color : '#9CA3AF',
             boxShadow: active ? `0 0 0 1px ${color}44` : 'none',
           }}
         >
@@ -637,73 +562,52 @@ function MultiExpiryPicker({ expiries, selected, onChange, disabled }: {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <span style={CTRL_LABEL}>Expiries</span>
+    <div className={s.multiPickerWrap}>
+      <span className={s.ctrlLabel}>Expiries</span>
       <button
         ref={btnRef2}
         type="button"
         onClick={handleOpen2}
-        style={{
-          minWidth: 130, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 8px', cursor: isDisabled ? 'not-allowed' : 'pointer',
-          border: '1px solid rgba(255,255,255,0.12)', background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, opacity: isDisabled ? 0.4 : 1, boxSizing: 'border-box', userSelect: 'none',
-          color: label ? '#D1D4DC' : '#52525b', fontSize: 12, fontWeight: 600, gap: 4,
-        }}
+        className={cx(
+          s.multiPickerBtn,
+          open ? s.multiPickerBtnOpen : s.multiPickerBtnClosed,
+          isDisabled ? s.multiPickerBtnDisabled : s.multiPickerBtnEnabled,
+          label ? s.multiPickerBtnHasValue : s.multiPickerBtnEmpty,
+        )}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+        <span className={s.multiPickerBtnText}>
           {label ?? 'Select expiries'}
         </span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className={s.multiPickerChevron}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef2} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          width: 190, overflow: 'hidden',
-        }}>
-          {/* Search */}
-          <div style={{ padding: 8, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div ref={dropRef2} className={s.multiPickerDropdown} style={{ top: pos.top, left: pos.left }}>
+          <div className={s.multiPickerSearchWrap}>
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search expiry…"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '5px 8px',
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 5, outline: 'none', fontSize: 12, color: '#D1D4DC',
-              }}
+              className={s.multiPickerSearchInput}
             />
           </div>
 
-          {/* Expiry list */}
-          <div style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 0' }}>
+          <div className={s.multiPickerList}>
             {filtered.length === 0 && (
-              <div style={{ padding: '10px 12px', fontSize: 11, color: '#52525b', textAlign: 'center' }}>No matches</div>
+              <div className={s.multiPickerNoMatch}>No matches</div>
             )}
             {filtered.map(exp => {
               const isSel = selected.includes(exp);
               return (
                 <div key={exp} onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); toggle(exp); }}
-                  className="labeled-select-option"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer',
-                    background: isSel ? 'rgba(245,158,11,0.07)' : undefined, transition: 'background 0.1s',
-                  }}>
-                  {/* Checkbox */}
-                  <span style={{
-                    width: 13, height: 13, border: `1px solid ${isSel ? '#f59e0b' : 'rgba(255,255,255,0.2)'}`,
-                    borderRadius: 3, flexShrink: 0, background: isSel ? '#f59e0b' : 'rgba(255,255,255,0.04)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {isSel && <span style={{ color: '#000', fontSize: 9, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                  className={cx(s.multiPickerRow, isSel && s.multiPickerRowSelected)}>
+                  <span className={cx(s.pickerCheckbox, isSel ? s.pickerCheckboxChecked : s.pickerCheckboxUnchecked)}>
+                    {isSel && <span className={s.pickerCheckTick}>✓</span>}
                   </span>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: isSel ? '#f59e0b' : '#D1D4DC', flex: 1 }}>
+                  <span className={cx(s.pickerLabel, isSel ? s.pickerLabelSelected : s.pickerLabelDefault)}>
                     {fmtExpiry(exp)}
                   </span>
                 </div>
@@ -711,17 +615,12 @@ function MultiExpiryPicker({ expiries, selected, onChange, disabled }: {
             })}
           </div>
 
-          {/* Footer — clear */}
           {selected.length > 0 && (
-            <div style={{ padding: 8, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className={s.multiPickerFooter}>
               <button
                 type="button"
                 onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange([]); setOpen(false); setSearch(''); }}
-                style={{
-                  width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  padding: '5px 0', fontSize: 11, fontWeight: 600, borderRadius: 5, cursor: 'pointer',
-                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171',
-                }}
+                className={s.clearBtn}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
                   <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 7h14m-9 3v8m4-8v8M10 3h4a1 1 0 0 1 1 1v3H9V4a1 1 0 0 1 1-1ZM6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7Z"/>
@@ -779,93 +678,67 @@ function MultiStrikePicker({ strikes, selected, onChange, disabled, highActivity
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <span style={CTRL_LABEL}>Strikes</span>
+    <div className={s.multiPickerWrap}>
+      <span className={s.ctrlLabel}>Strikes</span>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          width: 160, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 10px', cursor: isDisabled ? 'not-allowed' : 'pointer',
-          border: '1px solid rgba(255,255,255,0.12)', background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, opacity: isDisabled ? 0.4 : 1, boxSizing: 'border-box', userSelect: 'none',
-          color: label ? '#D1D4DC' : '#52525b', fontSize: 12, fontWeight: 600, gap: 6,
-        }}
+        className={cx(
+          s.strikePickerBtn,
+          open ? s.strikePickerBtnOpen : s.strikePickerBtnClosed,
+          isDisabled ? s.multiPickerBtnDisabled : s.multiPickerBtnEnabled,
+          label ? s.multiPickerBtnHasValue : s.multiPickerBtnEmpty,
+        )}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+        <span className={s.multiPickerBtnText}>
           {label ?? 'Select strikes'}
         </span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className={s.multiPickerChevron}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          width: 200, overflow: 'hidden',
-        }}>
-          {/* Search */}
-          <div style={{ padding: 8, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div ref={dropRef} className={s.strikePickerDropdown} style={{ top: pos.top, left: pos.left }}>
+          <div className={s.multiPickerSearchWrap}>
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search strike…"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '5px 8px',
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 5, outline: 'none', fontSize: 12, color: '#D1D4DC',
-              }}
+              className={s.multiPickerSearchInput}
             />
           </div>
 
-          {/* Strike list */}
-          <div style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 0' }}>
+          <div className={s.multiPickerList}>
             {filtered.length === 0 && (
-              <div style={{ padding: '10px 12px', fontSize: 11, color: '#52525b', textAlign: 'center' }}>No matches</div>
+              <div className={s.multiPickerNoMatch}>No matches</div>
             )}
-            {filtered.map(s => {
-              const isHot = highActivityStrikes?.has(s);
-              const isSel = selected.includes(s);
-              const dot = isSel ? STRIKE_COLORS[selected.indexOf(s) % STRIKE_COLORS.length] : undefined;
+            {filtered.map(st => {
+              const isHot = highActivityStrikes?.has(st);
+              const isSel = selected.includes(st);
+              const dot = isSel ? STRIKE_COLORS[selected.indexOf(st) % STRIKE_COLORS.length] : undefined;
               return (
-                <div key={s} onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); toggle(s); }} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer',
-                  background: isSel ? 'rgba(245,158,11,0.07)' : isHot ? 'rgba(251,191,36,0.04)' : undefined,
-                  borderLeft: isHot ? '2px solid rgba(251,191,36,0.45)' : '2px solid transparent',
-                  transition: 'background 0.1s',
-                }}>
-                  {/* Checkbox */}
-                  <span style={{
-                    width: 13, height: 13, border: `1px solid ${isSel ? '#f59e0b' : 'rgba(255,255,255,0.2)'}`,
-                    borderRadius: 3, flexShrink: 0, background: isSel ? '#f59e0b' : 'rgba(255,255,255,0.04)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {isSel && <span style={{ color: '#000', fontSize: 9, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                <div key={st} onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); toggle(st); }}
+                  className={cx(s.strikeRow, isSel ? s.strikeRowSelected : isHot ? s.strikeRowHot : s.strikeRowNeutral)}>
+                  <span className={cx(s.pickerCheckbox, isSel ? s.pickerCheckboxChecked : s.pickerCheckboxUnchecked)}>
+                    {isSel && <span className={s.pickerCheckTick}>✓</span>}
                   </span>
-                  <span style={{ color: isHot ? '#fbbf24' : isSel ? '#f59e0b' : '#D1D4DC', flex: 1, fontSize: 12, fontWeight: 500 }}>{s}</span>
-                  {isHot && <span style={{ fontSize: 9, color: 'rgba(251,191,36,0.5)', fontWeight: 700 }}>HOT</span>}
-                  {dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
+                  <span className={isHot ? s.strikeLabelHot : isSel ? s.strikeLabelSelected : s.strikeLabelDefault}>{st}</span>
+                  {isHot && <span className={s.hotBadge}>HOT</span>}
+                  {dot && <span className={s.strikeDot} style={{ background: dot }} />}
                 </div>
               );
             })}
           </div>
 
-          {/* Footer — clear button */}
           {selected.length > 0 && (
-            <div style={{ padding: 8, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className={s.multiPickerFooter}>
               <button
                 type="button"
                 onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange([]); setOpen(false); setSearch(''); }}
-                style={{
-                  width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  padding: '5px 0', fontSize: 11, fontWeight: 600, borderRadius: 5, cursor: 'pointer',
-                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171',
-                }}
+                className={s.clearBtn}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
                   <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 7h14m-9 3v8m4-8v8M10 3h4a1 1 0 0 1 1 1v3H9V4a1 1 0 0 1 1-1ZM6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7Z"/>
@@ -1077,8 +950,7 @@ function StrikeTable({
   return (
     <div className="glass-panel flex flex-col h-full rounded-xl overflow-hidden">
       {/* header */}
-      <div className="px-3 py-2.5 shrink-0 flex items-center gap-2"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className={`px-3 py-2.5 shrink-0 flex items-center gap-2 ${s.strikeTableHeader}`}>
         <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Strike Prices</span>
         {strikes.length > 0 && (
           <span className="text-[10px] text-white/20">{strikes.length}</span>
@@ -1087,7 +959,7 @@ function StrikeTable({
           <span className="text-[10px] text-amber-400/60">{highActivity.size} active</span>
         )}
         {selected.length > 0 && (
-          <span className="ml-auto text-[10px]" style={{ color: '#f59e0b' }}>{selected.length} sel</span>
+          <span className={`ml-auto text-[10px] ${s.strikeTableSelCount}`}>{selected.length} sel</span>
         )}
       </div>
 
@@ -1425,27 +1297,19 @@ function MultiExpiryView({ instruments, visible = true, toolbarSlot }: { instrum
 
       <IntervalButtons value={interval} onChange={setInterval} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <span style={{ ...CTRL_LABEL, visibility: 'hidden' }}>_</span>
+      <div className={s.showControlWrap}>
+        <span className={s.ctrlLabelHidden}>_</span>
         <button
           onClick={handleLoad}
           disabled={loading || !underlying || !strike || selectedExpiries.length === 0}
-          style={{
-            height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px',
-            background: 'rgba(245,158,11,0.85)', border: '1px solid rgba(245,158,11,0.5)',
-            borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            opacity: (loading || !underlying || !strike || selectedExpiries.length === 0) ? 0.4 : 1,
-            transition: 'opacity 0.15s',
-          }}
+          className={cx(s.loadBtnAmber, (loading || !underlying || !strike || selectedExpiries.length === 0) ? s.loadBtnAmberDisabled : '')}
         >
           {loading
-            ? <><span style={{ width: 10, height: 10, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Loading…</>
+            ? <><span className={s.spinnerWhite} />Loading…</>
             : <>
                 Load Chart
                 {selectedExpiries.length > 0 && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, padding: '0 4px', fontSize: 10, fontWeight: 700, borderRadius: 9999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>
-                    {selectedExpiries.length}
-                  </span>
+                  <span className={s.countBadgeAmber}>{selectedExpiries.length}</span>
                 )}
               </>
           }
@@ -1453,14 +1317,14 @@ function MultiExpiryView({ instruments, visible = true, toolbarSlot }: { instrum
       </div>
 
       {error       && <span className="text-red-400 text-xs self-end">{error}</span>}
-      {loadingMore && <span className="text-xs self-end animate-pulse" style={{ color: 'rgba(245,158,11,0.8)' }}>Loading older data...</span>}
+      {loadingMore && <span className={`text-xs self-end animate-pulse ${s.loadingMoreText}`}>Loading older data...</span>}
 
       {loadedExpiries.length > 0 && (
         <div className="flex flex-wrap gap-3 self-end ml-auto text-xs">
           {loadedExpiries.map(({ expiry, color }) => (
             <span key={expiry} className="flex items-center gap-2">
-              <span className="inline-block w-3 h-0.5 rounded" style={{ background: color }} />
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>{fmtExpiry(expiry)}</span>
+              <span className={s.legendLineSwatch} style={{ background: color }} />
+              <span className={s.legendLabel}>{fmtExpiry(expiry)}</span>
             </span>
           ))}
         </div>
@@ -1943,42 +1807,28 @@ function StraddleMulti({ instruments, straddleMode, visible = true, toolbarSlot 
 
       <IntervalButtons value={interval} onChange={setInterval} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <span style={CTRL_LABEL}>Show</span>
-        <div className="flex gap-1">
-          <ToggleGroup items={[
-            { label: 'CE LTP', active: showCE, color: '#34d399', onClick: () => setShowCE(v => !v) },
-            { label: 'PE LTP', active: showPE, color: '#f87171', onClick: () => setShowPE(v => !v) },
-            { label: 'OI',     active: showOI, color: '#f59e0b', onClick: () => setShowOI(v => !v) },
-          ]} />
-        </div>
+      <div className={s.showControlWrap}>
+        <span className={s.ctrlLabel}>Show</span>
+        <ToggleGroup items={[
+          { label: 'CE LTP', active: showCE, color: '#34d399', onClick: () => setShowCE(v => !v) },
+          { label: 'PE LTP', active: showPE, color: '#f87171', onClick: () => setShowPE(v => !v) },
+          { label: 'OI',     active: showOI, color: '#f59e0b', onClick: () => setShowOI(v => !v) },
+        ]} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <span style={{ ...CTRL_LABEL, visibility: 'hidden' }}>_</span>
+      <div className={s.selectWrap}>
+        <span className={s.ctrlLabelHidden}>_</span>
         <button
           onClick={handleLoad}
           disabled={loading || !underlying || !expiry || selected.length === 0}
-          style={{
-            height: 30, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px',
-            background: 'rgba(59,130,246,0.90)', border: '1px solid rgba(59,130,246,0.5)',
-            borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            opacity: (loading || !underlying || !expiry || selected.length === 0) ? 0.35 : 1,
-            transition: 'opacity 0.15s, box-shadow 0.15s',
-            boxShadow: '0 1px 8px rgba(59,130,246,0.25)',
-            letterSpacing: '0.02em',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 16px rgba(59,130,246,0.45)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 8px rgba(59,130,246,0.25)'; }}
+          className={cx(s.loadBtnGhost, (loading || !underlying || !expiry || selected.length === 0) && s.loadBtnGhostDisabled)}
         >
           {loading
-            ? <><span style={{ width: 10, height: 10, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Loading…</>
+            ? <><span className={s.spinnerFaint} />Loading…</>
             : <>
                 Load Chart
                 {selected.length > 0 && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 17, height: 17, padding: '0 4px', fontSize: 10, fontWeight: 700, borderRadius: 9999, background: 'rgba(255,255,255,0.20)', color: '#fff' }}>
-                    {selected.length}
-                  </span>
+                  <span className={s.countBadgeGhost}>{selected.length}</span>
                 )}
               </>
           }
@@ -1986,17 +1836,17 @@ function StraddleMulti({ instruments, straddleMode, visible = true, toolbarSlot 
       </div>
 
       {error      && <span className="text-red-400 text-xs self-end">{error}</span>}
-      {loadingMore && <span className="text-xs self-end animate-pulse" style={{ color: "rgba(245,158,11,0.8)" }}>Loading older data...</span>}
+      {loadingMore && <span className={`text-xs self-end animate-pulse ${s.loadingMoreText}`}>Loading older data...</span>}
 
       {loadedStrikes.length > 0 && (
         <div className="flex flex-wrap gap-3 self-end ml-auto text-xs">
           {loadedStrikes.map(({ strike, color }) => (
             <span key={strike} className="flex items-center gap-2">
-              <span className="inline-block w-3 h-0.5 rounded" style={{ background: color }} />
-              <span className="text-white/60">{strike}</span>
-              {showCE && <span className="text-[10px]" style={{ color: ceColor(color) }}>CE</span>}
-              {showPE && <span className="text-[10px] text-red-400/70">PE</span>}
-              {showOI && <span className="text-[10px]" style={{ color: "rgba(245,158,11,0.7)" }}>OI</span>}
+              <span className={s.legendLineSwatch} style={{ background: color }} />
+              <span className="text-white/70">{strike}</span>
+              {showCE && <span className={`text-[10px] ${s.legendCeLabel}`} style={{ color: ceColor(color) }}>CE</span>}
+              {showPE && <span className="text-[10px] text-red-300/70">PE</span>}
+              {showOI && <span className={`text-[10px] ${s.legendOiLabel}`}>OI</span>}
             </span>
           ))}
         </div>
@@ -2014,24 +1864,17 @@ function StraddleMulti({ instruments, straddleMode, visible = true, toolbarSlot 
       {/* Split: left = strike table, right = chart */}
       <div className="flex-1 flex gap-2 p-2 overflow-hidden" style={{ minHeight: 0 }}>
         {/* table + toggle button */}
-        <div className="flex shrink-0 items-stretch" style={{ gap: 0 }}>
+        <div className="flex shrink-0 items-stretch">
           {/* animated table panel */}
-          <div style={{
-            width: showTable ? 300 : 0,
-            minWidth: 0,
-            overflow: 'hidden',
-            transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
-            height: '100%',
-            flexShrink: 0,
-          }}>
-            <div className="rounded-xl overflow-hidden" style={{ width: 300, height: '100%' }}>
+          <div className={s.tablePanel} style={{ width: showTable ? 300 : 0 }}>
+            <div className={s.tableInner + ' rounded-xl overflow-hidden'}>
               <StrikeTable
                 strikes={strikes}
                 selected={selected}
                 strikeKeyMap={strikeKeyMap}
-                onToggle={s =>
+                onToggle={st =>
                   setSelected(prev =>
-                    prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s].sort((a, b) => a - b)
+                    prev.includes(st) ? prev.filter(x => x !== st) : [...prev, st].sort((a, b) => a - b)
                   )
                 }
                 onHighActivityStrikes={setHighActivityStrikes}
@@ -2039,30 +1882,23 @@ function StraddleMulti({ instruments, straddleMode, visible = true, toolbarSlot 
             </div>
           </div>
           {/* collapse/expand toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px 0 4px' }}>
+          <div className={s.collapseToggleWrap}>
             <button
               onClick={() => setShowTable(v => !v)}
               title={showTable ? 'Hide table' : 'Show table'}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 18, height: 48, borderRadius: 6,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)',
-                color: '#787B86', cursor: 'pointer', flexShrink: 0, padding: 0,
-                transition: 'background 0.15s, color 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.12)'; (e.currentTarget as HTMLButtonElement).style.color = '#D1D4DC'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; }}
+              className={s.collapseToggleBtn}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
-                style={{ transform: showTable ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)' }}>
+                className={s.collapseIcon}
+                style={{ transform: showTable ? 'rotate(0deg)' : 'rotate(180deg)' }}>
                 <path d="M7 2L3 5L7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
           </div>
         </div>
         {/* chart */}
-        <div className="glass-panel flex-1 rounded-xl relative" style={{ minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-          <div ref={containerCallbackRef} style={{ position: 'absolute', inset: 0 }} />
+        <div className={`glass-panel flex-1 rounded-xl relative ${s.chartPanel}`}>
+          <div ref={containerCallbackRef} className={s.chartInset} />
         </div>
       </div>
     </div>
@@ -2323,33 +2159,24 @@ function StrangleView({ instruments, visible = true, toolbarSlot }: { instrument
       <LabeledSelect label="CE Strike" value={strikeA} options={strikes} onChange={v => setStrikeA(v as number)} disabled={!expiry} />
       <LabeledSelect label="PE Strike" value={strikeB} options={strikes} onChange={v => setStrikeB(v as number)} disabled={!expiry} />
       <IntervalButtons value={interval} onChange={setInterval} />
-      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <span style={{ ...CTRL_LABEL, visibility: 'hidden' }}>_</span>
+      <div className={s.showControlWrap}>
+        <span className={s.ctrlLabelHidden}>_</span>
         <button
           onClick={handleLoad}
           disabled={loading || !underlying || !expiry || !strikeA || !strikeB}
-          style={{
-            height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px',
-            background: 'rgba(245,158,11,0.85)', border: '1px solid rgba(245,158,11,0.5)',
-            borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            opacity: (loading || !underlying || !expiry || !strikeA || !strikeB) ? 0.4 : 1,
-            transition: 'opacity 0.15s',
-          }}
+          className={cx(s.loadBtnAmber, (loading || !underlying || !expiry || !strikeA || !strikeB) ? s.loadBtnAmberDisabled : '')}
         >
-          {loading
-            ? <><span style={{ width: 10, height: 10, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Loading…</>
-            : 'Load Chart'
-          }
+          {loading ? <><span className={s.spinnerWhite} />Loading…</> : 'Load Chart'}
         </button>
       </div>
       {error       && <span className="text-red-400 text-xs self-end">{error}</span>}
-      {loadingMore && <span className="text-xs self-end animate-pulse" style={{ color: "rgba(245,158,11,0.8)" }}>Loading older data...</span>}
+      {loadingMore && <span className={`text-xs self-end animate-pulse ${s.loadingMoreText}`}>Loading older data...</span>}
       <div className="flex gap-3 self-end ml-auto text-xs">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-yellow-400" /><span className="text-white/50">Premium</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-400" /><span className="text-white/50">CE</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-red-400" /><span className="text-white/50">PE</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ background: "rgba(245,158,11,0.6)" }} /><span className="text-white/50">OI</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-yellow-400/40" /><span className="text-white/50">Vol</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-yellow-400" /><span className="text-white/65">Premium</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-400" /><span className="text-white/65">CE</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-red-400" /><span className="text-white/65">PE</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ background: "rgba(245,158,11,0.6)" }} /><span className="text-white/65">OI</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-yellow-400/40" /><span className="text-white/65">Vol</span></span>
       </div>
     </>
   );
@@ -2657,32 +2484,23 @@ function CalendarSpread({ instruments, visible = true, toolbarSlot }: { instrume
       <LabeledSelect label="Far Expiry"  value={expiryFar}  options={farExpiries} onChange={v => setExpiryFar(v as number)} formatLabel={v => fmtExpiry(v as number)} disabled={!expiryNear} />
       <LabeledSelect label="Strike"      value={strike}      options={strikes}     onChange={v => setStrike(v as number)} disabled={!expiryNear} />
       <IntervalButtons value={interval} onChange={setInterval} />
-      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <span style={{ ...CTRL_LABEL, visibility: 'hidden' }}>_</span>
+      <div className={s.showControlWrap}>
+        <span className={s.ctrlLabelHidden}>_</span>
         <button
           onClick={handleLoad}
           disabled={loading || !underlying || !expiryNear || !expiryFar || !strike}
-          style={{
-            height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px',
-            background: 'rgba(245,158,11,0.85)', border: '1px solid rgba(245,158,11,0.5)',
-            borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            opacity: (loading || !underlying || !expiryNear || !expiryFar || !strike) ? 0.4 : 1,
-            transition: 'opacity 0.15s',
-          }}
+          className={cx(s.loadBtnAmber, (loading || !underlying || !expiryNear || !expiryFar || !strike) ? s.loadBtnAmberDisabled : '')}
         >
-          {loading
-            ? <><span style={{ width: 10, height: 10, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />Loading…</>
-            : 'Load Chart'
-          }
+          {loading ? <><span className={s.spinnerWhite} />Loading…</> : 'Load Chart'}
         </button>
       </div>
       {error       && <span className="text-red-400 text-xs self-end">{error}</span>}
-      {loadingMore && <span className="text-xs self-end animate-pulse" style={{ color: "rgba(245,158,11,0.8)" }}>Loading older data...</span>}
+      {loadingMore && <span className={`text-xs self-end animate-pulse ${s.loadingMoreText}`}>Loading older data...</span>}
       <div className="flex gap-3 self-end ml-auto text-xs">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-blue-400" /><span className="text-white/50">Near</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-orange-400" /><span className="text-white/50">Far</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-blue-400/45" /><span className="text-white/50">Near OI</span></span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-orange-400/45" /><span className="text-white/50">Far OI</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-white/70" /><span className="text-white/65">Near</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-orange-400" /><span className="text-white/65">Far</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-white/40" /><span className="text-white/65">Near OI</span></span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-orange-400/45" /><span className="text-white/65">Far OI</span></span>
       </div>
     </>
   );
@@ -2706,23 +2524,14 @@ export default function StraddleChart({ instruments, visible = true }: Props) {
   const toolbarSlotRef = useCallback((el: HTMLDivElement | null) => { setToolbarSlotEl(el); }, []);
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden" style={{ background: 'transparent' }}>
+    <div className="flex flex-col h-full min-w-0 overflow-hidden">
       {/* Single unified toolbar */}
-      <div className="glass-bar flex flex-nowrap items-center gap-3 px-4 shrink-0 overflow-x-auto"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', minHeight: 50, paddingTop: 8, paddingBottom: 8,
-          fontFamily: 'inherit' }}>
+      <div className={`glass-bar flex flex-nowrap items-center gap-3 px-4 shrink-0 overflow-x-auto ${s.mainToolbar}`}>
 
-        {/* Mode tab group — unified pill container */}
-        <div style={{ display: 'flex', background: '#151920', borderRadius: 8, padding: 3, gap: 1, flexShrink: 0 }}>
+        {/* Mode tab group */}
+        <div className={s.modeTabGroup}>
           {(['straddle', 'strangle', 'calendar'] as ChartMode[]).map(m => (
-            <button key={m} onClick={() => setMode(m)} style={{
-              padding: '4px 13px', fontSize: 12, fontWeight: mode === m ? 600 : 400,
-              cursor: 'pointer', lineHeight: 1.5, border: 'none', borderRadius: 6,
-              transition: 'all 0.12s', whiteSpace: 'nowrap',
-              background: mode === m ? '#1E2535' : 'transparent',
-              color: mode === m ? '#E2E8F0' : '#4B5563',
-              boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
-            }}>
+            <button key={m} onClick={() => setMode(m)} className={cx(s.modeTabBtn, mode === m ? s.modeTabBtnActive : '')}>
               {m.charAt(0).toUpperCase() + m.slice(1)}
             </button>
           ))}
@@ -2730,16 +2539,9 @@ export default function StraddleChart({ instruments, visible = true }: Props) {
 
         {/* Single / Multi toggle — only shown when Straddle is active */}
         {mode === 'straddle' && (
-          <div style={{ display: 'flex', background: '#151920', borderRadius: 7, padding: 3, gap: 1, flexShrink: 0 }}>
+          <div className={s.subModeGroup}>
             {(['single', 'multi'] as const).map(m => (
-              <button key={m} onClick={() => setStraddleMode(m)} style={{
-                padding: '3px 10px', fontSize: 11, fontWeight: straddleMode === m ? 600 : 400,
-                cursor: 'pointer', lineHeight: 1.5, border: 'none', borderRadius: 5,
-                transition: 'all 0.12s', whiteSpace: 'nowrap',
-                background: straddleMode === m ? 'rgba(59,130,246,0.18)' : 'transparent',
-                color: straddleMode === m ? '#60A5FA' : '#4B5563',
-                boxShadow: straddleMode === m ? '0 0 0 1px rgba(59,130,246,0.30)' : 'none',
-              }}>
+              <button key={m} onClick={() => setStraddleMode(m)} className={cx(s.subModeBtn, straddleMode === m ? s.subModeBtnActive : '')}>
                 {m.charAt(0).toUpperCase() + m.slice(1)}
               </button>
             ))}
@@ -2747,24 +2549,20 @@ export default function StraddleChart({ instruments, visible = true }: Props) {
         )}
 
         {/* Divider */}
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.08)', flexShrink: 0, margin: '2px 0' }} />
+        <div className={s.toolbarDivider} />
 
         {/* Slot: active sub-view portals its controls here */}
-        <div
-          ref={toolbarSlotRef}
-          className="flex flex-nowrap items-end gap-4 overflow-x-auto min-w-0"
-          style={{ flex: 1 }}
-        />
+        <div ref={toolbarSlotRef} className="flex flex-nowrap items-end gap-4 overflow-x-auto min-w-0 flex-1" />
       </div>
 
       <div className="flex-1 overflow-hidden grid min-w-0" style={{ gridTemplate: '1fr / 1fr' }}>
-        <div style={{ gridArea: '1/1', minWidth: 0, minHeight: 0, height: '100%', overflow: 'hidden', visibility: mode === 'straddle' ? 'visible' : 'hidden', pointerEvents: mode === 'straddle' ? 'auto' : 'none' }}>
+        <div className={s.viewLayer} style={{ visibility: mode === 'straddle' ? 'visible' : 'hidden', pointerEvents: mode === 'straddle' ? 'auto' : 'none' }}>
           <StraddleMulti instruments={instruments} straddleMode={straddleMode} visible={visible && mode === 'straddle'} toolbarSlot={mode === 'straddle' ? toolbarSlotEl : null} />
         </div>
-        <div style={{ gridArea: '1/1', minWidth: 0, minHeight: 0, height: '100%', overflow: 'hidden', visibility: mode === 'strangle' ? 'visible' : 'hidden', pointerEvents: mode === 'strangle' ? 'auto' : 'none' }}>
+        <div className={s.viewLayer} style={{ visibility: mode === 'strangle' ? 'visible' : 'hidden', pointerEvents: mode === 'strangle' ? 'auto' : 'none' }}>
           <StrangleView instruments={instruments} visible={visible && mode === 'strangle'} toolbarSlot={mode === 'strangle' ? toolbarSlotEl : null} />
         </div>
-        <div style={{ gridArea: '1/1', minWidth: 0, minHeight: 0, height: '100%', overflow: 'hidden', visibility: mode === 'calendar' ? 'visible' : 'hidden', pointerEvents: mode === 'calendar' ? 'auto' : 'none' }}>
+        <div className={s.viewLayer} style={{ visibility: mode === 'calendar' ? 'visible' : 'hidden', pointerEvents: mode === 'calendar' ? 'auto' : 'none' }}>
           <CalendarSpread instruments={instruments} visible={visible && mode === 'calendar'} toolbarSlot={mode === 'calendar' ? toolbarSlotEl : null} />
         </div>
       </div>

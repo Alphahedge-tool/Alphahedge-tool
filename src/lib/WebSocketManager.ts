@@ -183,6 +183,10 @@ class WebSocketManager {
   private requestedKeys: Set<string> = new Set();
   private subscribedKeys: Set<string> = new Set();
 
+  // Batch listener dispatch — accumulate per-tick, flush via setTimeout(0)
+  private pendingFeeds: Map<string, any> = new Map();
+  private feedTimerId: number | null = null;
+
   isConnected = false;
 
   // ── public API ────────────────────────────────────────────
@@ -285,6 +289,11 @@ class WebSocketManager {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.feedTimerId !== null) {
+      clearTimeout(this.feedTimerId);
+      this.feedTimerId = null;
+      this.pendingFeeds = new Map();
+    }
     if (this.ws) {
       this.ws.onclose = null;
       this.ws.onmessage = null;
@@ -323,7 +332,6 @@ class WebSocketManager {
         if (!this.destroyed && this.retryCount < this.MAX_RETRIES) {
           this.retryCount += 1;
           const delay = Math.min(2000 * Math.pow(2, this.retryCount - 1), 30_000);
-          console.log(`[WSManager] closed (code=${event.code}) retry ${this.retryCount}/${this.MAX_RETRIES} in ${delay}ms`);
           this.reconnectTimer = setTimeout(() => this._connect(), delay);
         }
       };
@@ -370,17 +378,19 @@ class WebSocketManager {
       data: { mode: 'full', instrumentKeys: keys },
     };
     this.ws.send(Buffer.from(JSON.stringify(msg)));
-    console.log(`[WSManager] subscribed ${keys.length} keys`);
   }
 
   private _processFeed(feeds: Record<string, any>): void {
+    // Parse and store data immediately (so .get() is always fresh),
+    // but batch listener dispatch into rAF so it never blocks scroll/zoom.
     for (const key of Object.keys(feeds)) {
       const feed = feeds[key];
       let parsed: InstrumentMarketData | null = null;
 
       if (feed.fullFeed?.marketFF) {
-        const { ltpc = {}, optionGreeks = {}, marketLevel = {}, marketOHLC = {}, iv, oi, atp, vtt } =
+        const { ltpc = {}, optionGreeks = {}, marketLevel = {}, marketOHLC, iv, oi, atp, vtt } =
           feed.fullFeed.marketFF;
+        const safeMarketOHLC = marketOHLC ?? {};
         parsed = {
           ltp: ltpc.ltp || 0,
           ltt: ltpc.ltt?.toString() || '',
@@ -401,7 +411,7 @@ class WebSocketManager {
             askQ: q.askQ?.toString() || '',
             askP: q.askP || 0,
           })),
-          ohlc: (marketOHLC.ohlc || []).map((c: any) => ({
+          ohlc: (safeMarketOHLC.ohlc || []).map((c: any) => ({
             interval: c.interval || '',
             open: c.open || 0,
             high: c.high || 0,
@@ -412,7 +422,8 @@ class WebSocketManager {
           })),
         };
       } else if (feed.fullFeed?.indexFF) {
-        const { ltpc = {}, marketOHLC = {} } = feed.fullFeed.indexFF;
+        const { ltpc = {}, marketOHLC: indexMarketOHLC } = feed.fullFeed.indexFF;
+        const safeIndexOHLC = indexMarketOHLC ?? {};
         parsed = {
           ltp: ltpc.ltp || 0,
           ltt: ltpc.ltt?.toString() || '',
@@ -421,7 +432,7 @@ class WebSocketManager {
           delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0,
           iv: 0, oi: 0, atp: 0, vtt: '',
           bidAskQuote: [],
-          ohlc: (marketOHLC.ohlc || []).map((c: any) => ({
+          ohlc: (safeIndexOHLC.ohlc || []).map((c: any) => ({
             interval: c.interval || '',
             open: c.open || 0,
             high: c.high || 0,
@@ -435,14 +446,27 @@ class WebSocketManager {
 
       if (!parsed) continue;
 
+      // Always update data map synchronously so .get() reads are fresh
       this.data.set(key, parsed);
+      // Accumulate into pending batch (latest value per key wins within one tick)
+      this.pendingFeeds.set(key, parsed);
+    }
 
-      const keySubs = this.listeners.get(key);
-      if (keySubs) {
-        for (const cb of keySubs) cb(parsed);
-      }
-
-      for (const cb of this.wildcardListeners) cb(key, parsed);
+    // Flush once per event-loop tick via setTimeout(0) — batches all keys from
+    // one WS message into a single listener dispatch, never blocking mid-frame
+    if (this.feedTimerId === null) {
+      this.feedTimerId = window.setTimeout((): void => {
+        this.feedTimerId = null;
+        const batch = this.pendingFeeds;
+        this.pendingFeeds = new Map();
+        for (const [key, parsed] of batch) {
+          const keySubs = this.listeners.get(key);
+          if (keySubs) {
+            for (const cb of keySubs) cb(parsed);
+          }
+          for (const cb of this.wildcardListeners) cb(key, parsed);
+        }
+      }, 0) as unknown as number;
     }
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useMemo, type RefObject } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, startTransition, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import {
   createChart,
@@ -17,6 +17,7 @@ import {
 } from 'lightweight-charts';
 import type { Instrument } from './useInstruments';
 import { cx } from './lib/utils';
+import s from './CandleChart.module.css';
 import { wsManager, type InstrumentMarketData } from './lib/WebSocketManager';
 import { LayoutPicker } from './workspace/LayoutPicker';
 import type { LayoutId } from './workspace/workspaceTypes';
@@ -279,46 +280,26 @@ function MetricDropdown({ value, onChange, metrics }: {
       </button>
 
       {open && createPortal(
-        <div
+          <div
           ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            right: pos.right,
-            minWidth: 170,
-            zIndex: 9999,
-            background: '#1f1f1f',
-            border: '1px solid #2a2a2a',
-            borderRadius: 6,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset',
-            overflow: 'hidden',
-          }}
+          className={s.dropdownMenu}
+          style={{ top: pos.top, right: pos.right, minWidth: 170 }}
         >
-          <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #2a2a2a' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#787B86' }}>Select Metric</span>
+          <div className={s.dropdownMenuHeader}>
+            <span className={s.dropdownMenuHeaderLabel}>Select Metric</span>
           </div>
-          <ul style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent', padding: '4px', margin: 0, listStyle: 'none' } as React.CSSProperties}>
+          <ul className={s.dropdownMenuList} style={{ maxHeight: 320 }}>
             {metrics.map(m => {
               const isActive = m.id === value;
               return (
                 <li key={m.id}>
                   <button
                     onClick={() => { onChange(m.id); setOpen(false); }}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      width: '100%', padding: '7px 10px', borderRadius: 4, border: 'none',
-                      cursor: 'pointer', fontSize: 12, fontWeight: isActive ? 700 : 500,
-                      background: isActive ? 'rgba(255,152,0,0.12)' : 'transparent',
-                      color: isActive ? '#FF9800' : '#C4C7D0',
-                      transition: 'background 0.1s, color 0.1s',
-                      gap: 8,
-                    }}
-                    onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                    onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                    className={cx(s.dropdownMenuItem, isActive ? s.dropdownMenuItemActive : '')}
                   >
-                    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+                    <span className={s.dropdownMenuItemDesc}>
                       <span>{m.label}</span>
-                      <span style={{ fontSize: 10, color: isActive ? 'rgba(255,152,0,0.6)' : '#4A4E5C', fontWeight: 400 }}>{m.desc}</span>
+                      <span className={cx(s.dropdownMenuItemSub, isActive ? s.dropdownMenuItemSubActive : '')}>{m.desc}</span>
                     </span>
                     {isActive && (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -387,52 +368,26 @@ function ExpiryDropdown({ expiries, selected, onChange }: {
       </button>
 
       {open && createPortal(
-        <div
+          <div
           ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            right: pos.right,
-            minWidth: 160,
-            zIndex: 9999,
-            background: '#1f1f1f',
-            border: '1px solid #2a2a2a',
-            borderRadius: 6,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset',
-            overflow: 'hidden',
-          }}
+          className={s.dropdownMenu}
+          style={{ top: pos.top, right: pos.right, minWidth: 160 }}
         >
           {/* Header */}
-          <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #2a2a2a' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#787B86' }}>Select Expiry</span>
+          <div className={s.dropdownMenuHeader}>
+            <span className={s.dropdownMenuHeaderLabel}>Select Expiry</span>
           </div>
           {/* List */}
-          <ul style={{ maxHeight: 260, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent', padding: '4px', margin: 0, listStyle: 'none' } as React.CSSProperties}>
+          <ul className={s.dropdownMenuList} style={{ maxHeight: 260 }}>
             {expiries.length === 0 ? (
-              <li style={{ padding: '10px 12px', fontSize: 12, color: '#4A4E5C' }}>No expiries found</li>
+              <li className={s.dropdownMenuEmpty}>No expiries found</li>
             ) : expiries.map(e => {
               const active = e === selected;
               return (
                 <li key={e}>
                   <button
                     onClick={() => { onChange(e); setOpen(false); }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: 4,
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: active ? 700 : 500,
-                      background: active ? 'rgba(255,152,0,0.12)' : 'transparent',
-                      color: active ? '#FF9800' : '#C4C7D0',
-                      transition: 'background 0.1s, color 0.1s',
-                    }}
-                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                    className={cx(s.dropdownMenuItem, active ? s.dropdownMenuItemActive : '')}
                   >
                     <span>{fmtExpiry(e)}</span>
                     {active && (
@@ -508,7 +463,7 @@ function useOptionChain(instrument: Instrument, instruments: Instrument[], open:
     let timer: ReturnType<typeof setTimeout> | null = null;
     const scheduleUpdate = () => {
       if (timer !== null) return;
-      timer = setTimeout(() => { timer = null; setLtpVer(v => v + 1); }, 200);
+      timer = setTimeout(() => { timer = null; startTransition(() => { setLtpVer(v => v + 1); }); }, 200);
     };
 
     const unsubs = allKeys.map(key =>
@@ -635,7 +590,8 @@ function OptionChainPanel({
   return (
     <div
       ref={panelRef}
-      style={{ width: panelWidth, background: '#1d1a17', borderLeft: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', color: '#D1D5DB' }}
+      className={s.ocPanel}
+      style={{ width: panelWidth }}
     >
       <style>{`
         .ocp-tbody tr.ocp-row:hover td { background: rgba(255,255,255,0.03); }
@@ -643,40 +599,33 @@ function OptionChainPanel({
         .ocp-tbody tr.ocp-row-atm:hover td { background: rgba(224,168,0,0.08); }
         .ocp-tbody tr.ocp-row-odd td { background: transparent; }
         .ocp-tbody tr.ocp-row-even td { background: rgba(255,255,255,0.015); }
-        .ocp-gear:hover { background: rgba(255,255,255,0.1) !important; }
       `}</style>
 
       {/* Resize handle */}
       <div
         onPointerDown={onResizePointerDown}
         onDoubleClick={() => setPanelWidth(290)}
-        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', zIndex: 20, background: 'transparent', transition: 'background 0.15s' }}
-        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(79,142,247,0.45)'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+        className={s.ocResizeHandle}
       />
 
       {/* Metric picker modal */}
       {settingsOpen && (
-        <div onClick={() => setSettingsOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 50, backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 240, padding: '18px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0' }}>Choose Metric</span>
-              <button onClick={() => setSettingsOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', padding: 2 }}>
+        <div onClick={() => setSettingsOpen(false)} className={s.ocModalOverlay}>
+          <div onClick={e => e.stopPropagation()} className={s.ocModalCard}>
+            <div className={s.ocModalHeader}>
+              <span className={s.ocModalTitle}>Choose Metric</span>
+              <button onClick={() => setSettingsOpen(false)} className={s.ocModalClose}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div className={s.ocModalList}>
               {OC_METRICS.map(m => (
-                <button key={m.id} onClick={() => { setMetric(m.id); setSettingsOpen(false); }} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', textAlign: 'left',
-                  background: metric === m.id ? 'rgba(249,115,22,0.15)' : 'transparent',
-                  color: metric === m.id ? '#f97316' : '#9CA3AF',
-                }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0, background: metric === m.id ? '#f97316' : 'transparent', border: `1.5px solid ${metric === m.id ? '#f97316' : 'rgba(255,255,255,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button key={m.id} onClick={() => { setMetric(m.id); setSettingsOpen(false); }} className={cx(s.ocModalBtn, metric === m.id ? s.ocModalBtnActive : s.ocModalBtnDefault)}>
+                  <div className={cx(s.ocModalCheck, metric === m.id ? s.ocModalCheckOn : s.ocModalCheckOff)}>
                     {metric === m.id && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{m.label}</span>
-                  <span style={{ fontSize: 11, color: '#4B5563', marginLeft: 'auto' }}>{m.desc}</span>
+                  <span className={s.ocModalBtnLabel}>{m.label}</span>
+                  <span className={s.ocModalBtnDesc}>{m.desc}</span>
                 </button>
               ))}
             </div>
@@ -685,21 +634,18 @@ function OptionChainPanel({
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: '#1d1a17' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#E2E8F0', letterSpacing: '0.04em' }}>{underlying}</span>
+      <div className={s.ocHeader}>
+        <div className={s.ocHeaderLeft}>
+          <span className={s.ocSymbol}>{underlying}</span>
           {spot > 0 && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#4F8EF7', background: 'rgba(79,142,247,0.1)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(79,142,247,0.2)' }}>
-              {spot.toFixed(2)}
-            </span>
+            <span className={s.ocSpotBadge}>{spot.toFixed(2)}</span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className={s.ocHeaderRight}>
           {/* Active metric badge */}
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#FF9800', background: 'rgba(255,152,0,0.1)', padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(255,152,0,0.2)', letterSpacing: '0.04em' }}>{curMetricLabel}</span>
+          <span className={s.ocMetricBadge}>{curMetricLabel}</span>
           {/* Gear — opens metric picker */}
-          <button className="ocp-gear" onClick={() => setSettingsOpen(true)} title="Choose metric"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, cursor: 'pointer', color: '#817E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, transition: 'background 0.15s' }}>
+          <button className={s.ocGearBtn} onClick={() => setSettingsOpen(true)} title="Choose metric">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 13.648 13.648" fill="currentColor">
               <path fillRule="evenodd" clipRule="evenodd" d="M5.09373 0.995125C5.16241 0.427836 5.64541 0 6.21747 0H7.43151C8.0039 0 8.48663 0.428191 8.55525 0.996829C8.5553 0.997248 8.55536 0.997666 8.5554 0.9981L8.65947 1.81525C8.80015 1.86677 8.93789 1.92381 9.07227 1.98601L9.72415 1.47911C10.1776 1.12819 10.8237 1.16381 11.2251 1.57622L12.0753 2.42643C12.4854 2.82551 12.5214 3.47159 12.1697 3.92431L11.6628 4.57692C11.725 4.71124 11.782 4.84882 11.8335 4.98924L12.6526 5.09337C12.653 5.09342 12.6534 5.09348 12.6539 5.09352C13.2211 5.16221 13.6492 5.64522 13.6484 6.21766V7.4312C13.6484 8.00358 13.2203 8.48622 12.6517 8.5549C12.6513 8.55496 12.6508 8.55502 12.6503 8.55506L11.8338 8.65909C11.7824 8.7996 11.7254 8.93729 11.663 9.07168L12.1696 9.72354C12.5218 10.1776 12.4847 10.823 12.0728 11.2245L11.2224 12.0749C10.8233 12.485 10.1772 12.5209 9.72452 12.1692L9.07187 11.6624C8.93756 11.7246 8.79995 11.7815 8.65952 11.833L8.55539 12.6521C8.55533 12.6525 8.55528 12.653 8.55522 12.6534C8.48652 13.2206 8.00353 13.6484 7.43151 13.6484H6.21747C5.64485 13.6484 5.16232 13.22 5.09373 12.6506C5.09367 12.6501 5.09361 12.6496 5.09355 12.6491L4.98954 11.8328C4.84901 11.7814 4.71133 11.7244 4.57692 11.662L3.92477 12.1688C3.47111 12.5199 2.82587 12.4838 2.42408 12.0724L1.57358 11.2219C1.16354 10.8229 1.12761 10.1769 1.47927 9.72417L1.98614 9.0715C1.92397 8.93721 1.86696 8.7996 1.81546 8.65919L0.996348 8.55505C0.995929 8.555 0.995526 8.55494 0.995107 8.5549C0.427838 8.48619 0 8.00325 0 7.4312V6.21724C0 5.64481 0.428228 5.16211 0.996871 5.09351L1.81538 4.98929C1.86677 4.84897 1.92362 4.7113 1.98597 4.5768L1.47915 3.92465C1.12701 3.47063 1.1643 2.82485 1.57625 2.42329L2.42671 1.57338C2.82634 1.16348 3.47226 1.12815 3.92438 1.4792L4.57644 1.98589C4.71105 1.92352 4.84888 1.86662 4.98946 1.81519L5.09373 0.995125ZM6.82448 4.43525C5.50742 4.43525 4.43541 5.50723 4.43541 6.82422C4.43541 8.14119 5.50742 9.21317 6.82448 9.21317C8.14154 9.21317 9.21356 8.14119 9.21356 6.82422C9.21356 5.50723 8.14154 4.43525 6.82448 4.43525ZM3.79381 6.82422C3.79381 5.15287 5.15311 3.79365 6.82448 3.79365C8.49586 3.79365 9.85515 5.15287 9.85515 6.82422C9.85515 8.49556 8.49586 9.85477 6.82448 9.85477C5.15311 9.85477 3.79381 8.49556 3.79381 6.82422Z" />
             </svg>
@@ -708,29 +654,29 @@ function OptionChainPanel({
       </div>
 
       {/* Expiry row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.03)', flexShrink: 0 }}>
-        <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Expiry</span>
+      <div className={s.ocExpiryRow}>
+        <span className={s.ocExpiryLabel}>Expiry</span>
         <ExpiryDropdown expiries={expiries} selected={selectedExpiry} onChange={v => { setSelectedExpiry(v); shouldScrollToAtm.current = true; }} />
       </div>
 
       {/* Table */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+      <div className={s.ocTableScroll}>
         {rows.length === 0 ? (
-          <div style={{ padding: '60px', textAlign: 'center', fontSize: 12, color: '#3D4150' }}>
+          <div className={s.ocTableEmpty}>
             {instruments.length === 0 ? 'Loading…' : selectedExpiry ? 'No options found' : 'Select expiry'}
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 3, background: '#1d1a17' }}>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <th style={{ textAlign: 'center', padding: '8px 0', fontSize: 12, fontWeight: 800, color: '#e0a800', letterSpacing: '0.08em', background: '#333333' }}>Call</th>
-                <th style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#9CA3AF', background: '#333333', width: 72 }}>Strike</th>
-                <th style={{ textAlign: 'center', padding: '8px 0', fontSize: 12, fontWeight: 800, color: '#818cf8', letterSpacing: '0.08em', background: '#333333' }}>Put</th>
+          <table className={s.ocTable}>
+            <thead className={s.ocThead}>
+              <tr className={s.ocHeadRowTop}>
+                <th className={s.ocThCall}>Call</th>
+                <th className={s.ocThStrike}>Strike</th>
+                <th className={s.ocThPut}>Put</th>
               </tr>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                <th style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'rgba(224,168,0,0.02)' }}>{curMetricLabel}</th>
-                <th style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.04em', background: '#333333', width: 72 }}>Strike</th>
-                <th style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'rgba(129,140,248,0.02)' }}>{curMetricLabel}</th>
+              <tr className={s.ocHeadRowSub}>
+                <th className={s.ocThCallSub}>{curMetricLabel}</th>
+                <th className={s.ocThStrikeSub}>Strike</th>
+                <th className={s.ocThPutSub}>{curMetricLabel}</th>
               </tr>
             </thead>
             <tbody className="ocp-tbody">
@@ -748,19 +694,15 @@ function OptionChainPanel({
                     className={`ocp-row ${isAtm ? 'ocp-row-atm' : ri % 2 === 0 ? 'ocp-row-even' : 'ocp-row-odd'}`}
                     style={{ borderBottom: showAtmLine ? '1px dashed rgba(224,168,0,0.4)' : '1px solid rgba(255,255,255,0.06)' }}
                   >
-                    <td style={{
-                      padding: '7px 10px', fontSize: 12, fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap',
-                      color: ceVal !== '—' ? '#2ebd85' : '#3D4150',
-                      background: isCeItm ? 'rgba(0,168,132,0.18)' : undefined,
-                    }}>{ceVal}</td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, fontWeight: 700, textAlign: 'center', whiteSpace: 'nowrap', background: '#333333', color: isAtm ? '#e0a800' : '#C0C0C0', width: 72 }}>
+                    <td className={cx(s.ocTdCall, ceVal === '—' ? s.ocTdCallEmpty : '')}
+                      style={{ background: isCeItm ? 'rgba(0,168,132,0.18)' : undefined }}
+                    >{ceVal}</td>
+                    <td className={cx(s.ocTdStrike, isAtm ? s.ocTdStrikeAtm : '')}>
                       {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                     </td>
-                    <td style={{
-                      padding: '7px 10px', fontSize: 12, fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap',
-                      color: peVal !== '—' ? '#f23645' : '#3D4150',
-                      background: isPeItm ? 'rgba(210,130,0,0.28)' : undefined,
-                    }}>{peVal}</td>
+                    <td className={cx(s.ocTdPut, peVal === '—' ? s.ocTdPutEmpty : '')}
+                      style={{ background: isPeItm ? 'rgba(210,130,0,0.28)' : undefined }}
+                    >{peVal}</td>
                   </tr>
                 );
               })}
@@ -804,7 +746,6 @@ async function fetchCandles(
   // Upstox returns newest-first; lightweight-charts requires oldest-first.
   const candles = rawCandles.reverse();
   const prevTimestamp: number | null = json?.data?.meta?.prevTimestamp ?? null;
-  console.log('[CandleChart] fetchCandles reversed array. First (oldest) candle:', candles[0], 'url:', res.url);
   return { candles, prevTimestamp };
 }
 
@@ -933,29 +874,14 @@ function calculateTWAP(candles: CandlestickData[]): VwapPoint[] {
 // ── Timeframe inline buttons (TradingView style) ─────────────────────────────
 function TimeframeButtons({ interval, onChange }: { interval: Interval; onChange: (iv: Interval) => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+    <div className={s.tfRow}>
       {INTERVALS.map(iv => {
         const active = iv.value === interval.value;
         return (
           <button
             key={iv.value}
             onClick={() => onChange(iv)}
-            style={{
-              height: 28,
-              padding: '0 6px',
-              fontSize: 13,
-              fontWeight: active ? 600 : 400,
-              color: active ? '#D1D4DC' : '#787B86',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              letterSpacing: '0.01em',
-              transition: 'color 0.12s, background 0.12s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#D1D4DC'; }}
-            onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; }}
+            className={cx(s.tfBtn, active ? s.tfBtnActive : '')}
           >
             {iv.label}
           </button>
@@ -970,23 +896,20 @@ type ViewKey = 'candle' | 'straddle' | 'oiprofile';
 
 function CandleIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-      <line x1="12" y1="2" x2="12" y2="6" />
-      <line x1="12" y1="18" x2="12" y2="22" />
-      <rect x="8" y="6" width="8" height="12" rx="1.5" />
-      <line x1="5" y1="5" x2="5" y2="9" />
-      <line x1="5" y1="15" x2="5" y2="19" />
-      <rect x="2" y="9" width="6" height="6" rx="1" />
-      <line x1="19" y1="3" x2="19" y2="8" />
-      <line x1="19" y1="14" x2="19" y2="21" />
-      <rect x="16" y="8" width="6" height="6" rx="1" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="6" height="14" x="4" y="5" rx="2"/>
+      <rect width="6" height="10" x="14" y="7" rx="2"/>
+      <path d="M17 22v-5"/>
+      <path d="M17 7V2"/>
+      <path d="M7 22v-3"/>
+      <path d="M7 5V2"/>
     </svg>
   );
 }
 
 function StraddleIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="2 18 7 10 12 14 17 6 22 10" />
       <polyline points="2 18 7 14 12 10 17 16 22 12" strokeOpacity="0.45" />
     </svg>
@@ -995,7 +918,7 @@ function StraddleIcon() {
 
 function OIProfileIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="5" width="8" height="3" rx="1" />
       <rect x="2" y="11" width="14" height="3" rx="1" />
       <rect x="2" y="17" width="6" height="3" rx="1" />
@@ -1019,19 +942,9 @@ function LayoutButtonInline({ activeLayout, onLayoutChange }: { activeLayout: La
         ref={btnRef}
         onClick={() => setOpen(o => !o)}
         title="Change layout"
-        style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 28, height: 28,
-          background: open ? 'rgba(255,152,0,0.10)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${open ? 'rgba(255,152,0,0.45)' : 'rgba(255,255,255,0.08)'}`,
-          borderRadius: 6, cursor: 'pointer',
-          color: open ? '#FF9800' : '#787B86',
-          transition: 'background 0.12s, border-color 0.12s, color 0.12s',
-        }}
-        onMouseEnter={e => { if (!open) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.18)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; } }}
-        onMouseLeave={e => { if (!open) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; } }}
+        className={cx(s.layoutBtn, open ? s.layoutBtnOpen : '')}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
           <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
@@ -1078,71 +991,27 @@ function ViewSwitcher({ onViewChange }: { onViewChange: (v: ViewKey) => void }) 
         ref={btnRef}
         onClick={handleOpen}
         title="Switch view type"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          height: 26, padding: '0 9px',
-          background: open ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${open ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
-          borderRadius: 6,
-          color: open ? '#D1D4DC' : '#9B9EA8',
-          fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-          cursor: 'pointer', transition: 'background 0.12s, border-color 0.12s, color 0.12s',
-        }}
-        onMouseEnter={e => {
-          if (!open) {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.15)';
-            (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0';
-          }
-        }}
-        onMouseLeave={e => {
-          if (!open) {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
-            (e.currentTarget as HTMLButtonElement).style.color = '#9B9EA8';
-          }
-        }}
+        className={cx(s.viewSwitchBtn, open ? s.viewSwitchBtnOpen : '')}
       >
         {/* Grid icon */}
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
           <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
           <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
         View
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
           style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
           <path d="m19 9-7 7-7-7" />
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={menuRef} style={{
-          position: 'fixed',
-          top: pos.top,
-          left: pos.left,
-          transform: 'translateX(-100%)',
-          zIndex: 9600,
-          background: 'rgba(17,20,28,0.97)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 10,
-          padding: 6,
-          minWidth: 168,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(16px)',
-        }}>
-          <div style={{ padding: '4px 8px 6px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: '#4A4E5C', textTransform: 'uppercase' }}>
-            Switch View
-          </div>
+        <div ref={menuRef} className={s.viewDropdownMenu} style={{ top: pos.top, left: pos.left, transform: 'translateX(-100%)' }}>
+          <div className={s.viewDropdownTitle}>Switch View</div>
           {VIEW_OPTIONS.map(opt => (
             <button key={opt.value}
               onClick={() => { onViewChange(opt.value); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                width: '100%', padding: '8px 10px',
-                background: 'transparent',
-                border: 'none', borderRadius: 7,
-                cursor: 'pointer', transition: 'background 0.1s',
-              }}
+              className={s.viewDropdownBtn}
               onMouseEnter={e => {
                 (e.currentTarget as HTMLButtonElement).style.background = `rgba(${opt.color === '#26a69a' ? '38,166,154' :
                     opt.color === '#7B68EE' ? '123,104,238' : '255,152,0'
@@ -1150,20 +1019,11 @@ function ViewSwitcher({ onViewChange }: { onViewChange: (v: ViewKey) => void }) 
               }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             >
-              <span style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                background: `rgba(${opt.color === '#26a69a' ? '38,166,154' :
-                    opt.color === '#7B68EE' ? '123,104,238' : '255,152,0'
-                  },0.14)`,
-                color: opt.color,
-              }}>
+              <span className={s.viewDropdownIcon} style={{ background: `rgba(${opt.color === '#26a69a' ? '38,166,154' : opt.color === '#7B68EE' ? '123,104,238' : '255,152,0'},0.14)`, color: opt.color }}>
                 {opt.icon}
               </span>
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#D1D4DC', letterSpacing: '0.02em' }}>
-                  {opt.label}
-                </span>
+              <span className={s.viewDropdownLabel}>
+                <span className={s.viewDropdownLabelText}>{opt.label}</span>
               </span>
             </button>
           ))}
@@ -1245,56 +1105,36 @@ function OISettingsModal({
   return createPortal(
     <div
       ref={panelRef as RefObject<HTMLDivElement>}
-      style={{
-        position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999,
-        width: 300,
-        background: 'rgba(18,20,28,0.97)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 10,
-        boxShadow: '0 16px 48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07)',
-        backdropFilter: 'blur(20px)',
-        overflow: 'hidden',
-      }}
+      className={s.oiSettingsPanel}
+      style={{ top: pos.top, right: pos.right }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className={s.oiSettingsHeader}>
+        <div className={s.oiSettingsHeaderLeft}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2ebd85" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 6h-8m8 4H6m12 4h-8m8 4H6" />
           </svg>
-          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: '#D1D4DC', textTransform: 'uppercase' }}>OI Profile Settings</span>
+          <span className={s.oiSettingsTitle}>OI Profile Settings</span>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4A4E5C', padding: 2, display: 'flex', alignItems: 'center' }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#9B9EA8')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#4A4E5C')}
-        >
+        <button onClick={onClose} className={s.oiSettingsClose}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 18 17.94 6M18 18 6.06 6" /></svg>
         </button>
       </div>
 
-      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className={s.oiSettingsBody}>
 
         {/* Expiry Picker */}
         {expiries.length > 0 && (
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#787B86', textTransform: 'uppercase', marginBottom: 8 }}>Expiry</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div className={s.oiSectionLabel}>Expiry</div>
+            <div className={s.oiExpiryWrap}>
               {expiries.map(exp => {
                 const active = exp === selectedExpiry;
                 return (
                   <button
                     key={exp}
                     onClick={() => onExpiry(exp)}
-                    style={{
-                      padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
-                      fontSize: 11, fontWeight: 600, fontFamily: 'monospace',
-                      border: active ? '1px solid rgba(255,152,0,0.5)' : '1px solid rgba(255,255,255,0.08)',
-                      background: active ? 'rgba(255,152,0,0.12)' : 'rgba(255,255,255,0.03)',
-                      color: active ? '#FFB74D' : '#9B9EA8',
-                      transition: 'all 0.12s',
-                    }}
-                    onMouseEnter={e => { if (!active) { const b = e.currentTarget; b.style.background = 'rgba(255,255,255,0.07)'; b.style.color = '#D1D4DC'; } }}
-                    onMouseLeave={e => { if (!active) { const b = e.currentTarget; b.style.background = 'rgba(255,255,255,0.03)'; b.style.color = '#9B9EA8'; } }}
+                    className={cx(s.oiExpiryBtn, active ? s.oiExpiryBtnActive : s.oiExpiryBtnInactive)}
                   >
                     {fmtExpiry(exp)}
                   </button>
@@ -1306,8 +1146,8 @@ function OISettingsModal({
 
         {/* Data Mode */}
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#787B86', textTransform: 'uppercase', marginBottom: 8 }}>Data Mode</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className={s.oiSectionLabel}>Data Mode</div>
+          <div className={s.oiModeColumn}>
             {modes.map(m => {
               const active = m.hasChildren ? isGexActive : mode === m.id;
               return (
@@ -1321,20 +1161,12 @@ function OISettingsModal({
                         onMode(m.id);
                       }
                     }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 12px', borderRadius: 7, cursor: 'pointer', width: '100%', textAlign: 'left',
-                      border: active ? '1px solid rgba(46,189,133,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                      background: active ? 'rgba(46,189,133,0.08)' : 'rgba(255,255,255,0.03)',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = active ? 'rgba(46,189,133,0.08)' : 'rgba(255,255,255,0.03)'; }}
+                    className={cx(s.oiModeBtn, active ? s.oiModeBtnActive : s.oiModeBtnInactive)}
                   >
-                    <span style={{ color: active ? '#2ebd85' : '#787B86', flexShrink: 0, display: 'flex' }}>{m.icon}</span>
-                    <span style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: active ? '#D1D4DC' : '#9B9EA8' }}>{m.label}</div>
-                      <div style={{ fontSize: 10, color: '#4A4E5C', marginTop: 1 }}>{m.sub}</div>
+                    <span className={cx(s.oiModeIcon, active ? s.oiModeIconActive : s.oiModeIconInactive)}>{m.icon}</span>
+                    <span className={s.oiModeText}>
+                      <div className={cx(s.oiModeLabel, active ? s.oiModeLabelActive : s.oiModeLabelInactive)}>{m.label}</div>
+                      <div className={s.oiModeSub}>{m.sub}</div>
                     </span>
                     {m.hasChildren ? (
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={active ? '#2ebd85' : '#4A4E5C'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -1350,7 +1182,7 @@ function OISettingsModal({
 
                   {/* GEX sub-options */}
                   {m.hasChildren && gexExpanded && (
-                    <div style={{ marginTop: 4, marginLeft: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div className={s.oiGexSubs}>
                       {([
                         { id: 'gex_raw' as OIMode, label: 'By OI', sub: 'γ · OI · Lot' },
                         { id: 'gex_spot' as OIMode, label: 'By Spot', sub: 'γ · OI · Lot · S²' },
@@ -1360,20 +1192,12 @@ function OISettingsModal({
                           <button
                             key={sub.id}
                             onClick={() => onMode(sub.id)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 12px', borderRadius: 6, cursor: 'pointer', width: '100%', textAlign: 'left',
-                              border: subActive ? '1px solid rgba(129,140,248,0.4)' : '1px solid rgba(255,255,255,0.05)',
-                              background: subActive ? 'rgba(129,140,248,0.1)' : 'rgba(255,255,255,0.02)',
-                              transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={e => { if (!subActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)'; }}
-                            onMouseLeave={e => { if (!subActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.02)'; }}
+                            className={cx(s.oiGexSubBtn, subActive ? s.oiGexSubBtnActive : s.oiGexSubBtnInactive)}
                           >
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: subActive ? '#818cf8' : '#333333' }} />
-                            <span style={{ flex: 1 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: subActive ? '#818cf8' : '#9B9EA8' }}>{sub.label}</div>
-                              <div style={{ fontSize: 10, color: '#4A4E5C', marginTop: 1, fontFamily: 'monospace' }}>{sub.sub}</div>
+                            <span className={cx(s.oiGexDot, subActive ? s.oiGexDotActive : s.oiGexDotInactive)} />
+                            <span className={s.oiModeText}>
+                              <div className={cx(s.oiGexSubLabel, subActive ? s.oiGexSubLabelActive : s.oiGexSubLabelInactive)}>{sub.label}</div>
+                              <div className={s.oiGexSubSub}>{sub.sub}</div>
                             </span>
                             {subActive && (
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -1393,24 +1217,24 @@ function OISettingsModal({
 
         {/* Colors */}
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#787B86', textTransform: 'uppercase', marginBottom: 8 }}>Bar Colors</div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className={s.oiSectionLabel}>Bar Colors</div>
+          <div className={s.oiColorRow}>
             {[
               { label: 'Call', value: callColor, onChange: onCallColor },
               { label: 'Put', value: putColor, onChange: onPutColor },
             ].map(({ label, value, onChange }) => (
-              <label key={label} style={{ flex: 1, cursor: 'pointer' }}>
-                <div style={{ fontSize: 10, color: '#787B86', marginBottom: 5, letterSpacing: '0.06em' }}>{label}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}>
-                  <div style={{ width: 18, height: 18, borderRadius: 4, background: value, border: '2px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#9B9EA8' }}>{value}</span>
+              <label key={label} className={s.oiColorLabel}>
+                <div className={s.oiColorName}>{label}</div>
+                <div className={s.oiColorSwatch}>
+                  <div className={s.oiColorDot} style={{ background: value }} />
+                  <span className={s.oiColorHex}>{value}</span>
                   <input type="color" value={value} onChange={e => onChange(e.target.value)}
-                    style={{ opacity: 0, position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}
+                    className={s.oiColorInputHidden}
                     id={`oi-color-${label}`}
                   />
                 </div>
                 <input type="color" value={value} onChange={e => onChange(e.target.value)}
-                  style={{ opacity: 0, width: '100%', height: 2, cursor: 'pointer', marginTop: -2 }}
+                  className={s.oiColorInputRange}
                 />
               </label>
             ))}
@@ -1419,18 +1243,18 @@ function OISettingsModal({
 
         {/* Opacity */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#787B86', textTransform: 'uppercase' }}>Opacity</div>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#D1D4DC', fontFamily: 'monospace' }}>{opacity}%</span>
+          <div className={s.oiOpacityHeader}>
+            <div className={s.oiSectionLabel} style={{ marginBottom: 0 }}>Opacity</div>
+            <span className={s.oiOpacityVal}>{opacity}%</span>
           </div>
           <input
             type="range" min={10} max={100} value={opacity}
             onChange={e => onOpacity(Number(e.target.value))}
-            style={{ width: '100%', accentColor: '#2ebd85', cursor: 'pointer', height: 4 }}
+            className={s.oiOpacitySlider}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
-            <span style={{ fontSize: 9, color: '#4A4E5C' }}>10%</span>
-            <span style={{ fontSize: 9, color: '#4A4E5C' }}>100%</span>
+          <div className={s.oiOpacityHints}>
+            <span className={s.oiOpacityHint}>10%</span>
+            <span className={s.oiOpacityHint}>100%</span>
           </div>
         </div>
 
@@ -1480,42 +1304,25 @@ function VwapSettingsPanel({
   ];
 
   return createPortal(
-    <div ref={panelRef as RefObject<HTMLDivElement>} style={{
-      position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999,
-      width: 260,
-      background: 'rgba(18,20,28,0.97)',
-      border: '1px solid rgba(255,255,255,0.10)',
-      borderRadius: 10,
-      boxShadow: '0 16px 48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07)',
-      backdropFilter: 'blur(20px)',
-      overflow: 'hidden',
-    }}>
+    <div ref={panelRef as RefObject<HTMLDivElement>} className={s.vwapPanel} style={{ top: pos.top, right: pos.right }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: '#D1D4DC', textTransform: 'uppercase' }}>VWAP Anchor</span>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4A4E5C', padding: 2, display: 'flex', alignItems: 'center' }}>
+      <div className={s.vwapPanelHeader}>
+        <span className={s.vwapPanelTitle}>VWAP Anchor</span>
+        <button onClick={onClose} className={s.vwapPanelClose}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 18 17.94 6M18 18 6.06 6" /></svg>
         </button>
       </div>
-      <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className={s.vwapPanelBody}>
         {anchors.map(a => {
           const active = anchor === a.id;
           return (
             <button key={a.id} onClick={() => { onAnchor(a.id); onClose(); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '9px 12px', borderRadius: 7, cursor: 'pointer', width: '100%', textAlign: 'left',
-                border: active ? '1px solid rgba(255,215,0,0.40)' : '1px solid rgba(255,255,255,0.07)',
-                background: active ? 'rgba(255,215,0,0.08)' : 'rgba(255,255,255,0.03)',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)'; }}
+              className={cx(s.vwapAnchorBtn, active ? s.vwapAnchorBtnActive : s.vwapAnchorBtnInactive)}
             >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: active ? '#FFD700' : '#333333' }} />
-              <span style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: active ? '#FFD700' : '#9B9EA8' }}>{a.label}</div>
-                <div style={{ fontSize: 10, color: '#4A4E5C', marginTop: 1 }}>{a.sub}</div>
+              <span className={cx(s.vwapAnchorDot, active ? s.vwapAnchorDotActive : s.vwapAnchorDotInactive)} />
+              <span className={s.oiModeText}>
+                <div className={cx(s.vwapAnchorLabel, active ? s.vwapAnchorLabelActive : s.vwapAnchorLabelInactive)}>{a.label}</div>
+                <div className={s.vwapAnchorSub}>{a.sub}</div>
               </span>
               {active && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
             </button>
@@ -1553,12 +1360,17 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const prevTimestampRef = useRef<number | null>(null);
   const isLoadingMoreRef = useRef(false);
   const loadLockRef = useRef(false);
+  const initialZoomDoneRef = useRef(false);     // true after first zoomToEnd — never zoom again until instrument/interval changes
+  const programmaticScrollRef = useRef(false); // true during programmatic scroll — suppresses scroll handler side-effects
 
   // Live bar refs — reset on every interval/instrument change
   const liveBarRef = useRef<CandlestickData | null>(null);
   const liveVolRef = useRef<HistogramData | null>(null);
   // Blocks WS updates while REST fetch is in flight
   const restLoadingRef = useRef(false);
+  // True until the very first chart load completes — skeleton holds for MIN_SKELETON_MS on initial load
+  const firstLoadRef = useRef(true);
+  const MIN_SKELETON_MS = 600;
   // Pre-market tick accumulator (INDEX only, 08:59–09:07 IST)
   const pmTicksRef = useRef<number[][]>([]);
   const pmSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1585,7 +1397,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const [chartReady, setChartReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [restLoadedKey, setRestLoadedKey] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false); // drives HIST spinner — set via rAF to avoid scroll jank
   const [error, setError] = useState<string | null>(null);
   const [wsLive, setWsLive] = useState(false);
   const [optionChainOpenInternal, setOptionChainOpenInternal] = useState(false);
@@ -1595,6 +1407,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     setOptionChainOpenInternal(next);
     onOptionChainOpenChange?.(next);
   };
+  // Deferred mount — panel DOM is created one rAF after open so the click
+  // never blocks the chart frame (Bloomberg-style: UI responds instantly, data loads after)
+  const [ocPanelMounted, setOcPanelMounted] = useState(false);
+  useEffect(() => {
+    if (!optionChainOpen) { setOcPanelMounted(false); return; }
+    const id = requestAnimationFrame(() => setOcPanelMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, [optionChainOpen]);
 
   const [oiShowInternal, setOiShowInternal] = useState(false);
   const oiShow = oiShowProp ?? oiShowInternal;
@@ -1654,17 +1474,17 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const vwapExpiryDayRef = useRef<'tuesday' | 'thursday'>('thursday');
   vwapExpiryDayRef.current = vwapExpiryDay;
 
-  // Compute available expiries for OI overlay
+  // Compute available expiries for OI overlay — only when OI panel is open (lazy)
   const oiUnderlying = instrument.underlying_symbol || instrument.trading_symbol;
   const oiExpiries = useMemo(() => {
-    if (!oiUnderlying || !instruments.length) return [];
+    if (!oiShow || !oiUnderlying || !instruments.length) return [];
     const today = Date.now();
     return [...new Set(
       instruments
         .filter(i => (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol === oiUnderlying && i.expiry != null && i.expiry >= today - 86400000)
         .map(i => i.expiry as number)
     )].sort((a, b) => a - b);
-  }, [oiUnderlying, instruments]);
+  }, [oiShow, oiUnderlying, instruments]);
 
   // Auto-select nearest expiry when list loads or instrument changes
   useEffect(() => {
@@ -1690,8 +1510,10 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const intervalRef = useRef<Interval>(interval);
   intervalRef.current = interval;
 
-  // Show option chain/OI if: INDEX/EQ directly, or FUT/CE/PE with options
+  // Show option chain/OI if: INDEX/EQ directly, or FUT/CE/PE with options.
+  // Only computed after chart has loaded data — never blocks initial render.
   const hasOptions = useMemo(() => {
+    if (!restLoadedKey) return false; // defer until chart is painted
     const t = instrument.instrument_type;
     if (t === 'INDEX' || t === 'EQ') return true;
     if (t === 'FUT' || t === 'CE' || t === 'PE') {
@@ -1700,13 +1522,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       return instruments.some(i => (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol === underlying);
     }
     return false;
-  }, [instrument.instrument_type, instrument.underlying_symbol, instruments]);
+  }, [restLoadedKey, instrument.instrument_type, instrument.underlying_symbol, instruments]);
 
   // ── Expiry list in Unix seconds for VWAP expiry-to-expiry anchor ───────────
   // Filtered by vwapExpiryDay: 2=Tue, 4=Thu (getUTCDay on IST-shifted date)
+  // Only computed when VWAP is active and anchor is 'expiry' — lazy to avoid blocking chart init
   const vwapExpiriesSec = useMemo(() => {
     const under = instrument.underlying_symbol || instrument.trading_symbol;
-    if (!under || !instruments?.length) return [];
+    if (!vwapShow || vwapAnchor !== 'expiry' || !under || !instruments?.length) return [];
     const dayFilter = vwapExpiryDay === 'tuesday' ? 2 : 4; // IST weekday
     return [...new Set(
       instruments
@@ -1718,20 +1541,34 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
         })
         .map(i => Math.floor((i.expiry as number) / 1000))
     )].sort((a, b) => a - b);
-  }, [instrument.underlying_symbol, instrument.trading_symbol, instruments, vwapExpiryDay]);
+  }, [vwapShow, vwapAnchor, instrument.underlying_symbol, instrument.trading_symbol, instruments, vwapExpiryDay]);
   const vwapExpiriesSecRef = useRef<number[]>([]);
   vwapExpiriesSecRef.current = vwapExpiriesSec;
 
   // ── Boot chart once ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !wrapperRef.current) return;
+
+    // Defer chart creation by one rAF so React's flex layout has fully resolved.
+    // Without this, on page refresh the container reports 0px dimensions at mount time —
+    // LW-charts creates a 0px canvas, pointer events miss it, crosshair/scroll is
+    // stuck until the ResizeObserver fires and resizes the chart.
+    let chartCleanup: (() => void) | null = null;
+    let rafId = requestAnimationFrame(() => {
+    rafId = 0;
+    if (!containerRef.current || !wrapperRef.current) return;
+
+    const w = containerRef.current.clientWidth || wrapperRef.current.clientWidth || 800;
+    const h = containerRef.current.clientHeight || wrapperRef.current.clientHeight || 500;
 
     const chart = createChart(containerRef.current, {
-      autoSize: true,
+      autoSize: false,
+      width: w,
+      height: h,
       layout: {
         background: { color: '#171717' },
         textColor: '#B2B5BE',
-        fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace",
+        fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
         fontSize: 13,
       },
       grid: {
@@ -1742,6 +1579,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       rightPriceScale: {
         borderColor: '#2a2a2a',
         scaleMargins: { top: 0.05, bottom: 0.25 },
+        ticksVisible: true,
+        visible: true,
       },
       timeScale: {
         borderColor: '#2a2a2a',
@@ -1818,14 +1657,18 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     let roRaf: number | null = null;
     let roDebounce: ReturnType<typeof setTimeout> | null = null;
     const ro = new ResizeObserver(() => {
-      if (!chartRef.current) return;
-      // Sync canvas size immediately every frame (cheap, keeps canvas aligned)
+      if (!chartRef.current || !containerRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      if (!w || !h) return;
+      // Manually resize — no autoSize so barSpacing is never reset by LW-charts internals
       if (roRaf !== null) cancelAnimationFrame(roRaf);
       roRaf = requestAnimationFrame(() => {
         roRaf = null;
+        chart.resize(w, h, false);
         resyncCanvas();
       });
-      // Heavy OI redraw only after resize settles (16ms trailing debounce)
+      // Heavy OI redraw only after resize settles
       if (roDebounce !== null) clearTimeout(roDebounce);
       roDebounce = setTimeout(() => {
         roDebounce = null;
@@ -1911,7 +1754,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       }
     });
 
-    return () => {
+    chartCleanup = () => {
       if (scrollRaf !== null) cancelAnimationFrame(scrollRaf);
       if (roRaf !== null) cancelAnimationFrame(roRaf);
       if (roDebounce !== null) clearTimeout(roDebounce);
@@ -1920,6 +1763,12 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       chart.remove();
       chartRef.current = null;
       setChartReady(false);
+    };
+    }); // end rAF
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      chartCleanup?.();
     };
   }, []);
 
@@ -2032,98 +1881,88 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
     if (!instruments.length || !hasOptions) return;
 
-    const underlying = instrument.underlying_symbol || instrument.trading_symbol;
-    if (!underlying) return;
-
-    // Use selected expiry (falls back to nearest)
-    const today = Date.now();
-    const allExpiries = [...new Set(
-      instruments
-        .filter(i => (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol === underlying && i.expiry != null && i.expiry >= today - 86400000)
-        .map(i => i.expiry as number)
-    )].sort((a, b) => a - b);
-    if (!allExpiries.length) return;
-    const expiry = (oiExpiryRef.current && allExpiries.includes(oiExpiryRef.current)) ? oiExpiryRef.current : allExpiries[0];
-
-    // Build OI rows from all strikes
-    const strikeMetaMap = new Map<number, { ceKey: string | null; peKey: string | null; lotSize: number }>();
-    for (const ins of instruments) {
-      if (ins.underlying_symbol !== underlying || ins.expiry !== expiry) continue;
-      if (ins.instrument_type !== 'CE' && ins.instrument_type !== 'PE') continue;
-      const s = ins.strike_price ?? 0;
-      if (!strikeMetaMap.has(s)) strikeMetaMap.set(s, { ceKey: null, peKey: null, lotSize: ins.lot_size });
-      const meta = strikeMetaMap.get(s)!;
-      if (ins.instrument_type === 'CE') meta.ceKey = ins.instrument_key;
-      else meta.peKey = ins.instrument_key;
-    }
-
-    // Also update spot ref for GEX
-    const spotSnap = wsManager.get(instrument.instrument_key);
-    if (spotSnap?.ltp) oiSpotRef.current = spotSnap.ltp;
-
-    const rows: OIRow[] = [...strikeMetaMap.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .filter(([, { ceKey, peKey }]) => ceKey && peKey)
-      .map(([strike, { ceKey, peKey, lotSize }]) => {
-        const ceSnap = wsManager.get(ceKey!);
-        const peSnap = wsManager.get(peKey!);
-        return {
-          strike,
-          callKey: ceKey!,
-          putKey: peKey!,
-          lotSize,
-          callOI: ceSnap?.oi ?? 0,
-          putOI: peSnap?.oi ?? 0,
-          callVol: ceSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
-          putVol: peSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
-          callIV: ceSnap?.iv ?? 0,
-          putIV: peSnap?.iv ?? 0,
-          callGamma: ceSnap?.gamma ?? 0,
-          putGamma: peSnap?.gamma ?? 0,
-        };
-      });
-
-    oiRowsRef.current = rows;
-    const allKeys = rows.flatMap(r => [r.callKey, r.putKey]);
-    wsManager.requestKeys(allKeys);
-    // Delay first draw so chart price scale is ready
-    setTimeout(() => redrawOI(), 120);
-
-    // rAF-throttled redraw on OI ticks
+    // Defer heavy instrument scan + WS subscription off the click frame
+    let unsubs: (() => void)[] = [];
+    let spotUnsub: (() => void) | null = null;
     let rafId: number | null = null;
-    const scheduleRedraw = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => { rafId = null; redrawOI(); });
-    };
+    let cancelled = false;
 
-    const unsubs = allKeys.map(key =>
-      wsManager.subscribe(key, (md) => {
-        const row = oiRowsRef.current.find(r => r.callKey === key || r.putKey === key);
-        if (!row) return;
-        const vol = md.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0;
-        if (row.callKey === key) {
-          row.callOI = md.oi || 0;
-          row.callVol = vol;
-          row.callIV = md.iv || 0;
-          row.callGamma = md.gamma || 0;
-        } else {
-          row.putOI = md.oi || 0;
-          row.putVol = vol;
-          row.putIV = md.iv || 0;
-          row.putGamma = md.gamma || 0;
-        }
-        scheduleRedraw();
-      })
-    );
+    const tid = window.setTimeout(() => {
+      if (cancelled) return;
 
-    // Keep spot ref live for GEX spot mode
-    const spotUnsub = wsManager.subscribe(instrument.instrument_key, (md) => {
-      if (md.ltp) oiSpotRef.current = md.ltp;
-    });
+      const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+      if (!underlying) return;
+
+      const today = Date.now();
+      const allExpiries = [...new Set(
+        instruments
+          .filter(i => (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol === underlying && i.expiry != null && i.expiry >= today - 86400000)
+          .map(i => i.expiry as number)
+      )].sort((a, b) => a - b);
+      if (!allExpiries.length) return;
+      const expiry = (oiExpiryRef.current && allExpiries.includes(oiExpiryRef.current)) ? oiExpiryRef.current : allExpiries[0];
+
+      const strikeMetaMap = new Map<number, { ceKey: string | null; peKey: string | null; lotSize: number }>();
+      for (const ins of instruments) {
+        if (ins.underlying_symbol !== underlying || ins.expiry !== expiry) continue;
+        if (ins.instrument_type !== 'CE' && ins.instrument_type !== 'PE') continue;
+        const s = ins.strike_price ?? 0;
+        if (!strikeMetaMap.has(s)) strikeMetaMap.set(s, { ceKey: null, peKey: null, lotSize: ins.lot_size });
+        const meta = strikeMetaMap.get(s)!;
+        if (ins.instrument_type === 'CE') meta.ceKey = ins.instrument_key;
+        else meta.peKey = ins.instrument_key;
+      }
+
+      const spotSnap = wsManager.get(instrument.instrument_key);
+      if (spotSnap?.ltp) oiSpotRef.current = spotSnap.ltp;
+
+      const rows: OIRow[] = [...strikeMetaMap.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .filter(([, { ceKey, peKey }]) => ceKey && peKey)
+        .map(([strike, { ceKey, peKey, lotSize }]) => {
+          const ceSnap = wsManager.get(ceKey!);
+          const peSnap = wsManager.get(peKey!);
+          return {
+            strike, callKey: ceKey!, putKey: peKey!, lotSize,
+            callOI: ceSnap?.oi ?? 0, putOI: peSnap?.oi ?? 0,
+            callVol: ceSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
+            putVol: peSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
+            callIV: ceSnap?.iv ?? 0, putIV: peSnap?.iv ?? 0,
+            callGamma: ceSnap?.gamma ?? 0, putGamma: peSnap?.gamma ?? 0,
+          };
+        });
+
+      oiRowsRef.current = rows;
+      const allKeys = rows.flatMap(r => [r.callKey, r.putKey]);
+      wsManager.requestKeys(allKeys);
+      setTimeout(() => redrawOI(), 120);
+
+      const scheduleRedraw = () => {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => { rafId = null; redrawOI(); });
+      };
+
+      unsubs = allKeys.map(key =>
+        wsManager.subscribe(key, (md) => {
+          const row = oiRowsRef.current.find(r => r.callKey === key || r.putKey === key);
+          if (!row) return;
+          const vol = md.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0;
+          if (row.callKey === key) { row.callOI = md.oi || 0; row.callVol = vol; row.callIV = md.iv || 0; row.callGamma = md.gamma || 0; }
+          else { row.putOI = md.oi || 0; row.putVol = vol; row.putIV = md.iv || 0; row.putGamma = md.gamma || 0; }
+          scheduleRedraw();
+        })
+      );
+
+      spotUnsub = wsManager.subscribe(instrument.instrument_key, (md) => {
+        if (md.ltp) oiSpotRef.current = md.ltp;
+      });
+    }, 0);
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(tid);
       unsubs.forEach(u => u());
-      spotUnsub();
+      spotUnsub?.();
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2155,12 +1994,18 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
   // ── Zoom to last N candles (right-anchored) ────────────────────────────────
   const zoomToEnd = useCallback((data: CandlestickData[]) => {
+    if (initialZoomDoneRef.current) return; // already zoomed — never override user's position
+    if (data.length === 0) return;
     const ts = chartRef.current?.timeScale();
-    if (!ts || data.length === 0) return;
+    if (!ts) return;
+    initialZoomDoneRef.current = true;
     const visible = Math.min(INITIAL_VISIBLE, data.length);
-    const from = data[data.length - visible].time;
-    const to = data[data.length - 1].time;
-    setTimeout(() => ts.setVisibleRange({ from, to }), 50);
+    const containerWidth = containerRef.current?.clientWidth ?? 800;
+    const spacing = Math.max(4, Math.floor(containerWidth / visible));
+    programmaticScrollRef.current = true;
+    ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
+    ts.scrollToRealTime();
+    requestAnimationFrame(() => { programmaticScrollRef.current = false; });
   }, []);
 
   // ── Load fresh candles whenever instrument OR interval changes ─────────────
@@ -2182,6 +2027,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     liveBarRef.current = null;
     liveVolRef.current = null;
     loadLockRef.current = false;
+    initialZoomDoneRef.current = false;
     barRefetchScheduledRef.current = false;
     if (barRefetchTimerRef.current) {
       clearTimeout(barRefetchTimerRef.current);
@@ -2200,33 +2046,24 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
     (async () => {
       try {
-        // ── Step 1: fetch today's candles (from = IST 23:59:59) ──
-        const todayRes = await fetchCandles(instrument.instrument_key, iv, from);
+        // Fetch today → if empty, try prev day → if still empty, try day before that.
+        // Stop as soon as we have candles. Max 3 fetches, never loads more than needed.
+        let res = await fetchCandles(instrument.instrument_key, iv, from);
         if (mySession !== sessionRef.current) return;
-
-        let candles = todayRes.candles;
-        let prev = todayRes.prevTimestamp;
-
-        // ── Step 2: if today returned empty, fall back to prevTimestamp (like StraddleChart) ──
-        if (candles.length === 0 && prev) {
-          const fallback = await fetchCandles(instrument.instrument_key, iv, prev);
+        if (res.candles.length === 0 && res.prevTimestamp) {
+          res = await fetchCandles(instrument.instrument_key, iv, res.prevTimestamp);
           if (mySession !== sessionRef.current) return;
-          candles = fallback.candles;
-          prev = fallback.prevTimestamp;
+          if (res.candles.length === 0 && res.prevTimestamp) {
+            res = await fetchCandles(instrument.instrument_key, iv, res.prevTimestamp);
+            if (mySession !== sessionRef.current) return;
+          }
         }
 
-        // ── Step 3: also fetch previous day candles and combine ──
-        let prevCandles: number[][] = [];
-        let prevPrev: number | null = null;
-        if (prev) {
-          const prevRes = await fetchCandles(instrument.instrument_key, iv, prev);
-          if (mySession !== sessionRef.current) return;
-          prevCandles = prevRes.candles;
-          prevPrev = prevRes.prevTimestamp;
-        }
+        const candles = res.candles;
+        const prevPrev = res.prevTimestamp;
 
-        // Combine: older first, then today
-        const combined = [...prevCandles, ...candles];
+        // Combine (no prev-day merge — only the day with data)
+        const combined = [...candles];
 
         // ── Prepend saved pre-market candles (INDEX only) ──────────────────
         let pmCandles: number[][] = [];
@@ -2269,61 +2106,64 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
         const sorted = [...allRaw].sort((a, b) => a[0] - b[0]);
         const unique = sorted.filter((c, i) => i === 0 || c[0] !== sorted[i - 1][0]);
 
-        console.log(`[CandleChart] Combining ${pmCandles.length} pmCandles and ${combined.length} REST candles for ${instrument.instrument_key}. Unique total: ${unique.length}`);
-
         const cData = unique.map(toCandleRow);
         const vData = unique.map(toVolRow);
         allCandlesRef.current = cData;
         allVolRef.current = vData;
         prevTimestampRef.current = prevPrev;
 
-        candleSeriesRef.current!.setData(cData);
-        volSeriesRef.current!.setData(vData);
-        if (vwapSeriesRef.current) updateVwapData();
-        if (twapSeriesRef.current) updateTwapData();
-
-        // ── If last REST candle == current wall-clock bar, pop it as live bar seed ──
-        // This handles mid-bar connect: REST returns the current bar as "complete",
-        // but WS needs to keep updating it. Pop it from history and treat as live.
+        // ── Pop live bar BEFORE setData so we only paint once ──────────────────
         const wallBarSec = snapToBarTime(Date.now(), INTERVALS.find(i => i.value === iv)?.minutes ?? 1);
         const lastCandle = cData.length > 0 ? cData[cData.length - 1] : null;
         if (lastCandle && Number(lastCandle.time) === wallBarSec) {
-          // Remove from REST history — WS will own this bar
           const poppedCandle = cData.pop()!;
           const poppedVol = vData.pop();
           allCandlesRef.current = cData;
           allVolRef.current = vData;
-
           const snapshot = wsManager.get(instrument.instrument_key);
           const ltp = (snapshot?.ltp ?? 0) > 0 ? snapshot!.ltp : poppedCandle.close;
-          const seedBar: CandlestickData = {
+          liveBarRef.current = {
             time: poppedCandle.time,
             open: poppedCandle.open,
             high: Math.max(poppedCandle.high, ltp),
             low: Math.min(poppedCandle.low, ltp),
             close: ltp,
           };
-          liveBarRef.current = seedBar;
           liveVolRef.current = poppedVol ? { ...poppedVol, color: ltp >= poppedCandle.open ? 'rgba(46,189,133,0.5)' : 'rgba(242,54,69,0.5)' } : null;
-
-          candleSeriesRef.current!.setData(cData);
-          volSeriesRef.current!.setData(vData);
-          if (vwapSeriesRef.current) updateVwapData();
-          if (twapSeriesRef.current) updateTwapData();
-          try { candleSeriesRef.current!.update(seedBar); } catch { /* ignore */ }
-          if (liveVolRef.current) try { volSeriesRef.current!.update(liveVolRef.current); } catch { /* ignore */ }
         } else {
           liveBarRef.current = null;
           liveVolRef.current = null;
         }
 
+        // Unblock WS ticks immediately (ref — no chart work needed)
         restLoadingRef.current = false;
-        const zoomData = liveBarRef.current ? [...cData, liveBarRef.current] : cData;
-        zoomToEnd(zoomData);
-        setLoading(false);
-        setRestLoadedKey(instrument.instrument_key);
-        // Redraw OI bars after chart has settled (zoomToEnd has a 50ms timeout)
-        setTimeout(() => { if (oiShowLiveRef.current) redrawOI(); }, 120);
+
+        // Paint data in its own rAF so it never competes with pointer/scroll events.
+        // In production builds, setData+zoomToEnd in the same microtask as chart init blocks input.
+        const paintStart = Date.now();
+        requestAnimationFrame(() => {
+          if (mySession !== sessionRef.current) return;
+          if (!candleSeriesRef.current || !volSeriesRef.current) return;
+          candleSeriesRef.current.setData(cData);
+          volSeriesRef.current.setData(vData);
+          if (vwapSeriesRef.current) updateVwapData();
+          if (twapSeriesRef.current) updateTwapData();
+          if (liveBarRef.current) try { candleSeriesRef.current.update(liveBarRef.current); } catch { /* ignore */ }
+          if (liveVolRef.current) try { volSeriesRef.current.update(liveVolRef.current); } catch { /* ignore */ }
+          const zoomData = liveBarRef.current ? [...cData, liveBarRef.current] : cData;
+          zoomToEnd(zoomData);
+          setRestLoadedKey(instrument.instrument_key);
+          setTimeout(() => { if (oiShowLiveRef.current) redrawOI(); }, 120);
+          // On initial load, hold skeleton for MIN_SKELETON_MS so everything settles before revealing
+          const isFirst = firstLoadRef.current;
+          if (isFirst) firstLoadRef.current = false;
+          const elapsed = Date.now() - paintStart;
+          const remaining = isFirst ? Math.max(0, MIN_SKELETON_MS - elapsed) : 0;
+          setTimeout(() => {
+            if (mySession !== sessionRef.current) return;
+            setLoading(false);
+          }, remaining);
+        });
       } catch (err) {
         if (mySession !== sessionRef.current) return;
         restLoadingRef.current = false;
@@ -2357,8 +2197,6 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       const msUntilNextBar = nextBarMs - nowMs;
       // Add a small buffer (500ms) so the bar is definitely closed by then
       const delay = msUntilNextBar + 500;
-
-      console.log(`[CandleChart] Silent re-fetch scheduled in ${Math.round(delay / 1000)}s at next bar boundary`);
 
       barRefetchTimerRef.current = setTimeout(async () => {
         if (mySession !== sessionRef.current) return;
@@ -2422,9 +2260,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             try { volSeriesRef.current?.update(liveVolRef.current); } catch { /* ignore */ }
           }
 
-          console.log(`[CandleChart] Silent re-fetch done — ${cData.length} historical candles reloaded`);
         } catch (err) {
-          console.warn('[CandleChart] Silent re-fetch failed', err);
         } finally {
           if (mySession === sessionRef.current) restLoadingRef.current = false;
         }
@@ -2462,16 +2298,6 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
       if (!logged) {
         logged = true;
-        console.log('[CandleChart] First WS tick debug:', {
-          ltp: md.ltp,
-          ohlcRaw: md.ohlc,
-          ohlcEntry,
-          ohlcBarTimeSec,
-          wallBarTimeSec,
-          useOhlc,
-          ohlcBarTime: ohlcBarTimeSec ? new Date(ohlcBarTimeSec * 1000).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) : null,
-          wallBarTime: new Date(wallBarTimeSec * 1000).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }),
-        });
         // Schedule a silent REST re-fetch at the next bar boundary
         scheduleBarRefetch(mySession);
       }
@@ -2638,10 +2464,10 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
     isLoadingMoreRef.current = true;
     loadLockRef.current = true;
-    setLoadingMore(true);
+    requestAnimationFrame(() => setLoadingMore(true));
 
     const ts = chartRef.current?.timeScale();
-    const visRange = ts?.getVisibleRange();
+    const logicalRange = ts?.getVisibleLogicalRange();
     const iv = intervalRef.current.value;
 
     try {
@@ -2680,8 +2506,11 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             try { volSeriesRef.current!.update(liveVolRef.current); } catch { /* ignore */ }
           }
 
-          if (visRange && ts) {
-            setTimeout(() => ts.setVisibleRange(visRange), 50);
+          // Anchor right edge after prepend — scrollToPosition is cheap, no layout recalc
+          if (ts && logicalRange) {
+            programmaticScrollRef.current = true;
+            ts.scrollToPosition(logicalRange.to + uniqueOlder.length - (ts.getVisibleLogicalRange()?.to ?? 0), false);
+            requestAnimationFrame(() => { programmaticScrollRef.current = false; });
           }
         }
       }
@@ -2689,8 +2518,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       // ignore
     } finally {
       isLoadingMoreRef.current = false;
-      setLoadingMore(false);
-      setTimeout(() => { loadLockRef.current = false; }, 1000);
+      requestAnimationFrame(() => setLoadingMore(false));
+      setTimeout(() => { loadLockRef.current = false; }, 400);
     }
   }, [instrument.instrument_key]);
   // interval NOT in deps — read via intervalRef
@@ -2701,7 +2530,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     if (!ts) return;
 
     const handler = (range: LogicalRange | null) => {
-      if (!range || loadLockRef.current || !prevTimestampRef.current) return;
+      if (!range) return;
+      if (loadLockRef.current || !prevTimestampRef.current) return;
       const barsInfo = candleSeriesRef.current?.barsInLogicalRange(range);
       if (barsInfo && barsInfo.barsBefore < 20) {
         loadMore();
@@ -2730,76 +2560,53 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   });
 
   return (
-    <div className="chart-mono flex flex-col h-full" style={{ background: '#171717' }}>
+    <div className={`chart-mono flex flex-col h-full ${s.root}`}>
       {/* Toolbar — hidden in workspace mode */}
       {!hideToolbar && (
-        <div style={{
-          height: 38, flexShrink: 0, display: 'flex', alignItems: 'center',
-          padding: '0 8px', gap: 0,
-          background: '#171717',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          overflow: 'hidden', minWidth: 0,
-        }}>
+        <div className={s.toolbar}>
 
-          {/* ── Symbol search button (TradingView flat style) ── */}
-          <button
-            onClick={onSearchOpen}
-            title="Search symbol"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              height: 28, padding: '0 4px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4, cursor: 'pointer',
-              marginRight: 2, flexShrink: 0,
-              minWidth: 0, maxWidth: 220,
-              transition: 'color 0.12s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#787B86" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
-              <circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" />
+          {/* ── Symbol search container ── */}
+          <button onClick={onSearchOpen} title="Search symbol" className={s.symbolBtn}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" className={s.searchIcon}>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#D1D4DC', letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {instrument.name || instrument.trading_symbol}
-            </span>
+            <span className={s.symbolName}>{instrument.name || instrument.trading_symbol}</span>
           </button>
 
           {/* ── Separator ── */}
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', margin: '0 6px', flexShrink: 0 }} />
+          <div className={s.tbSep} />
 
           {/* ── Timeframe inline buttons ── */}
           <TimeframeButtons interval={interval} onChange={iv => { setIntervalState(iv); onIntervalChange?.(iv.value); }} />
 
           {/* ── Separator ── */}
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', margin: '0 6px', flexShrink: 0 }} />
+          <div className={s.tbSep} />
 
           {/* ── Status indicators ── */}
           {loading && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <span style={{ width: 10, height: 10, border: '1.5px solid rgba(255,255,255,0.2)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-              <span style={{ fontSize: 10, color: '#5D606B', letterSpacing: '0.08em', fontWeight: 600 }}>LOADING</span>
+            <span className={s.statusWrap}>
+              <span className={s.spinner} />
+              <span className={s.loadingLabel}>LOADING</span>
             </span>
           )}
           {loadingMore && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <span style={{ width: 10, height: 10, border: '1.5px solid rgba(255,152,0,0.5)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-              <span style={{ fontSize: 10, color: 'rgba(255,152,0,0.6)', letterSpacing: '0.08em', fontWeight: 600 }}>HIST</span>
+            <span className={s.statusWrap}>
+              <span className={s.spinnerHist} />
+              <span className={s.histLabel}>HIST</span>
             </span>
           )}
           {error && (
-            <span style={{ fontSize: 10, color: '#f23645', flexShrink: 0, fontWeight: 600, letterSpacing: '0.06em' }} title={error}>ERR</span>
+            <span className={s.errLabel} title={error}>ERR</span>
           )}
           {!loading && wsLive && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2ebd85', boxShadow: '0 0 6px #2ebd85', flexShrink: 0 }} />
-              <span style={{ fontSize: 10, color: '#2ebd85', fontWeight: 600, letterSpacing: '0.08em' }}>LIVE</span>
+            <span className={s.statusWrap}>
+              <span className={s.liveDot} />
+              <span className={s.liveLabel}>LIVE</span>
             </span>
           )}
 
           {/* ── Right side ── */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <div className={s.rightGroup}>
 
             {/* Layout picker */}
             {onLayoutChange && activeLayout && (
@@ -2812,33 +2619,16 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             )}
 
             {/* ── VWAP / TWAP indicators ── */}
-            <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', margin: '0 2px', flexShrink: 0 }} />
+            <div className={s.tbSep} />
 
             {/* VWAP toggle */}
             <button
               ref={vwapBtnRef}
               onClick={() => setVwapShow(!vwapShow)}
               title="Toggle VWAP"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                height: 26, padding: '0 9px',
-                background: vwapShow ? 'rgba(255,215,0,0.10)' : 'transparent',
-                border: vwapShow ? '1px solid rgba(255,215,0,0.30)' : '1px solid transparent',
-                borderRadius: 4, cursor: 'pointer',
-                fontSize: 11, fontWeight: vwapShow ? 600 : 400,
-                color: vwapShow ? '#FFD700' : '#787B86',
-                transition: 'all 0.12s', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={e => { if (!vwapShow) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; } }}
-              onMouseLeave={e => { if (!vwapShow) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; } }}
+              className={cx(s.indicatorBtn, vwapShow ? s.indicatorBtnVwapOn : '')}
             >
-              <span style={{
-                width: 13, height: 13, borderRadius: 3, flexShrink: 0,
-                border: vwapShow ? '1.5px solid #FFD700' : '1.5px solid #3D4150',
-                background: vwapShow ? 'rgba(255,215,0,0.18)' : 'transparent',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.12s',
-              }}>
+              <span className={cx(s.checkBox, vwapShow ? s.checkBoxVwapOn : s.checkBoxVwap)}>
                 {vwapShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
               </span>
               VWAP
@@ -2849,19 +2639,9 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               <button
                 onClick={() => setVwapSettingsOpen(o => !o)}
                 title="VWAP Anchor"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  height: 26, padding: '0 8px',
-                  background: vwapSettingsOpen ? 'rgba(255,255,255,0.08)' : 'transparent',
-                  border: '1px solid transparent',
-                  borderRadius: 4, cursor: 'pointer',
-                  fontSize: 10, color: vwapSettingsOpen ? '#FFD700' : '#6B6E7A',
-                  transition: 'all 0.12s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = vwapSettingsOpen ? 'rgba(255,255,255,0.08)' : 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = vwapSettingsOpen ? '#FFD700' : '#6B6E7A'; }}
+                className={cx(s.anchorBtn, vwapSettingsOpen ? s.anchorBtnOpen : '')}
               >
-                <span style={{ fontSize: 9, letterSpacing: '0.04em', fontWeight: 500 }}>
+                <span className={s.anchorLabel}>
                   {vwapAnchor === 'daily' ? 'D' : vwapAnchor === 'weekly' ? 'W' : vwapAnchor === 'monthly' ? 'M' : 'EX'}
                 </span>
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
@@ -2872,26 +2652,9 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             <button
               onClick={() => setTwapShow(!twapShow)}
               title="Toggle TWAP"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                height: 26, padding: '0 9px',
-                background: twapShow ? 'rgba(0,191,255,0.10)' : 'transparent',
-                border: twapShow ? '1px solid rgba(0,191,255,0.30)' : '1px solid transparent',
-                borderRadius: 4, cursor: 'pointer',
-                fontSize: 11, fontWeight: twapShow ? 600 : 400,
-                color: twapShow ? '#00BFFF' : '#787B86',
-                transition: 'all 0.12s', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={e => { if (!twapShow) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; } }}
-              onMouseLeave={e => { if (!twapShow) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; } }}
+              className={cx(s.indicatorBtn, twapShow ? s.indicatorBtnTwapOn : '')}
             >
-              <span style={{
-                width: 13, height: 13, borderRadius: 3, flexShrink: 0,
-                border: twapShow ? '1.5px solid #00BFFF' : '1.5px solid #3D4150',
-                background: twapShow ? 'rgba(0,191,255,0.18)' : 'transparent',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.12s',
-              }}>
+              <span className={cx(s.checkBox, twapShow ? s.checkBoxTwapOn : s.checkBoxTwap)}>
                 {twapShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#00BFFF" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
               </span>
               TWAP
@@ -2911,33 +2674,15 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             {/* OI Profile + OC Panel */}
             {hasOptions && (
               <>
-                <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', margin: '0 2px', flexShrink: 0 }} />
+                <div className={s.tbSep} />
 
                 {/* OI Profile toggle */}
                 <button
                   onClick={() => setOiShow(o => !o)}
                   title="Toggle OI profile overlay"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    height: 26, padding: '0 9px',
-                    background: oiShow ? 'rgba(46,189,133,0.10)' : 'transparent',
-                    border: oiShow ? '1px solid rgba(46,189,133,0.30)' : '1px solid transparent',
-                    borderRadius: 4, cursor: 'pointer',
-                    fontSize: 11, fontWeight: oiShow ? 600 : 400,
-                    color: oiShow ? '#2ebd85' : '#787B86',
-                    transition: 'all 0.12s',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { if (!oiShow) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; } }}
-                  onMouseLeave={e => { if (!oiShow) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; } }}
+                  className={cx(s.indicatorBtn, oiShow ? s.indicatorBtnOiOn : '')}
                 >
-                  <span style={{
-                    width: 13, height: 13, borderRadius: 3, flexShrink: 0,
-                    border: oiShow ? '1.5px solid #2ebd85' : '1.5px solid #3D4150',
-                    background: oiShow ? 'rgba(46,189,133,0.18)' : 'transparent',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.12s',
-                  }}>
+                  <span className={cx(s.checkBox, oiShow ? s.checkBoxOiOn : s.checkBoxOi)}>
                     {oiShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#2ebd85" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
                   </span>
                   OI Profile
@@ -2949,17 +2694,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                     ref={oiSettingsBtnRef}
                     title="OI Profile Settings"
                     onClick={() => setOiSettingsOpen(o => !o)}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      height: 26, padding: '0 8px',
-                      background: oiSettingsOpen ? 'rgba(255,255,255,0.08)' : 'transparent',
-                      border: '1px solid transparent',
-                      borderRadius: 4, cursor: 'pointer',
-                      fontSize: 11, color: oiSettingsOpen ? '#D1D4DC' : '#6B6E7A',
-                      transition: 'all 0.12s',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = oiSettingsOpen ? 'rgba(255,255,255,0.08)' : 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = oiSettingsOpen ? '#D1D4DC' : '#6B6E7A'; }}
+                    className={cx(s.settingsBtn, oiSettingsOpen ? s.settingsBtnOpen : '')}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <circle cx="12" cy="12" r="3" />
@@ -2971,31 +2706,17 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                 {/* OC Panel toggle */}
                 <button
                   onClick={() => setOptionChainOpen(o => !o)}
-                  title="Toggle option chain"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    height: 26, padding: '0 9px',
-                    background: optionChainOpen ? 'rgba(255,152,0,0.10)' : 'transparent',
-                    border: optionChainOpen ? '1px solid rgba(255,152,0,0.30)' : '1px solid transparent',
-                    borderRadius: 4, cursor: 'pointer',
-                    fontSize: 11, fontWeight: optionChainOpen ? 600 : 400,
-                    color: optionChainOpen ? '#FF9800' : '#787B86',
-                    transition: 'all 0.12s',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { if (!optionChainOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = '#C4C7D0'; } }}
-                  onMouseLeave={e => { if (!optionChainOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; } }}
+                  title="Open Option Chain"
+                  className={cx(s.indicatorBtn, optionChainOpen ? s.indicatorBtnOcOn : '')}
                 >
-                  <span style={{
-                    width: 13, height: 13, borderRadius: 3, flexShrink: 0,
-                    border: optionChainOpen ? '1.5px solid #FF9800' : '1.5px solid #3D4150',
-                    background: optionChainOpen ? 'rgba(255,152,0,0.18)' : 'transparent',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.12s',
-                  }}>
-                    {optionChainOpen && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#FF9800" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                  </span>
-                  OC Panel
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2v20"/>
+                    <path d="M8 10H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4"/>
+                    <path d="M16 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/>
+                    <path d="M8 20H7a2 2 0 0 1-2-2v-2c0-1.1.9-2 2-2h1"/>
+                    <path d="M16 14h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1"/>
+                  </svg>
+                  OC
                 </button>
               </>
             )}
@@ -3020,33 +2741,40 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       {/* Chart + option chain side by side */}
       <div className="flex flex-1 min-h-0">
         {/* Chart container + OI canvas overlay */}
-        <div ref={wrapperRef} className="flex-1 min-w-0" style={{ position: 'relative', overflow: 'hidden' }}>
-          <div ref={containerRef} data-chart-container style={{ position: 'absolute', inset: 0 }} />
+        <div ref={wrapperRef} className={`flex-1 min-w-0 ${s.chartWrapper}`}>
+          <div ref={containerRef} data-chart-container className={s.chartContainer} />
+
+          {/* Skeleton bars — unmounted entirely when not loading (no DOM nodes = no animation CPU cost) */}
+          {loading && (
+            <div className={s.skeleton} aria-hidden="true">
+              {Array.from({ length: 40 }, (_, i) => (
+                <div
+                  key={i}
+                  className={s.skeletonBar}
+                  style={{
+                    height: `${20 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 65}%`,
+                    ['--sk-delay' as string]: `${(i * 0.035) % 1.4}s`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
           {/* OI canvas */}
           <canvas
             ref={canvasRef}
-            style={{
-              position: 'absolute', inset: 0,
-              pointerEvents: 'none', zIndex: 10,
-              display: oiShow ? 'block' : 'none',
-            }}
+            className={s.oiCanvas}
+            style={{ display: oiShow ? 'block' : 'none' }}
           />
 
           {/* Drawing canvas */}
-          <canvas
-            ref={drawing.canvasRef}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 11 }}
-          />
+          <canvas ref={drawing.canvasRef} className={s.drawingCanvas} />
 
-          {/* Drawing interaction overlay — native listeners attached via overlayRef */}
+          {/* Drawing interaction overlay */}
           <div
             ref={drawing.overlayRef}
-            style={{
-              position: 'absolute', inset: 0, zIndex: 12,
-              pointerEvents: drawing.isPassive ? 'none' : 'all',
-              cursor: drawing.cursorStyle,
-            }}
+            className={s.drawingOverlay}
+            style={{ pointerEvents: drawing.isPassive ? 'none' : 'all', cursor: drawing.cursorStyle }}
           />
 
 
@@ -3060,28 +2788,23 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             const symbolName = instrument.name || instrument.trading_symbol;
             const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
-              <div style={{
-                position: 'absolute', top: 6, left: 8, zIndex: 15,
-                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px',
-                pointerEvents: 'none',
-                fontFamily: 'inherit',
-              }}>
+              <div className={s.ohlcOverlay}>
                 {/* Symbol · interval · exchange */}
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#E0E3EB', letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
+                <span className={s.ohlcSymbol}>
                   {symbolName}
-                  <span style={{ color: '#787B86', fontWeight: 500, fontSize: 11, marginLeft: 5 }}>· {interval.label} · NSE</span>
+                  <span className={s.ohlcMeta}>· {interval.label} · NSE</span>
                 </span>
                 {/* Live dot */}
-                {wsLive && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2ebd85', boxShadow: '0 0 6px #2ebd85', display: 'inline-block', flexShrink: 0 }} />}
+                {wsLive && <span className={s.ohlcLiveDot} />}
                 {/* OHLC values */}
                 {d && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: '"SF Mono","Fira Code","Cascadia Code",monospace', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                    <span><span style={{ color: '#787B86', fontSize: 11 }}>O</span><span style={{ color: '#E0E3EB', marginLeft: 3 }}>{fmt(d.open)}</span></span>
-                    <span><span style={{ color: '#787B86', fontSize: 11 }}>H</span><span style={{ color: '#2ebd85', marginLeft: 3 }}>{fmt(d.high)}</span></span>
-                    <span><span style={{ color: '#787B86', fontSize: 11 }}>L</span><span style={{ color: '#f23645', marginLeft: 3 }}>{fmt(d.low)}</span></span>
-                    <span><span style={{ color: '#787B86', fontSize: 11 }}>C</span><span style={{ color: '#E0E3EB', marginLeft: 3 }}>{fmt(d.close)}</span></span>
+                  <span className={s.ohlcValues}>
+                    <span><span className={s.ohlcLabel}>O</span><span className={s.ohlcValueNeutral}>{fmt(d.open)}</span></span>
+                    <span><span className={s.ohlcLabel}>H</span><span className={s.ohlcHigh}>{fmt(d.high)}</span></span>
+                    <span><span className={s.ohlcLabel}>L</span><span className={s.ohlcLow}>{fmt(d.low)}</span></span>
+                    <span><span className={s.ohlcLabel}>C</span><span className={s.ohlcValueNeutral}>{fmt(d.close)}</span></span>
                     <span style={{ color: changeColor, fontWeight: 600 }}>
-                      {d.change >= 0 ? '+' : ''}{fmt(d.change)}<span style={{ opacity: 0.75 }}> ({d.changePct >= 0 ? '+' : ''}{d.changePct.toFixed(2)}%)</span>
+                      {d.change >= 0 ? '+' : ''}{fmt(d.change)}<span className={s.ohlcChangePct}> ({d.changePct >= 0 ? '+' : ''}{d.changePct.toFixed(2)}%)</span>
                     </span>
                   </span>
                 )}
@@ -3131,32 +2854,22 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               ? fmtVal(callVal - putVal)
               : callVal > 0 ? (putVal / callVal).toFixed(2) : '—';
             return (
-              <div style={{
-                position: 'absolute', left, top, width: tipW, zIndex: 20,
-                pointerEvents: 'none',
-                background: 'rgba(10,12,18,0.97)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 8,
-                padding: '10px 12px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04) inset',
-                backdropFilter: 'blur(16px)',
-                fontFamily: 'inherit',
-              }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: '#4A4E5C', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 2 }}>STRIKE</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#FF9800', marginBottom: 8, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{oiTooltip.strike.toLocaleString('en-IN')}</div>
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: '#5D606B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Call {modeLabel}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: callColor, fontFamily: '"SF Mono", "Fira Code", monospace' }}>{fmtVal(callVal)}</span>
+              <div className={s.oiTooltip} style={{ left, top }}>
+                <div className={s.oiTooltipLabel}>STRIKE</div>
+                <div className={s.oiTooltipStrike}>{oiTooltip.strike.toLocaleString('en-IN')}</div>
+                <div className={s.oiTooltipDivider} />
+                <div className={s.oiTooltipRow}>
+                  <span className={s.oiTooltipRowKey}>Call {modeLabel}</span>
+                  <span className={s.oiTooltipRowVal} style={{ color: callColor }}>{fmtVal(callVal)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: '#5D606B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Put {modeLabel}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: putColor, fontFamily: '"SF Mono", "Fira Code", monospace' }}>{fmtVal(putVal)}</span>
+                <div className={s.oiTooltipRow}>
+                  <span className={s.oiTooltipRowKey}>Put {modeLabel}</span>
+                  <span className={s.oiTooltipRowVal} style={{ color: putColor }}>{fmtVal(putVal)}</span>
                 </div>
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: '#5D606B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{ratioLabel}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#E0E3EB', fontFamily: '"SF Mono", "Fira Code", monospace' }}>{ratio}</span>
+                <div className={s.oiTooltipDivider} />
+                <div className={s.oiTooltipRowLast}>
+                  <span className={s.oiTooltipRowKey}>{ratioLabel}</span>
+                  <span className={cx(s.oiTooltipRowVal, s.oiTooltipNeutral)}>{ratio}</span>
                 </div>
               </div>
             );
@@ -3165,41 +2878,24 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
         {/* Option chain panel — tab button floats on left edge */}
         {hasOptions && (
-          <div style={{ position: 'relative', flexShrink: 0, display: 'flex' }}>
+          <div className={s.ocTabContainer}>
             {/* Tab button — sticks out from the left edge of the panel */}
             <button
               onClick={() => setOptionChainOpen(o => !o)}
               title="Toggle option chain"
-              style={{
-                position: 'absolute',
-                left: -20,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: 20,
-                height: 44,
-                background: optionChainOpen ? 'rgba(255,152,0,0.08)' : '#171717',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRight: 'none',
-                borderRadius: '6px 0 0 6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: optionChainOpen ? '#FF9800' : '#3D4150',
-                transition: 'color 0.15s, background 0.15s',
-                zIndex: 10,
-              }}
-              onMouseEnter={e => { if (!optionChainOpen) { (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)'; } }}
-              onMouseLeave={e => { if (!optionChainOpen) { (e.currentTarget as HTMLButtonElement).style.color = '#3D4150'; (e.currentTarget as HTMLButtonElement).style.background = '#171717'; } }}
+              className={cx(s.ocTabBtn, optionChainOpen ? s.ocTabBtnOpen : '')}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ transform: optionChainOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}>
-                <path d="m15 18-6-6 6-6" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20"/>
+                <path d="M8 10H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4"/>
+                <path d="M16 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/>
+                <path d="M8 20H7a2 2 0 0 1-2-2v-2c0-1.1.9-2 2-2h1"/>
+                <path d="M16 14h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1"/>
               </svg>
             </button>
 
-            {/* Panel itself */}
-            {optionChainOpen && (
+            {/* Panel — mounted one rAF after open so click never blocks chart frame */}
+            {ocPanelMounted && (
               <OptionChainPanel
                 instrument={instrument}
                 instruments={instruments}

@@ -1,0 +1,370 @@
+/* ── CSS Custom Properties ──────────────────────────────────────────────────── */
+:root {
+  --sidebar-width: 240px;
+  --sidebar-icon-width: 44px;
+}
+
+/* ── SidebarProvider ────────────────────────────────────────────────────────── */
+.provider {
+  display: block;
+  height: 100vh;
+  width: 100%;
+  background: #171717;
+  color: #D1D4DC;
+  position: relative;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────────── */
+.sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #171717;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.sidebarVisible {
+  overflow: hidden;
+}
+
+.sidebarCollapsed {
+  overflow: visible;
+}
+
+/* ── SidebarTrigger ─────────────────────────────────────────────────────────── */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 6px;
+  color: #787B86;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.trigger:hover {
+  color: #D1D4DC;
+  background: #2A2E39;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── SidebarRail ────────────────────────────────────────────────────────────── */
+.rail {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  opacity: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  transition: opacity 150ms ease;
+}
+
+.rail:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── SidebarInset ───────────────────────────────────────────────────────────── */
+.inset {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── SidebarHeader ──────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 4px;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── SidebarContent ─────────────────────────────────────────────────────────── */
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── SidebarFooter ──────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 12px;
+  border-top: 1px solid #2A2E39;
+  flex-shrink: 0;
+  transition: opacity 200ms ease;
+}
+
+.footerExpanded {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.footerCollapsed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── SidebarGroup ───────────────────────────────────────────────────────────── */
+.group {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  padding: 10px 0;
+}
+
+.groupCollapsed {
+  align-items: center;
+}
+
+/* ── SidebarGroupLabel ──────────────────────────────────────────────────────── */
+.groupLabel {
+  margin-bottom: 12px;
+  margin-top: 4px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #555870;
+  overflow: hidden;
+  transition: opacity 150ms ease;
+}
+
+.groupLabelExpanded {
+  opacity: 1;
+  pointer-events: auto;
+  height: auto;
+  margin-bottom: 12px;
+  margin-top: 4px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.groupLabelCollapsed {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  margin-bottom: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ── SidebarGroupContent ────────────────────────────────────────────────────── */
+.groupContent {
+  width: 100%;
+}
+
+.groupContentCollapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* ── SidebarMenu ────────────────────────────────────────────────────────────── */
+.menu {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.menuCollapsed {
+  align-items: center;
+  width: 100%;
+}
+
+/* ── SidebarMenuItem ────────────────────────────────────────────────────────── */
+.menuItem {
+  list-style: none;
+}
+
+.menuItemExpanded {
+  margin-left: 8px;
+  margin-right: 8px;
+}
+
+.menuItemCollapsed {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* ── SidebarMenuButton ──────────────────────────────────────────────────────── */
+.menuBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  border: none;
+  background: transparent;
+  color: #868CA0;
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menuBtn:hover {
+  background: #24262F;
+  color: #C8CAD4;
+}
+
+.menuBtn > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #5C5F74;
+  transition: color 200ms ease;
+}
+
+.menuBtn > span {
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Active state (expanded) */
+.menuBtn[data-active='true'] {
+  background: #2C2F3E;
+  color: #E8EAF0;
+}
+
+.menuBtn[data-active='true'] > svg {
+  color: #C5C9DA;
+}
+
+/* Expanded width */
+.menuBtnExpanded {
+  width: 100%;
+}
+
+/* Collapsed overrides */
+.menuBtnCollapsed {
+  width: 100%;
+  height: 44px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.menuBtnCollapsed > svg {
+  width: 20px;
+  height: 20px;
+  color: #7B7F96;
+}
+
+.menuBtnCollapsed:hover > svg {
+  color: #C8CAD4;
+}
+
+.menuBtnCollapsed[data-active='true'] > svg {
+  color: #FF9800;
+}
+
+.menuBtnCollapsed[data-active='true'] {
+  background: rgba(255, 152, 0, 0.10);
+}
+
+.menuBtnCollapsed > span {
+  opacity: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+  width: 0;
+  overflow: hidden;
+}
+
+/* Hide the chevron SVG (last child) in collapsed state */
+.menuBtnCollapsed > svg:last-child {
+  display: none;
+}
+
+/* Hide ml-auto chevron icon when collapsed */
+.menuBtnCollapsed > svg.mlAuto {
+  display: none;
+}
+
+/* ── Tooltip wrapper ────────────────────────────────────────────────────────── */
+.tooltipWrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.tooltip {
+  pointer-events: none;
+  position: absolute;
+  left: 100%;
+  margin-left: 12px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  z-index: 50;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #F4F6FA;
+  color: #0B0F19;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+
+.tooltipWrap:hover .tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+/* ── SidebarSeparator ───────────────────────────────────────────────────────── */
+.separator {
+  margin: 4px 8px;
+  height: 1px;
+  background: #2A2E39;
+}

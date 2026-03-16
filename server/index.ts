@@ -51,10 +51,72 @@ const app = Fastify({ logger: false });
 
 // Allow cross-origin requests from Vite dev server (localhost:5173)
 app.addHook('onRequest', async (req, reply) => {
-  reply.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+  const origin = req.headers['origin'] ?? '';
+  if (origin === 'http://localhost:5173' || origin === 'http://localhost:8888') {
+    reply.header('Access-Control-Allow-Origin', origin);
+  }
   reply.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  reply.header('Access-Control-Allow-Headers', 'Content-Type');
+  reply.header('Access-Control-Allow-Headers', 'Content-Type,x-session-token,x-device-id,x-raw-cookie');
   if (req.method === 'OPTIONS') { reply.status(204).send(); }
+});
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     ?? '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
+const GOOGLE_REDIRECT_URI  = process.env.GOOGLE_REDIRECT_URI  ?? 'http://localhost:8888/auth/google/callback';
+
+// Step 1 — redirect to Google consent screen
+app.get('/auth/google', async (_req, reply) => {
+  const params = new URLSearchParams({
+    client_id:     GOOGLE_CLIENT_ID,
+    redirect_uri:  GOOGLE_REDIRECT_URI,
+    response_type: 'code',
+    scope:         'openid email profile',
+    access_type:   'offline',
+    prompt:        'select_account',
+  });
+  return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+// Step 2 — handle callback, exchange code for tokens, redirect to app
+app.get('/auth/google/callback', async (req, reply) => {
+  const { code, error } = req.query as Record<string, string>;
+  if (error || !code) {
+    return reply.redirect('/?auth_error=access_denied');
+  }
+  try {
+    // Exchange code for tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id:     GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri:  GOOGLE_REDIRECT_URI,
+        grant_type:    'authorization_code',
+      }),
+    });
+    const tokens = await tokenRes.json() as any;
+    if (!tokens.access_token) {
+      return reply.redirect('/?auth_error=token_failed');
+    }
+    // Get user info
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    const user = await userRes.json() as any;
+    // Encode user info and redirect to app with it in query params
+    const userData = encodeURIComponent(JSON.stringify({
+      name:    user.name,
+      email:   user.email,
+      picture: user.picture,
+      sub:     user.sub,
+    }));
+    return reply.redirect(`http://localhost:8888/?google_user=${userData}`);
+  } catch (e: any) {
+    return reply.redirect(`http://localhost:8888/?auth_error=${encodeURIComponent(e.message)}`);
+  }
 });
 
 // Keep-alive connection pool to service.upstox.com
@@ -354,6 +416,7 @@ app.post('/api/nubra-login', async (req, reply) => {
       headers: {
         'Content-Type': 'application/json',
         'x-device-id': deviceId,
+        'x-device-origin': 'DESKTOP',
       },
       body: JSON.stringify({ phone, totp: parseInt(totpCode) }),
       dispatcher: nubraAuthAgent,
@@ -375,13 +438,14 @@ app.post('/api/nubra-login', async (req, reply) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
         'x-device-id': deviceId,
+        'x-device-origin': 'DESKTOP',
       },
       body: JSON.stringify({ pin: mpin }),
       dispatcher: nubraAuthAgent,
     } as any);
 
     const step2Data = await step2.json() as any;
-    console.log(`[nubra-login] verifypin ${step2.status} keys=${Object.keys(step2Data).join(',')}${step2Data.data ? ' data_keys='+Object.keys(step2Data.data).join(',') : ''}`);
+    console.log(`[nubra-login] verifypin ${step2.status}`, JSON.stringify(step2Data).slice(0, 300));
     // PROD may nest under data: { session_token } or top-level
     const sessionToken = step2Data.session_token ?? step2Data.data?.session_token ?? step2Data.data?.token;
     if (!step2.ok || !sessionToken) {
@@ -418,19 +482,25 @@ const nubraAgent = new Agent({
 
 app.post('/api/nubra-timeseries', async (req, reply) => {
   const body = req.body as {
-    rawCookie: string;
+    rawCookie?: string;
     query: unknown[];
     chart?: string;
   };
 
-  const { rawCookie, query, chart = 'Multi-Strike_IV' } = body ?? {};
+  const headers = req.headers;
+  const sessionToken = (headers['x-session-token'] as string) ?? '';
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
 
-  if (!rawCookie || !Array.isArray(query)) {
-    return reply.status(400).send({ error: 'rawCookie and query[] are required' });
+  const { rawCookie: rawCookieBody, query, chart = 'Multi-Strike_IV' } = body ?? {};
+  const rawCookie = rawCookieHdr || rawCookieBody || '';
+
+  if (!Array.isArray(query)) {
+    return reply.status(400).send({ error: 'query[] is required' });
   }
 
   const targetUrl = `https://api.nubra.io/charts/timeseries?chart=${encodeURIComponent(chart)}`;
-  const cookieStr = rawCookie;
+  const cookieStr = rawCookie || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -438,9 +508,11 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken}`,
         'Origin': 'https://nubra.io',
         'Referer': 'https://nubra.io/',
         'Cookie': cookieStr,
+        'x-device-id': deviceId,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
@@ -468,15 +540,21 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
 
 app.post('/api/nubra-multistrike', async (req, reply) => {
   const body = req.body as {
-    rawCookie: string;
+    rawCookie?: string;
     query: unknown[];
     chart?: string;
   };
 
-  const { rawCookie, query, chart = 'Open_Interest_Change' } = body ?? {};
+  const hdrs = req.headers;
+  const sessionToken2 = (hdrs['x-session-token'] as string) ?? '';
+  const deviceId2     = (hdrs['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr2 = (hdrs['x-raw-cookie'] as string) ?? '';
 
-  if (!rawCookie || !Array.isArray(query)) {
-    return reply.status(400).send({ error: 'rawCookie and query[] are required' });
+  const { rawCookie: rawCookieBody2, query, chart = 'Open_Interest_Change' } = body ?? {};
+  const rawCookie = rawCookieHdr2 || rawCookieBody2 || `authToken=${sessionToken2}; sessionToken=${sessionToken2}; deviceId=${deviceId2}`;
+
+  if (!Array.isArray(query)) {
+    return reply.status(400).send({ error: 'query[] is required' });
   }
 
   const targetUrl = `https://api.nubra.io/charts/multistrike?chart=${encodeURIComponent(chart)}`;
@@ -487,9 +565,11 @@ app.post('/api/nubra-multistrike', async (req, reply) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken2}`,
         'Origin': 'https://nubra.io',
         'Referer': 'https://nubra.io/',
         'Cookie': rawCookie,
+        'x-device-id': deviceId2,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
@@ -967,15 +1047,17 @@ app.post('/api/upstox-login', async (req, reply) => {
     return reply.send({ access_token: cached.access_token, cached: true });
   }
 
-  const API_KEY      = process.env.UPSTOX_API_KEY      ?? '';
-  const API_SECRET   = process.env.UPSTOX_API_SECRET    ?? '';
-  const REDIRECT_URI = process.env.UPSTOX_REDIRECT_URI  ?? 'http://127.0.0.1:3001/upstox/callback';
-  const PHONE        = process.env.UPSTOX_PHONE         ?? '';
-  const PIN          = process.env.UPSTOX_PIN           ?? '';
-  const TOTP_SECRET  = process.env.UPSTOX_TOTP_SECRET   ?? '';
+  // Prefer credentials from request body (sent from browser IDB), fall back to env
+  const body = (req.body ?? {}) as Record<string, string>;
+  const API_KEY      = body.api_key      || process.env.UPSTOX_API_KEY      || '';
+  const API_SECRET   = body.api_secret   || process.env.UPSTOX_API_SECRET   || '';
+  const REDIRECT_URI = process.env.UPSTOX_REDIRECT_URI ?? 'http://127.0.0.1:3001/upstox/callback';
+  const PHONE        = body.phone        || process.env.UPSTOX_PHONE        || '';
+  const PIN          = body.pin          || process.env.UPSTOX_PIN          || '';
+  const TOTP_SECRET  = body.totp_secret  || process.env.UPSTOX_TOTP_SECRET  || '';
 
   if (!API_KEY || !API_SECRET || !PHONE || !PIN || !TOTP_SECRET) {
-    return reply.status(400).send({ error: 'Fill in UPSTOX_* fields in urjaa/.env first.' });
+    return reply.status(400).send({ error: 'Upstox credentials required: api_key, api_secret, phone, pin, totp_secret' });
   }
 
   // Lazy-load Playwright (ESM dynamic import)
@@ -1247,6 +1329,150 @@ app.get('/api/upstox-login-stream', async (req, reply) => {
     send('error', JSON.stringify({ error: e.message }));
     reply.raw.end();
   }
+});
+
+// ── Dhan / Nubra API routes (migrated from Next.js) ──────────────────────────
+
+const DHAN_CLIENT_ID  = process.env.DHAN_CLIENT_ID  ?? '';
+const DHAN_PIN        = process.env.DHAN_PIN         ?? '';
+const DHAN_TOTP_SECRET = process.env.DHAN_TOTP_SECRET ?? '';
+const DHAN_APP_ID     = process.env.DHAN_APP_ID      ?? '';
+const DHAN_APP_SECRET = process.env.DHAN_APP_SECRET  ?? '';
+
+// POST /api/dhan-autologin
+app.post('/api/dhan-autologin', async (_req, reply) => {
+  try {
+    const totp = generateTotp(DHAN_TOTP_SECRET);
+    const res = await fetch(
+      `https://auth.dhan.co/app/generateAccessToken?dhanClientId=${DHAN_CLIENT_ID}&pin=${DHAN_PIN}&totp=${totp}`,
+      { method: 'POST' }
+    );
+    const data = await res.json() as any;
+    if (data.status === 'error')
+      return reply.status(400).send({ error: data.message ?? JSON.stringify(data) });
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(500).send({ error: e.message });
+  }
+});
+
+// POST /api/dhan-consent
+app.post('/api/dhan-consent', async (_req, reply) => {
+  try {
+    const res = await fetch(
+      `https://auth.dhan.co/app/generate-consent?client_id=${DHAN_CLIENT_ID}`,
+      { method: 'POST', headers: { app_id: DHAN_APP_ID, app_secret: DHAN_APP_SECRET } }
+    );
+    const data = await res.json() as any;
+    if (!res.ok) return reply.status(res.status).send(data);
+    const loginUrl = `https://auth.dhan.co/login/consentApp-login?consentAppId=${data.consentAppId}`;
+    return reply.send({ consentAppId: data.consentAppId, loginUrl });
+  } catch (e: any) {
+    return reply.status(500).send({ error: e.message });
+  }
+});
+
+// POST /api/dhan-token
+app.post('/api/dhan-token', async (req, reply) => {
+  try {
+    const { tokenId } = req.body as any;
+    if (!tokenId) return reply.status(400).send({ error: 'tokenId required' });
+    const res = await fetch(
+      `https://auth.dhan.co/app/consumeApp-consent?tokenId=${tokenId}`,
+      { method: 'GET', headers: { app_id: DHAN_APP_ID, app_secret: DHAN_APP_SECRET } }
+    );
+    const data = await res.json() as any;
+    if (!res.ok) return reply.status(res.status).send(data);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(500).send({ error: e.message });
+  }
+});
+
+// POST /api/nubra-evaluate
+app.post('/api/nubra-evaluate', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = headers['x-session-token'] as string;
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookie    = (headers['x-raw-cookie'] as string) ?? '';
+  if (!sessionToken) return reply.status(401).send({ error: 'Missing session token' });
+  const cookieHeader = rawCookie || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+  try {
+    const res = await fetch('https://api.nubra.io/strategies/strat1/evaluate', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Cookie': cookieHeader,
+        'x-device-id': deviceId,
+        'order-env': '',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://nubra.io',
+        'Referer': 'https://nubra.io/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify(req.body),
+      dispatcher: nubraAgent,
+    } as any);
+    console.log('[nubra-evaluate] request body:', JSON.stringify(req.body).slice(0, 500));
+    const text = await res.text();
+    console.log('[nubra-evaluate] status:', res.status, 'body:', text.slice(0, 500));
+    try {
+      const data = JSON.parse(text);
+      return reply.status(res.status).send(data);
+    } catch {
+      return reply.status(res.status).header('Content-Type', 'text/plain').send(text);
+    }
+  } catch (e: any) {
+    console.error('[nubra-evaluate] fetch error:', e.message);
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// POST /api/nubra-margin
+app.post('/api/nubra-margin', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = headers['x-session-token'] as string;
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  if (!sessionToken) return reply.status(401).send({ error: 'Missing session token' });
+  try {
+    const res = await fetch('https://api.nubra.io/orders/v2/margin_required', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json, text/plain, */*',
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
+        'x-device-id': deviceId,
+        'origin': 'https://nubra.io',
+        'referer': 'https://nubra.io/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify(req.body),
+      dispatcher: nubraAgent,
+    } as any);
+    const contentType = res.headers.get('content-type') ?? 'application/json';
+    const data = await res.text();
+    reply.status(res.status).header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// GET /api/nubra-orderbook
+app.get('/api/nubra-orderbook', async (req, reply) => {
+  const { ref_id, levels = '1' } = req.query as any;
+  const headers = req.headers;
+  const sessionToken = headers['x-session-token'] as string;
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  if (!sessionToken) return reply.status(401).send({ error: 'Missing session token' });
+  if (!ref_id)       return reply.status(400).send({ error: 'Missing ref_id' });
+  const res = await fetch(`https://api.nubra.io/orderbooks/${ref_id}?levels=${levels}`, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${sessionToken}`, 'x-device-id': deviceId },
+  });
+  const data = await res.json() as any;
+  return reply.status(res.status).send(data);
 });
 
 app.listen({ port: 3001 }, (err) => {

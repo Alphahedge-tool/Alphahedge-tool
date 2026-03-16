@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import s from './SplitDivider.module.css';
 
 interface SplitDividerProps {
   axis: 'col' | 'row';
@@ -92,6 +93,7 @@ export function SplitDivider({
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      className={s.divider}
       style={{
         ...style,
         cursor: isCol ? 'col-resize' : 'row-resize',
@@ -101,19 +103,17 @@ export function SplitDivider({
             ? 'rgba(255,152,0,0.20)'
             : 'transparent',
         transition: active ? 'none' : 'background 0.15s',
-        position: 'relative',
-        overflow: 'hidden',
       }}
     >
       {/* Center line — row-divider only; col-divider uses its own background */}
       {!isCol && (
-        <div style={{
-          position: 'absolute',
-          left: 0, right: 0, top: '50%', height: 1, transform: 'translateY(-50%)',
-          background: highlight ? 'rgba(255,152,0,0.6)' : 'transparent',
-          transition: active ? 'none' : 'background 0.15s',
-          pointerEvents: 'none',
-        }} />
+        <div
+          className={s.centerLine}
+          style={{
+            background: highlight ? 'rgba(255,152,0,0.6)' : 'transparent',
+            transition: active ? 'none' : 'background 0.15s',
+          }}
+        />
       )}
     </div>
   );

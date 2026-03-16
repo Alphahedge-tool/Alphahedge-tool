@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import type { Instrument } from '../useInstruments';
 import type { PaneState, ViewType } from './workspaceTypes';
 import CandleChart from '../CandleChart';
-import StraddleChart from '../StraddleChart';
-import OIProfileView from '../OIProfileView';
 import type { DrawingEngineHandle, DrawToolId } from '../DrawingToolbar';
+import s from './PaneShell.module.css';
+
+const StraddleChart = lazy(() => import('../StraddleChart'));
+const OIProfileView = lazy(() => import('../OIProfileView'));
 
 // ── View type picker ──────────────────────────────────────────────────────────
 
@@ -51,22 +53,18 @@ function ViewTypePicker({
       <button
         ref={btnRef}
         onClick={handleOpen}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          height: 20, padding: '0 6px',
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 4,
-          fontSize: 10, fontWeight: 600, color: '#9B9EA8',
-          cursor: 'pointer', letterSpacing: '0.04em',
-          transition: 'border-color 0.1s, color 0.1s',
-        }}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.2)'; (e.currentTarget as HTMLButtonElement).style.color = '#D1D4DC'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.10)'; (e.currentTarget as HTMLButtonElement).style.color = '#9B9EA8'; }}
+        className={s.viewPickerBtn}
       >
         {current.short}
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          className={`${s.viewPickerChevron} ${open ? s.viewPickerChevronOpen : s.viewPickerChevronClosed}`}
+        >
           <path d="m19 9-7 7-7-7"/>
         </svg>
       </button>
@@ -74,16 +72,8 @@ function ViewTypePicker({
       {open && createPortal(
         <div
           ref={menuRef}
-          style={{
-            position: 'fixed', top: pos.top, left: pos.left,
-            zIndex: 9600,
-            background: '#1f1f1f',
-            border: '1px solid #2a2a2a',
-            borderRadius: 6,
-            padding: 4,
-            minWidth: 130,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-          }}
+          className={s.viewPickerMenu}
+          style={{ top: pos.top, left: pos.left }}
         >
           {VIEW_OPTIONS.map(opt => {
             const isActive = opt.value === value;
@@ -91,17 +81,7 @@ function ViewTypePicker({
               <button
                 key={opt.value}
                 onClick={() => { onChange(opt.value); setOpen(false); }}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  width: '100%', padding: '6px 10px',
-                  background: isActive ? 'rgba(255,152,0,0.10)' : 'transparent',
-                  border: 'none', borderRadius: 4,
-                  fontSize: 11, fontWeight: isActive ? 700 : 500,
-                  color: isActive ? '#FF9800' : '#C4C7D0',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                className={`${s.viewPickerOption} ${isActive ? s.viewPickerOptionActive : s.viewPickerOptionInactive}`}
               >
                 {opt.label}
                 {isActive && (
@@ -132,34 +112,20 @@ function PaneActionModal({ onSearch, onViewChange, onClose }: PaneActionModalPro
   return createPortal(
     <div
       onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        zIndex: 9700,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(4px)',
-      }}
+      className={s.modalBackdrop}
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{
-          background: 'rgba(17,20,28,0.98)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 14,
-          padding: '24px 20px 20px',
-          width: 320,
-          boxShadow: '0 24px 64px rgba(0,0,0,0.85)',
-          display: 'flex', flexDirection: 'column', gap: 8,
-        }}
+        className={s.modalCard}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#D1D4DC', letterSpacing: '0.02em' }}>
+        <div className={s.modalHeader}>
+          <span className={s.modalTitle}>
             What do you want to show here?
           </span>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4A4E5C', padding: 2, display: 'flex' }}
+            className={s.modalCloseBtn}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M18 6 6 18M6 6l12 12"/>
@@ -170,91 +136,49 @@ function PaneActionModal({ onSearch, onViewChange, onClose }: PaneActionModalPro
         {/* Search option */}
         <button
           onClick={() => { onClose(); onSearch(); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            width: '100%', padding: '11px 14px',
-            background: 'rgba(255,152,0,0.06)',
-            border: '1px solid rgba(255,152,0,0.20)',
-            borderRadius: 9, cursor: 'pointer',
-            transition: 'background 0.12s, border-color 0.12s',
-            textAlign: 'left',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,152,0,0.12)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,152,0,0.40)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,152,0,0.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,152,0,0.20)'; }}
+          className={s.modalOptionBtnSearch}
         >
-          <span style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(255,152,0,0.14)', color: '#FF9800',
-          }}>
+          <span className={s.modalOptionIconSearch}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
           </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#FF9800' }}>Search Symbol</span>
-            <span style={{ fontSize: 10, color: '#787B86' }}>Show candle chart for any instrument</span>
+          <span className={s.modalOptionText}>
+            <span className={s.modalOptionLabelSearch}>Search Symbol</span>
+            <span className={s.modalOptionSubtitle}>Show candle chart for any instrument</span>
           </span>
         </button>
 
         {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
-          <span style={{ fontSize: 9, color: '#4A4E5C', letterSpacing: '0.08em', textTransform: 'uppercase' }}>or switch view</span>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
+        <div className={s.modalDivider}>
+          <div className={s.modalDividerLine} />
+          <span className={s.modalDividerLabel}>or switch view</span>
+          <div className={s.modalDividerLine} />
         </div>
 
         {/* Straddle option */}
         <button
           onClick={() => { onViewChange('straddle'); onClose(); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            width: '100%', padding: '11px 14px',
-            background: 'rgba(123,104,238,0.06)',
-            border: '1px solid rgba(123,104,238,0.18)',
-            borderRadius: 9, cursor: 'pointer',
-            transition: 'background 0.12s, border-color 0.12s',
-            textAlign: 'left',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(123,104,238,0.12)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(123,104,238,0.38)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(123,104,238,0.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(123,104,238,0.18)'; }}
+          className={s.modalOptionBtnStraddle}
         >
-          <span style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(123,104,238,0.14)', color: '#7B68EE',
-          }}>
+          <span className={s.modalOptionIconStraddle}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="2 18 7 10 12 14 17 6 22 10"/>
               <polyline points="2 18 7 14 12 10 17 16 22 12" strokeOpacity="0.45"/>
             </svg>
           </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#7B68EE' }}>Straddle Chart</span>
-            <span style={{ fontSize: 10, color: '#787B86' }}>Live straddle premium view</span>
+          <span className={s.modalOptionText}>
+            <span className={s.modalOptionLabelStraddle}>Straddle Chart</span>
+            <span className={s.modalOptionSubtitle}>Live straddle premium view</span>
           </span>
         </button>
 
         {/* OI Profile option */}
         <button
           onClick={() => { onViewChange('oiprofile'); onClose(); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            width: '100%', padding: '11px 14px',
-            background: 'rgba(255,152,0,0.04)',
-            border: '1px solid rgba(255,152,0,0.14)',
-            borderRadius: 9, cursor: 'pointer',
-            transition: 'background 0.12s, border-color 0.12s',
-            textAlign: 'left',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,152,0,0.10)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,152,0,0.32)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,152,0,0.04)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,152,0,0.14)'; }}
+          className={s.modalOptionBtnOi}
         >
-          <span style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(255,152,0,0.12)', color: '#FF9800',
-          }}>
+          <span className={s.modalOptionIconOi}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="5" width="8" height="3" rx="1"/>
               <rect x="2" y="11" width="14" height="3" rx="1"/>
@@ -262,9 +186,9 @@ function PaneActionModal({ onSearch, onViewChange, onClose }: PaneActionModalPro
               <line x1="2" y1="2" x2="2" y2="22"/>
             </svg>
           </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#FF9800' }}>OI Profile</span>
-            <span style={{ fontSize: 10, color: '#787B86' }}>Open interest strike-wise profile</span>
+          <span className={s.modalOptionText}>
+            <span className={s.modalOptionLabelOi}>OI Profile</span>
+            <span className={s.modalOptionSubtitle}>Open interest strike-wise profile</span>
           </span>
         </button>
       </div>
@@ -281,20 +205,14 @@ function EmptyPane({ onSearch, onViewChange }: { onSearch: () => void; onViewCha
     <>
       <div
         onClick={() => setShowModal(true)}
-        style={{
-          width: '100%', height: '100%',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 10, cursor: 'pointer',
-          background: '#171717',
-          color: '#4A4E5C',
-        }}
+        className={s.emptyPane}
       >
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: '#787B86', marginBottom: 4 }}>Empty pane</div>
-          <div style={{ fontSize: 11, color: '#4A4E5C' }}>Click to select view</div>
+        <div className={s.emptyPaneTextBlock}>
+          <div className={s.emptyPaneTitle}>Empty pane</div>
+          <div className={s.emptyPaneSubtitle}>Click to select view</div>
         </div>
       </div>
       {showModal && (
@@ -335,43 +253,40 @@ interface PaneShellProps {
   style?: React.CSSProperties;
 }
 
+function resolveDefaultInstrument(instruments: Instrument[]) {
+  return instruments.find(i => i.instrument_key === 'NSE_INDEX|Nifty 50')
+    ?? instruments.find(i => i.trading_symbol === 'NIFTY' || i.trading_symbol === 'Nifty 50')
+    ?? instruments[0]
+    ?? null;
+}
+
 export function PaneShell({
   pane, instruments, isActive, onPaneClick, onViewChange, onSearchOpen, activeLayout, onLayoutChange, onIntervalChange, onOiShowChange, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, onVwapShowChange, onVwapAnchorChange, onVwapColorChange, onVwapExpiryDayChange, onTwapShowChange, drawingRef, onDrawingsChange, style,
 }: PaneShellProps) {
   const isCandle = pane.viewType === 'candle';
+  // If no instrument selected yet, fall back to NIFTY (or first available) so chart never shows blank
+  const effectiveInstrument = pane.instrument ?? (instruments.length > 0 ? resolveDefaultInstrument(instruments) : null);
 
   return (
     <div
       onMouseDown={onPaneClick}
-      style={{
-        ...style,
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden', minWidth: 0, minHeight: 0,
-        background: '#171717',
-        border: `1px solid ${isActive ? 'rgba(255,152,0,0.45)' : 'rgba(255,255,255,0.05)'}`,
-        transition: 'border-color 0.15s',
-        boxShadow: isActive ? '0 0 0 1px rgba(255,152,0,0.15) inset' : 'none',
-      }}>
+      className={`${s.paneShell} ${isActive ? s.paneShellActive : s.paneShellInactive}`}
+      style={style}
+    >
       {/* For candle: no pane header — CandleChart has its own toolbar.
           For straddle/oiprofile: show a minimal header with view switcher. */}
       {!isCandle && (
-        <div style={{
-          height: 28, flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '0 8px',
-          background: 'rgba(255,255,255,0.02)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}>
+        <div className={s.paneHeader}>
           <ViewTypePicker value={pane.viewType} onChange={onViewChange} />
         </div>
       )}
 
       {/* Pane content */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+      <div className={s.paneContent}>
         {isCandle && (
-          pane.instrument
+          effectiveInstrument
             ? <CandleChart
-                instrument={pane.instrument}
+                instrument={effectiveInstrument}
                 instruments={instruments}
                 onSearchOpen={onSearchOpen}
                 onViewChange={onViewChange}
@@ -402,10 +317,10 @@ export function PaneShell({
             : <EmptyPane onSearch={onSearchOpen} onViewChange={onViewChange} />
         )}
         {pane.viewType === 'straddle' && (
-          <StraddleChart instruments={instruments} visible={true} />
+          <Suspense fallback={null}><StraddleChart instruments={instruments} visible={true} /></Suspense>
         )}
         {pane.viewType === 'oiprofile' && (
-          <OIProfileView instruments={instruments} />
+          <Suspense fallback={null}><OIProfileView instruments={instruments} /></Suspense>
         )}
       </div>
     </div>

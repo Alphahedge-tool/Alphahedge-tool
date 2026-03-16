@@ -5,8 +5,10 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, startTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { Clock } from 'lucide-react';
+import s from './OptionChain.module.css';
 
 // ── Time slots ────────────────────────────────────────────────────────────────
 const TIME_SLOTS = ['09:15','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:15','15:25'];
@@ -19,44 +21,39 @@ function CalendarPicker({ date, time, onDateChange, onTimeChange }: {
   const displayDate = date ? format(new Date(date + 'T00:00:00'), 'dd MMM yyyy') : 'Select date';
 
   return (
-    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className={s.calRoot}>
 
       {/* Date */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Date</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0' }}>{displayDate}</span>
+      <div className={s.calDateSection}>
+        <div className={s.calDateHeader}>
+          <span className={s.calDateLabel}>Date</span>
+          <span className={s.calDateValue}>{displayDate}</span>
         </div>
         <input
           type="date"
           value={date}
           max={new Date().toISOString().slice(0, 10)}
           onChange={e => onDateChange(e.target.value)}
-          style={{
-            width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 8, padding: '8px 10px', color: '#E2E8F0', fontSize: 12, fontWeight: 600,
-          }}
+          className={s.calDateInput}
         />
       </div>
 
       {/* Time */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Time</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '6px 8px' }}>
+      <div className={s.calTimeSection}>
+        <span className={s.calTimeLabel}>Time</span>
+        <div className={s.calTimeInputRow}>
           <Clock size={12} color="#6B7280" />
           <input type="time" value={time} onChange={e => onTimeChange(e.target.value)}
-            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#E2E8F0', fontSize: 12, fontWeight: 600, minWidth: 0 }} />
+            className={s.calTimeInput} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+        <div className={s.calTimeGrid}>
           {TIME_SLOTS.map(slot => {
             const sel = time === slot;
             return (
-              <button key={slot} onClick={() => onTimeChange(slot)} style={{
-                padding: '6px 0', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: 'pointer', textAlign: 'center',
-                background: sel ? 'rgba(255,152,0,0.18)' : 'rgba(255,255,255,0.03)',
-                border: sel ? '1px solid rgba(255,152,0,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                color: sel ? '#FF9800' : '#9CA3AF',
-              }}>{slot}</button>
+              <button key={slot} onClick={() => onTimeChange(slot)}
+                className={`${s.calTimeSlotBtn} ${sel ? s.calTimeSlotSelected : s.calTimeSlotUnselected}`}>
+                {slot}
+              </button>
             );
           })}
         </div>
@@ -188,10 +185,15 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
   const [entryDate, setEntryDate] = useState(() => getDefaultEntryDate());
   const [entryTime, setEntryTime] = useState('09:15');
   const [fetching, setFetching] = useState(false);
-  const [popup, setPopup] = useState<{ x: number; y: number; strike: number; type: 'CE' | 'PE'; action: 'B' | 'S'; price: number; refId?: number; greeks: { delta: number; theta: number; vega: number; gamma: number; iv: number }; instrumentKey?: string | null; expiry?: string; } | null>(null);
-  const openPopup = (p: NonNullable<typeof popup>) => startTransition(() => { setQty(1); setPopup(p); });
+  const [popup, setPopup] = useState<{ x: number; y: number; anchorBottom: number; strike: number; type: 'CE' | 'PE'; action: 'B' | 'S'; price: number; refId?: number; greeks: { delta: number; theta: number; vega: number; gamma: number; iv: number }; instrumentKey?: string | null; expiry?: string; } | null>(null);
+  const openPopup = (p: NonNullable<typeof popup>) => { setQty(1); setPopup(p); };
   const popupRef = useRef<HTMLDivElement>(null);
   const [atm, setAtm] = useState(0);
+  // Windowed render — only ATM±10 on load, expands by 10 as user scrolls to edges
+  const WINDOW = 10;
+  const ROW_H = 37; // approximate px per row (padding 8px top+bottom + 13px font)
+  const [visibleRange, setVisibleRange] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [chainLoading, setChainLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [colVis, setColVis] = useState<Record<string, boolean>>({
     ltp: true, chg: false, oichg: false, oi: true, delta: true, theta: false, gamma: false, vega: false, iv: true,
@@ -280,6 +282,7 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
   };
 
   const rowsRef = useRef<OptionRow[]>([]);
+  const wsRafRef = useRef<number | null>(null);
 
   const buildRows = (ceList: Record<string, number>[], peList: Record<string, number>[], atmRaw: number, spotRaw: number, isRest: boolean) => {
     const scale = isRest ? 100 : 1;
@@ -302,13 +305,17 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         map.get(s)!.pe = parseRest(opt);
       }
       const sorted = [...map.values()].sort((a, b) => a.strike - b.strike);
+      let atmIdx = 0;
       if (atmVal > 0) {
-        let idx = 0, minD = Infinity;
-        sorted.forEach((r, i) => { const d = Math.abs(r.strike - atmVal); if (d < minD) { minD = d; idx = i; } });
-        sorted.forEach((r, i) => { r.isAtm = i === idx; });
+        let minD = Infinity;
+        sorted.forEach((r, i) => { const d = Math.abs(r.strike - atmVal); if (d < minD) { minD = d; atmIdx = i; } });
+        sorted.forEach((r, i) => { r.isAtm = i === atmIdx; });
       }
       rowsRef.current = sorted;
       setRows([...sorted]);
+      setChainLoading(false);
+      // Show ATM±WINDOW strikes on first load — expand as user scrolls
+      setVisibleRange({ start: Math.max(0, atmIdx - WINDOW), end: Math.min(sorted.length - 1, atmIdx + WINDOW) });
       if (shouldScrollToAtm.current) {
         shouldScrollToAtm.current = false;
         requestAnimationFrame(() => {
@@ -331,8 +338,15 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         ...(ceMap.has(r.strike) ? { ce: ceMap.get(r.strike)! } : {}),
         ...(peMap.has(r.strike) ? { pe: peMap.get(r.strike)! } : {}),
       }));
+      // Always update ref immediately so onLtpUpdateRef reads fresh data
       rowsRef.current = updated;
-      setRows(updated);
+      // Defer React re-render to next animation frame — prevents B/S click lag
+      if (wsRafRef.current === null) {
+        wsRafRef.current = requestAnimationFrame(() => {
+          wsRafRef.current = null;
+          startTransition(() => { setRows(rowsRef.current); });
+        });
+      }
     }
 
     const finalRows = rowsRef.current;
@@ -352,7 +366,7 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
   useEffect(() => {
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     if (!selectedExpiry || !symbol || !sessionToken) return;
-    setRows([]); setSpot(0); setAtm(0); rowsRef.current = []; shouldScrollToAtm.current = true;
+    setRows([]); setSpot(0); setAtm(0); rowsRef.current = []; shouldScrollToAtm.current = true; setVisibleRange({ start: 0, end: 0 }); setChainLoading(true);
 
     // ── Step 1: Always fetch REST first for instant data ──────────────
     const restUrl = `/api/nubra-optionchain?session_token=${encodeURIComponent(sessionToken)}&instrument=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(selectedExpiry)}`;
@@ -391,39 +405,40 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
       } catch { /**/ }
     };
     ws.onerror = () => {}; ws.onclose = () => {};
-    return () => { ws.close(); wsRef.current = null; };
+    return () => {
+      ws.close(); wsRef.current = null;
+      if (wsRafRef.current !== null) { cancelAnimationFrame(wsRafRef.current); wsRafRef.current = null; }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedExpiry, symbol, sessionToken, exchange]);
 
   // All possible column defs — filtered by colVis below
   const maxCeOi = useMemo(() => Math.max(1, ...rows.map(r => r.ce.oi)), [rows]);
   const maxPeOi = useMemo(() => Math.max(1, ...rows.map(r => r.pe.oi)), [rows]);
+  // Refs so allColumns useMemo never needs maxCeOi/maxPeOi as deps (OI ticks won't recreate all col defs)
+  const maxCeOiRef = useRef(maxCeOi);
+  const maxPeOiRef = useRef(maxPeOi);
+  maxCeOiRef.current = maxCeOi;
+  maxPeOiRef.current = maxPeOi;
 
   const allColumns = useMemo(() => [
-    ch.accessor(r => r.ce.iv,       { id: 'ce_iv',    header: 'IV',       cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.ce.gamma,    { id: 'ce_gamma', header: 'Gamma',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue(), 4)}</span> }),
-    ch.accessor(r => r.ce.vega,     { id: 'ce_vega',  header: 'Vega',     cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.ce.theta,    { id: 'ce_theta', header: 'Theta',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.ce.delta,    { id: 'ce_delta', header: 'Delta',    cell: i => <span style={{ color: '#26a69a' }}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.ce.iv,       { id: 'ce_iv',    header: 'IV',       cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.ce.gamma,    { id: 'ce_gamma', header: 'Gamma',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue(), 4)}</span> }),
+    ch.accessor(r => r.ce.vega,     { id: 'ce_vega',  header: 'Vega',     cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.ce.theta,    { id: 'ce_theta', header: 'Theta',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.ce.delta,    { id: 'ce_delta', header: 'Delta',    cell: i => <span className={s.valTeal}>{fmtGreek(i.getValue())}</span> }),
     ch.accessor(r => r.ce.oi,       { id: 'ce_oi',    header: 'Call OI',  cell: i => {
-      const pct = Math.min(100, (i.getValue() / maxCeOi) * 100);
+      const pct = Math.min(100, (i.getValue() / maxCeOiRef.current) * 100);
       return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}>
-          <span style={{ color: '#E2E8F0', fontWeight: 600 }}>{fmtOi(i.getValue())}</span>
+          <span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span>
         </div>
       );
     } }),
     ch.accessor(r => r.ce.oiChgPct, { id: 'ce_oichg', header: 'OI Chg%', cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     ch.accessor(r => r.ce.chgPct,   { id: 'ce_chg',   header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     ch.accessor(r => r.ce.ltp,      { id: 'ce_price', header: 'Call LTP', cell: i => {
-      const row = i.row.original;
-      return (
-        <div className="oc-ltp-cell">
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-b" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'CE', action: 'B', price: i.getValue(), refId: row.ce.ref_id, greeks: { delta: row.ce.delta, theta: row.ce.theta, vega: row.ce.vega, gamma: row.ce.gamma, iv: row.ce.iv } }); }}>B</button></span>
-          <span style={{ color: '#C0C0C0', fontWeight: 700 }}>{fmtPrice(i.getValue())}</span>
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-s" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'CE', action: 'S', price: i.getValue(), refId: row.ce.ref_id, greeks: { delta: row.ce.delta, theta: row.ce.theta, vega: row.ce.vega, gamma: row.ce.gamma, iv: row.ce.iv } }); }}>S</button></span>
-        </div>
-      );
+      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
     } }),
     ch.accessor(r => r.strike, {
       id: 'strike', header: 'Strike',
@@ -433,31 +448,24 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
       },
     }),
     ch.accessor(r => r.pe.ltp,      { id: 'pe_price', header: 'Put LTP',  cell: i => {
-      const row = i.row.original;
-      return (
-        <div className="oc-ltp-cell">
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-b" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'PE', action: 'B', price: i.getValue(), refId: row.pe.ref_id, greeks: { delta: row.pe.delta, theta: row.pe.theta, vega: row.pe.vega, gamma: row.pe.gamma, iv: row.pe.iv } }); }}>B</button></span>
-          <span style={{ color: '#C0C0C0', fontWeight: 700 }}>{fmtPrice(i.getValue())}</span>
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-s" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'PE', action: 'S', price: i.getValue(), refId: row.pe.ref_id, greeks: { delta: row.pe.delta, theta: row.pe.theta, vega: row.pe.vega, gamma: row.pe.gamma, iv: row.pe.iv } }); }}>S</button></span>
-        </div>
-      );
+      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
     } }),
     ch.accessor(r => r.pe.chgPct,   { id: 'pe_chg',   header: 'Chg%',     cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     ch.accessor(r => r.pe.oiChgPct, { id: 'pe_oichg', header: 'OI Chg%',  cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     ch.accessor(r => r.pe.oi,       { id: 'pe_oi',    header: 'Put OI',   cell: i => {
-      const pct = Math.min(100, (i.getValue() / maxPeOi) * 100);
+      const pct = Math.min(100, (i.getValue() / maxPeOiRef.current) * 100);
       return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}>
-          <span style={{ color: '#E2E8F0', fontWeight: 600 }}>{fmtOi(i.getValue())}</span>
+          <span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span>
         </div>
       );
     } }),
-    ch.accessor(r => r.pe.delta,    { id: 'pe_delta', header: 'Delta',    cell: i => <span style={{ color: '#f23645' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.pe.theta,    { id: 'pe_theta', header: 'Theta',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.pe.vega,     { id: 'pe_vega',  header: 'Vega',     cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    ch.accessor(r => r.pe.gamma,    { id: 'pe_gamma', header: 'Gamma',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue(), 4)}</span> }),
-    ch.accessor(r => r.pe.iv,       { id: 'pe_iv',    header: 'IV',       cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-  ], [maxCeOi, maxPeOi, onAddLeg, selectedExpiry, symbol]);
+    ch.accessor(r => r.pe.delta,    { id: 'pe_delta', header: 'Delta',    cell: i => <span className={s.valRed}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.pe.theta,    { id: 'pe_theta', header: 'Theta',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.pe.vega,     { id: 'pe_vega',  header: 'Vega',     cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    ch.accessor(r => r.pe.gamma,    { id: 'pe_gamma', header: 'Gamma',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue(), 4)}</span> }),
+    ch.accessor(r => r.pe.iv,       { id: 'pe_iv',    header: 'IV',       cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+  ], [onAddLeg, selectedExpiry, symbol]);
 
 
   const [colOrder, setColOrder] = useState(['ltp', 'chg', 'oichg', 'oi', 'delta', 'theta', 'gamma', 'vega', 'iv']);
@@ -482,8 +490,14 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
   }, [allColumns, hiddenIds, colOrder]);
 
   // Recompute visible CE/PE col lists for super-header colSpan
-  const visibleCeCols = [...colOrder].reverse().map(k => COL_MAP[k]?.[0]).filter((id): id is string => !!id && !hiddenIds.has(id));
-  const visiblePeCols = colOrder.map(k => COL_MAP[k]?.[1]).filter((id): id is string => !!id && !hiddenIds.has(id));
+  const visibleCeCols = useMemo(
+    () => [...colOrder].reverse().map(k => COL_MAP[k]?.[0]).filter((id): id is string => !!id && !hiddenIds.has(id)),
+    [colOrder, hiddenIds]
+  );
+  const visiblePeCols = useMemo(
+    () => colOrder.map(k => COL_MAP[k]?.[1]).filter((id): id is string => !!id && !hiddenIds.has(id)),
+    [colOrder, hiddenIds]
+  );
 
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
 
@@ -498,48 +512,50 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
     if (el) el.scrollLeft = el.scrollWidth;
   }, [totalWidth]);
 
+  // Expand visible window as user scrolls near top or bottom edge
+  useEffect(() => {
+    const attach = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const onScroll = () => {
+        const total = rowsRef.current.length;
+        if (total === 0) return;
+        const { scrollTop, clientHeight } = el;
+        const scrollBottom = scrollTop + clientHeight;
+        setVisibleRange(prev => {
+          const renderedTop = prev.start * ROW_H;
+          const renderedBottom = prev.end * ROW_H + ROW_H;
+          const nearTop = prev.start > 0 && scrollTop <= renderedTop + ROW_H * 5;
+          const nearBottom = prev.end < total - 1 && scrollBottom >= renderedBottom - ROW_H * 5;
+          if (!nearTop && !nearBottom) return prev;
+          const newStart = nearTop ? Math.max(0, prev.start - WINDOW) : prev.start;
+          const newEnd = nearBottom ? Math.min(total - 1, prev.end + WINDOW) : prev.end;
+          if (newStart === prev.start && newEnd === prev.end) return prev;
+          return { start: newStart, end: newEnd };
+        });
+      };
+      el.addEventListener('scroll', onScroll, { passive: true });
+      return () => el.removeEventListener('scroll', onScroll);
+    };
+    // scrollRef.current is populated after first paint — use rAF to be safe
+    let cleanup: (() => void) | undefined;
+    const raf = requestAnimationFrame(() => { cleanup = attach(); });
+    return () => { cancelAnimationFrame(raf); cleanup?.(); };
+  }, []);
+
   const expLabel = selectedExpiry ? fmtExpiry(selectedExpiry) : '—';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1d1a17', color: '#D1D5DB', position: 'relative' }}>
-      <style>{`
-        .oc-tbody tr.oc-row:hover td { background: rgba(255,255,255,0.03); }
-        .oc-tbody tr.oc-row-atm td { background: rgba(224,168,0,0.04); }
-        .oc-tbody tr.oc-row-atm:hover td { background: rgba(224,168,0,0.08); }
-        .oc-tbody tr.oc-row-odd td { background: transparent; }
-        .oc-tbody tr.oc-row-even td { background: rgba(255,255,255,0.015); }
-        .oc-scroll { will-change: transform; }
-        .oc-gear:hover { background: rgba(255,255,255,0.1) !important; }
-        .oc-cb-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; user-select: none; }
-        .oc-cb-row:last-child { border-bottom: none; }
-        .oc-cb-row:hover { background: rgba(255,255,255,0.03); border-radius: 6px; }
-        .oc-cb-row.drag-over { background: rgba(79,142,247,0.1); border-radius: 6px; }
-        .oc-drag-handle { cursor: grab; opacity: 0.3; flex-shrink: 0; padding: 2px; }
-        .oc-drag-handle:hover { opacity: 0.8; }
-        .oc-ltp-cell { display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .oc-ltp-btn-wrap { opacity: 0; pointer-events: none; transition: opacity 0.1s ease-in-out; }
-        .oc-tbody tr.oc-row:hover .oc-ltp-btn-wrap { opacity: 1; pointer-events: auto; }
-        .oc-btn { font-size: 11px; font-weight: 800; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; letter-spacing: 0.08em; line-height: 1.5; transition: all 0.15s; }
-        .oc-btn-b { background: rgba(38,166,154,0.15); color: #26a69a; border: 1px solid rgba(38,166,154,0.3); }
-        .oc-btn-b:hover { background: rgba(38,166,154,0.25); border-color: rgba(38,166,154,0.5); }
-        .oc-btn-s { background: rgba(242,54,69,0.15); color: #f23645; border: 1px solid rgba(242,54,69,0.3); }
-        .oc-btn-s:hover { background: rgba(242,54,69,0.25); border-color: rgba(242,54,69,0.5); }
-      `}</style>
+    <div className={s.root}>
 
       {/* Settings modal */}
       {settingsOpen && (
-        <div
-          onClick={() => setSettingsOpen(false)}
-          style={{ position: 'absolute', inset: 0, zIndex: 50, backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 300, padding: '18px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
-          >
+        <div onClick={() => setSettingsOpen(false)} className={s.settingsOverlay}>
+          <div onClick={e => e.stopPropagation()} className={s.settingsCard}>
             {/* Modal header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0' }}>Choose Columns</span>
-              <button onClick={() => setSettingsOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', padding: 2 }}>
+            <div className={s.settingsHeader}>
+              <span className={s.settingsTitle}>Choose Columns</span>
+              <button onClick={() => setSettingsOpen(false)} className={s.settingsCloseBtn}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </div>
@@ -594,17 +610,14 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                       <circle cx="7.5" cy="11.5" r="1.5" fill="#9CA3AF"/>
                     </svg>
                   </span>
-                  {/* Checkbox */}
-                  <div style={{
-                    width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  {/* Checkbox — bg/border dynamic */}
+                  <div className={s.cbCheckbox} style={{
                     background: colVis[key] ? '#f97316' : 'transparent',
                     border: `1.5px solid ${colVis[key] ? '#f97316' : 'rgba(255,255,255,0.2)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.15s ease',
                   }}>
                     {colVis[key] && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
-                  <span style={{ fontSize: 13, color: colVis[key] ? '#E2E8F0' : '#6b7280', fontWeight: 500, flex: 1 }}>{COL_LABELS[key]}</span>
+                  <span className={s.cbLabel} style={{ color: colVis[key] ? '#E2E8F0' : '#6b7280' }}>{COL_LABELS[key]}</span>
                 </div>
               ))}
             </div>
@@ -613,87 +626,77 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: 'var(--bg-panel)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#E2E8F0', letterSpacing: '0.04em' }}>{symbol}</span>
-          {spot > 0 && (
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#4F8EF7', background: 'rgba(79,142,247,0.1)', padding: '4px 12px', borderRadius: 8, border: '1px solid rgba(79,142,247,0.2)' }}>
-              {spot.toFixed(2)}
-            </span>
-          )}
+      <div className={s.header}>
+        <div className={s.headerLeft}>
+          <span className={s.headerSymbol}>{symbol}</span>
+          {spot > 0 && <span className={s.headerSpot}>{spot.toFixed(2)}</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>{expLabel}</span>
+        <div className={s.headerRight}>
+          <span className={s.headerExpLabel}>{expLabel}</span>
           {/* Gear / settings button */}
-          <button
-            className="oc-gear"
-            onClick={() => setSettingsOpen(true)}
-            title="Choose columns"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, cursor: 'pointer', color: '#817E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, transition: 'background 0.15s' }}
-          >
+          <button className={`oc-gear ${s.gearBtn}`} onClick={() => setSettingsOpen(true)} title="Choose columns">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 13.648 13.648" fill="currentColor">
               <path fillRule="evenodd" clipRule="evenodd" d="M5.09373 0.995125C5.16241 0.427836 5.64541 0 6.21747 0H7.43151C8.0039 0 8.48663 0.428191 8.55525 0.996829C8.5553 0.997248 8.55536 0.997666 8.5554 0.9981L8.65947 1.81525C8.80015 1.86677 8.93789 1.92381 9.07227 1.98601L9.72415 1.47911C10.1776 1.12819 10.8237 1.16381 11.2251 1.57622L12.0753 2.42643C12.4854 2.82551 12.5214 3.47159 12.1697 3.92431L11.6628 4.57692C11.725 4.71124 11.782 4.84882 11.8335 4.98924L12.6526 5.09337C12.653 5.09342 12.6534 5.09348 12.6539 5.09352C13.2211 5.16221 13.6492 5.64522 13.6484 6.21766V7.4312C13.6484 8.00358 13.2203 8.48622 12.6517 8.5549C12.6513 8.55496 12.6508 8.55502 12.6503 8.55506L11.8338 8.65909C11.7824 8.7996 11.7254 8.93729 11.663 9.07168L12.1696 9.72354C12.5218 10.1776 12.4847 10.823 12.0728 11.2245L11.2224 12.0749C10.8233 12.485 10.1772 12.5209 9.72452 12.1692L9.07187 11.6624C8.93756 11.7246 8.79995 11.7815 8.65952 11.833L8.55539 12.6521C8.55533 12.6525 8.55528 12.653 8.55522 12.6534C8.48652 13.2206 8.00353 13.6484 7.43151 13.6484H6.21747C5.64485 13.6484 5.16232 13.22 5.09373 12.6506C5.09367 12.6501 5.09361 12.6496 5.09355 12.6491L4.98954 11.8328C4.84901 11.7814 4.71133 11.7244 4.57692 11.662L3.92477 12.1688C3.47111 12.5199 2.82587 12.4838 2.42408 12.0724L1.57358 11.2219C1.16354 10.8229 1.12761 10.1769 1.47927 9.72417L1.98614 9.0715C1.92397 8.93721 1.86696 8.7996 1.81546 8.65919L0.996348 8.55505C0.995929 8.555 0.995526 8.55494 0.995107 8.5549C0.427838 8.48619 0 8.00325 0 7.4312V6.21724C0 5.64481 0.428228 5.16211 0.996871 5.09351L1.81538 4.98929C1.86677 4.84897 1.92362 4.7113 1.98597 4.5768L1.47915 3.92465C1.12701 3.47063 1.1643 2.82485 1.57625 2.42329L2.42671 1.57338C2.82634 1.16348 3.47226 1.12815 3.92438 1.4792L4.57644 1.98589C4.71105 1.92352 4.84888 1.86662 4.98946 1.81519L5.09373 0.995125ZM6.82448 4.43525C5.50742 4.43525 4.43541 5.50723 4.43541 6.82422C4.43541 8.14119 5.50742 9.21317 6.82448 9.21317C8.14154 9.21317 9.21356 8.14119 9.21356 6.82422C9.21356 5.50723 8.14154 4.43525 6.82448 4.43525ZM3.79381 6.82422C3.79381 5.15287 5.15311 3.79365 6.82448 3.79365C8.49586 3.79365 9.85515 5.15287 9.85515 6.82422C9.85515 8.49556 8.49586 9.85477 6.82448 9.85477C5.15311 9.85477 3.79381 8.49556 3.79381 6.82422Z" />
             </svg>
           </button>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, cursor: 'pointer', color: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26 }}>
+          <button onClick={onClose} className={s.closeBtn}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
 
       {/* Expiry dropdown */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.03)', flexShrink: 0, background: 'var(--bg-panel)' }}>
-        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Expiry</span>
-        <div style={{ position: 'relative', flexShrink: 0 }}>
+      <div className={s.expiryRow}>
+        <span className={s.expiryLabel}>Expiry</span>
+        <div className={s.expirySelectWrap}>
           <select
             value={selectedExpiry ?? ''}
             onChange={e => setSelectedExpiry(e.target.value)}
-            style={{
-              appearance: 'none',
-              WebkitAppearance: 'none',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 8,
-              color: '#E2E8F0',
-              fontSize: 12,
-              fontWeight: 700,
-              padding: '5px 32px 5px 12px',
-              cursor: 'pointer',
-              outline: 'none',
-              letterSpacing: '0.02em',
-              minWidth: 110,
-            }}
+            className={s.expirySelect}
           >
             {expiries.map(exp => {
-              const s = String(exp);
-              return <option key={s} value={s} style={{ background: '#1f1f1f', color: '#E2E8F0' }}>{fmtExpiry(exp)}</option>;
+              const eStr = String(exp);
+              return <option key={eStr} value={eStr} style={{ background: '#1f1f1f', color: '#E2E8F0' }}>{fmtExpiry(exp)}</option>;
             })}
           </select>
-          <svg
-            width="10" height="6" viewBox="0 0 10 6" fill="none"
-            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6B7280' }}
-          >
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className={s.expirySelectChevron}>
             <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
       </div>
 
       {/* Table */}
-      <div className="oc-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+      <div ref={scrollRef} className={`oc-scroll ${s.tableScroll}`}>
         {rows.length === 0 ? (
-          <div style={{ padding: '60px', textAlign: 'center', fontSize: 13, color: '#3D4150' }}>
-            {selectedExpiry ? 'Loading data…' : 'Select an expiry'}
-          </div>
+          chainLoading ? (
+            <div className={s.skeletonWrap}>
+              {Array.from({ length: 18 }, (_, i) => (
+                <div key={i} className={s.skeletonRow}>
+                  {[0.7, 0.5, 0.6, 0.55, 0.65].map((w, j) => (
+                    <div key={j} className={s.skeletonCell} style={{ width: `${w * 14}%`, '--sk-d': `${((i * 5 + j) * 0.04) % 0.8}s` } as React.CSSProperties} />
+                  ))}
+                  <div className={`${s.skeletonCell} ${s.skeletonStrike}`} style={{ width: '10%' }} />
+                  {[0.65, 0.55, 0.6, 0.5, 0.7].map((w, j) => (
+                    <div key={j + 5} className={s.skeletonCell} style={{ width: `${w * 14}%`, '--sk-d': `${((i * 5 + j + 5) * 0.04) % 0.8}s` } as React.CSSProperties} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={s.tableEmpty}>
+              {selectedExpiry ? 'No data' : 'Select an expiry'}
+            </div>
+          )
         ) : (
-          <table style={{ width: totalWidth, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-panel)' }}>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <th colSpan={visibleCeCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#e0a800', letterSpacing: '0.08em', background: '#333333' }}>Call</th>
-                <th style={{ textAlign: 'center', padding: '10px 0', fontSize: 12, fontWeight: 700, color: '#9CA3AF', background: '#333333' }}>Strike</th>
-                <th colSpan={visiblePeCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#818cf8', letterSpacing: '0.08em', background: '#333333' }}>Put</th>
+          <table className={s.table} style={{ width: totalWidth }}>
+            <thead className={s.thead}>
+              <tr className={s.superHeaderRow}>
+                <th colSpan={visibleCeCols.length} className={s.thCall}>Call</th>
+                <th className={s.thStrike}>Strike</th>
+                <th colSpan={visiblePeCols.length} className={s.thPut}>Put</th>
               </tr>
               {table.getHeaderGroups().map(hg => (
-                <tr key={hg.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <tr key={hg.id} className={s.subHeaderRow}>
                   {hg.headers.map(h => {
                     const id = h.column.id;
                     const isStrike = id === 'strike';
@@ -714,7 +717,12 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
               ))}
             </thead>
             <tbody ref={tbodyRef} className="oc-tbody">
-              {table.getRowModel().rows.map((row, ri) => {
+              {/* Top spacer — represents rows above the visible window */}
+              {visibleRange.start > 0 && (
+                <tr style={{ height: visibleRange.start * ROW_H }}><td colSpan={visibleCeCols.length + 1 + visiblePeCols.length} /></tr>
+              )}
+              {table.getRowModel().rows.slice(visibleRange.start, visibleRange.end + 1).map((row, sliceIdx) => {
+                const ri = visibleRange.start + sliceIdx;
                 const data = row.original;
                 const prevData = table.getRowModel().rows[ri - 1]?.original;
                 const showAtmLine = data.isAtm && prevData && !prevData.isAtm;
@@ -725,32 +733,29 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                   <React.Fragment key={row.id}>
                     {showAtmLine && (
                       <tr>
-                        <td colSpan={visibleCeCols.length} style={{ padding: '2px 0', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }} />
-                        <td style={{ textAlign: 'center', padding: '2px 0', fontSize: 11, fontWeight: 800, color: '#e0a800', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }}>
+                        <td colSpan={visibleCeCols.length} className={s.atmDividerSide} />
+                        <td className={s.atmDividerCenter}>
                           {atm > 0 ? atm.toFixed(2) : ''}
                         </td>
-                        <td colSpan={visiblePeCols.length} style={{ padding: '2px 0', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }} />
+                        <td colSpan={visiblePeCols.length} className={s.atmDividerSide} />
                       </tr>
                     )}
                     <tr
-                      className={`oc-row ${data.isAtm ? 'oc-row-atm' : ri % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'}`}
+                      className={`oc-row ${data.isAtm ? 'oc-row-atm' : ri % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'} ${s.dataRow}`}
                       ref={data.isAtm ? atmRowRef : undefined}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.10)' }}
                       onMouseMove={e => {
                         if (popup) return;
                         const tr = e.currentTarget;
-                        const strikeTd = (tr.querySelector('td[data-col="strike"]') || tr.querySelector('td[data-col="mstrike"]')) as HTMLElement | null;
-                        if (!strikeTd) return;
-                        const ceLtpTd = strikeTd.previousElementSibling as HTMLElement | null;
-                        const peLtpTd = strikeTd.nextElementSibling as HTMLElement | null;
+                        const hoveredTd = (e.target as HTMLElement).closest('td') as HTMLElement | null;
+                        const hoveredCol = hoveredTd?.dataset.col ?? '';
+                        // Only show overlay when hovering directly over CE or PE LTP cell
+                        if (hoveredCol !== 'ce_price' && hoveredCol !== 'pe_price') { hideOverlay(); return; }
+                        const side = hoveredCol === 'ce_price' ? 'CE' : 'PE';
+                        const ceLtpTd = tr.querySelector('td[data-col="ce_price"]') as HTMLElement | null;
+                        const peLtpTd = tr.querySelector('td[data-col="pe_price"]') as HTMLElement | null;
                         const ceR = ceLtpTd?.getBoundingClientRect();
                         const peR = peLtpTd?.getBoundingClientRect();
                         if (!ceR || !peR) return;
-                        // only show when mouse is over CE LTP or PE LTP cell
-                        const overCe = e.clientX >= ceR.left && e.clientX <= ceR.right;
-                        const overPe = e.clientX >= peR.left && e.clientX <= peR.right;
-                        if (!overCe && !overPe) { hideOverlay(); return; }
-                        const side = overCe ? 'CE' : 'PE';
                         const trR = tr.getBoundingClientRect();
                         showOverlay(trR.top, ceR.left, ceR.width, peR.left, peR.width, trR.height, {
                           strike: data.strike, ceLtp: data.ce.ltp, peLtp: data.pe.ltp, ceRefId: data.ce.ref_id ?? 0, peRefId: data.pe.ref_id ?? 0,
@@ -766,9 +771,9 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                         const isCe = CE_COLS.includes(id);
                         // Bloomberg-style ITM: vivid teal for CE, warm amber for PE
                         const cellBg = isCe && isCeItm
-                          ? 'rgba(0,168,132,0.18)'      // Bloomberg teal/green — CE ITM (lighter)
+                          ? 'rgba(0,168,132,0.18)'
                           : !isCe && !isStrike && isPeItm
-                          ? 'rgba(210,130,0,0.28)'      // Bloomberg amber/orange — PE ITM
+                          ? 'rgba(210,130,0,0.28)'
                           : undefined;
                         return (
                           <td key={cell.id} data-col={id} className={isStrike ? 'oc-strike-cell' : ''} style={{
@@ -786,56 +791,71 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                   </React.Fragment>
                 );
               })}
+              {/* Bottom spacer — represents rows below the visible window */}
+              {visibleRange.end < rows.length - 1 && (
+                <tr style={{ height: (rows.length - 1 - visibleRange.end) * ROW_H }}><td colSpan={visibleCeCols.length + 1 + visiblePeCols.length} /></tr>
+              )}
             </tbody>
           </table>
         )}
       </div>
 
-      <div ref={ceOverlayRef} className="oc-bs-overlay" style={{ display: 'none', position: 'fixed', left: 0, top: 0, pointerEvents: 'none' }}>
-        <button className="oc-btn oc-btn-b" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'CE', action: 'B', price: d.ceLtp, refId: d.ceRefId, greeks: d.ceGreeks }); }}>B</button>
-        <button className="oc-btn oc-btn-s" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'CE', action: 'S', price: d.ceLtp, refId: d.ceRefId, greeks: d.ceGreeks }); }}>S</button>
-      </div>
-      <div ref={peOverlayRef} className="oc-bs-overlay" style={{ display: 'none', position: 'fixed', left: 0, top: 0, pointerEvents: 'none' }}>
-        <button className="oc-btn oc-btn-b" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'PE', action: 'B', price: d.peLtp, refId: d.peRefId, greeks: d.peGreeks }); }}>B</button>
-        <button className="oc-btn oc-btn-s" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'PE', action: 'S', price: d.peLtp, refId: d.peRefId, greeks: d.peGreeks }); }}>S</button>
-      </div>
+      {createPortal(<>
+        <div ref={ceOverlayRef} className={`oc-bs-overlay ${s.bsOverlay}`}>
+          <button className="oc-btn oc-btn-b" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'CE', action: 'B', price: d.ceLtp, refId: d.ceRefId, greeks: d.ceGreeks }); }}>B</button>
+          <button className="oc-btn oc-btn-s" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'CE', action: 'S', price: d.ceLtp, refId: d.ceRefId, greeks: d.ceGreeks }); }}>S</button>
+        </div>
+        <div ref={peOverlayRef} className={`oc-bs-overlay ${s.bsOverlay}`}>
+          <button className="oc-btn oc-btn-b" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'PE', action: 'B', price: d.peLtp, refId: d.peRefId, greeks: d.peGreeks }); }}>B</button>
+          <button className="oc-btn oc-btn-s" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); openPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'PE', action: 'S', price: d.peLtp, refId: d.peRefId, greeks: d.peGreeks }); }}>S</button>
+        </div>
+      </>, document.body)}
 
       {/* Qty popup */}
-      {popup && (() => {
+      {popup && createPortal((() => {
         const isBuy = popup.action === 'B';
-        const accentColor = isBuy ? '#26a69a' : '#f23645';
-        const accentBg = isBuy ? 'rgba(38,166,154,0.12)' : 'rgba(242,54,69,0.12)';
-        const accentBorder = isBuy ? 'rgba(38,166,154,0.4)' : 'rgba(242,54,69,0.4)';
+        const isCe = popup.type === 'CE';
+        // CE = green, PE = red
+        const typeColor = isCe ? '#22c55e' : '#ef4444';
+        const typeBg = isCe ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+        const typeBorder = isCe ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
+        // BUY = green tint, SELL = red tint for action badge
+        const actionColor = isBuy ? '#4ade80' : '#f87171';
+        const actionBg = isBuy ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)';
+        // Smart vertical placement: flip above if < 320px below anchor
+        const spaceBelow = window.innerHeight - popup.anchorBottom;
+        const showAbove = spaceBelow < 320;
+        const posStyle = showAbove
+          ? { bottom: window.innerHeight - popup.y, top: 'auto' as const }
+          : { top: popup.anchorBottom + 6, bottom: 'auto' as const };
         return (
-          <div ref={popupRef} style={{
-            position: 'fixed', left: popup.x, top: popup.y, transform: 'translateX(-50%)',
-            zIndex: 9999, background: '#1a1a1a', border: `1px solid ${accentBorder}`,
-            borderRadius: 12, padding: '12px 14px', boxShadow: '0 12px 48px rgba(0,0,0,0.7)',
-            display: 'flex', flexDirection: 'column', gap: 8,
-            width: 240,
-            maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
-          }}>
+          <div ref={popupRef} className={s.popup} style={{ left: popup.x, ...posStyle }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ padding: '2px 8px', borderRadius: 5, background: accentBg, border: `1px solid ${accentBorder}` }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: accentColor }}>{popup.action === 'B' ? 'BUY' : 'SELL'}</span>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa' }}>{popup.strike}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: popup.type === 'CE' ? '#facc15' : '#c084fc' }}>{popup.type}</span>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => setPopup(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4B5563', padding: 0, display: 'flex' }}>
+            <div className={s.popupHeader}>
+              {/* BUY/SELL badge */}
+              <span className={s.popupActionBadge} style={{ color: actionColor, background: actionBg }}>
+                {isBuy ? 'BUY' : 'SELL'}
+              </span>
+              {/* Strike */}
+              <span className={s.popupStrike}>{popup.strike}</span>
+              {/* CE/PE badge */}
+              <span className={s.popupTypeBadge} style={{ color: typeColor, background: typeBg, border: `1px solid ${typeBorder}` }}>
+                {popup.type}
+              </span>
+              <div className={s.popupSpacer} />
+              <button onClick={() => setPopup(null)} className={s.popupCloseBtn}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </div>
             {/* Price */}
-            <div style={{ fontSize: 11, color: '#4B5563' }}>@ <span style={{ color: '#E2E8F0', fontWeight: 600 }}>₹{popup.price.toFixed(2)}</span></div>
+            <div className={s.popupLtpRow}>LTP <span className={s.popupLtpValue}>₹{popup.price.toFixed(2)}</span></div>
             {/* Qty stepper */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, flex: 1 }}>Qty</span>
-              <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden' }}>
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ width: 26, height: 26, background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <input type="number" value={qty} min={1} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(v); }} onBlur={e => { const v = parseInt(e.target.value); setQty(isNaN(v) || v < 1 ? 1 : v); }} style={{ width: 54, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#E2E8F0', background: 'transparent', border: 'none', outline: 'none', MozAppearance: 'textfield' }} />
-                <button onClick={() => setQty(q => q + 1)} style={{ width: 26, height: 26, background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            <div className={s.popupQtyRow}>
+              <span className={s.popupQtyLabel}>Qty</span>
+              <div className={s.popupStepper}>
+                <button onClick={() => setQty(q => Math.max(1, q - 1))} className={s.popupStepBtn}>−</button>
+                <input type="number" value={qty} min={1} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(v); }} onBlur={e => { const v = parseInt(e.target.value); setQty(isNaN(v) || v < 1 ? 1 : v); }} className={s.popupQtyInput} />
+                <button onClick={() => setQty(q => q + 1)} className={s.popupStepBtn}>+</button>
               </div>
             </div>
             {/* Date + time picker (historical only) */}
@@ -976,13 +996,15 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
               } finally {
                 setFetching(false);
               }
-            }} style={{
-              padding: '6px 0', borderRadius: 7, background: fetching ? 'rgba(255,255,255,0.05)' : accentBg, border: `1px solid ${accentBorder}`,
-              color: fetching ? '#6B7280' : accentColor, fontSize: 12, fontWeight: 700, cursor: fetching ? 'not-allowed' : 'pointer', letterSpacing: '0.04em',
+            }} className={s.popupConfirmBtn} style={{
+              background: fetching ? 'rgba(255,255,255,0.05)' : typeBg,
+              border: `1px solid ${typeBorder}`,
+              color: fetching ? '#6B7280' : typeColor,
+              cursor: fetching ? 'not-allowed' : 'pointer',
             }}>{fetching ? 'Fetching price…' : 'Add to Basket'}</button>
           </div>
         );
-      })()}
+      })(), document.body)}
     </div>
   );
 }
@@ -1103,11 +1125,18 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       pe: r.peKey ? (mdRef.current.get(r.peKey) ?? { ...MCX_EMPTY }) : { ...MCX_EMPTY },
       isAtm: r.strike === atmStrike,
     })));
+    setChainLoading(false);
   }).current;
 
+  const prevExpiryRef = useRef<number | null>(null);
   useEffect(() => {
     const br = baseRowsRef.current;
-    if (!br.length) return; // don't clear — keep showing old rows while expiry loads
+    // Show skeleton whenever expiry or underlying changes (baseRows may not be empty since it's computed from instruments sync)
+    if (!br.length || prevExpiryRef.current !== selectedExpiry) {
+      prevExpiryRef.current = selectedExpiry ?? null;
+      setChainLoading(true);
+      if (!br.length) return;
+    }
     const allKeys = br.flatMap(r => [r.ceKey, r.peKey]).filter(Boolean) as string[];
 
     // Seed from wsManager cache immediately (no blank flash)
@@ -1119,7 +1148,8 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       }
     }
     wsManager.requestKeys(allKeys);
-    rebuildRows(spotRef.current);
+    // Defer first build by one frame so skeleton renders before rows paint
+    requestAnimationFrame(() => rebuildRows(spotRef.current));
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => { if (timer) return; timer = setTimeout(() => { timer = null; rebuildRows(spotRef.current); }, 200); };
@@ -1138,8 +1168,6 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     const now = Date.now();
     // Debug: log all MCX instruments matching this underlying so we can see real field values
     const mcxAll = instruments.filter(i => i.exchange === 'MCX' && (i.underlying_symbol?.toUpperCase() === underlying || i.trading_symbol?.toUpperCase().startsWith(underlying)));
-    console.log('[MCX spotKey] underlying:', underlying, 'candidates:', mcxAll.map(i => ({ key: i.instrument_key, type: i.instrument_type, sym: i.trading_symbol, under: i.underlying_symbol, expiry: i.expiry })));
-
     // Pick the nearest-expiry MCX FUT for this underlying (front-month = closest to today)
     const futs = instruments.filter(i =>
       i.exchange === 'MCX' &&
@@ -1149,7 +1177,6 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     );
     if (futs.length) {
       futs.sort((a, b) => (a.expiry as number) - (b.expiry as number));
-      console.log('[MCX spotKey] picked FUT:', futs[0].instrument_key, futs[0].trading_symbol);
       return futs[0].instrument_key;
     }
     // Fallback: any MCX instrument whose trading_symbol starts with underlying
@@ -1157,7 +1184,6 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       i.exchange === 'MCX' &&
       i.trading_symbol?.toUpperCase().startsWith(underlying)
     );
-    console.log('[MCX spotKey] fallback:', fallback?.instrument_key, fallback?.trading_symbol);
     return fallback?.instrument_key ?? null;
   }, [instruments, underlying]);
 
@@ -1185,11 +1211,12 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   const maxCeOi = useMemo(() => Math.max(1, ...rows.map(r => r.ce.oi)), [rows]);
   const maxPeOi = useMemo(() => Math.max(1, ...rows.map(r => r.pe.oi)), [rows]);
 
+  const [chainLoading, setChainLoading] = useState(false);
   const [qty, setQty] = useState(1);
   const [entryDate, setEntryDate] = useState(() => getDefaultEntryDate());
   const [entryTime, setEntryTime] = useState('09:15');
   const [fetching, setFetching] = useState(false);
-  const [popup, setPopup] = useState<{ x: number; y: number; strike: number; type: 'CE' | 'PE'; action: 'B' | 'S'; price: number; instrumentKey: string | null; greeks: { delta: number; theta: number; vega: number; gamma: number; iv: number } } | null>(null);
+  const [popup, setPopup] = useState<{ x: number; y: number; anchorBottom: number; strike: number; type: 'CE' | 'PE'; action: 'B' | 'S'; price: number; instrumentKey: string | null; greeks: { delta: number; theta: number; vega: number; gamma: number; iv: number } } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const ceOverlayRef = useRef<HTMLDivElement>(null);
   const peOverlayRef = useRef<HTMLDivElement>(null);
@@ -1226,49 +1253,35 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   }, [colVis]);
 
   const allColumns = useMemo(() => [
-    mch.accessor(r => r.ce.iv,    { id: 'mce_iv',    header: 'IV',       cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.ce.gamma, { id: 'mce_gamma', header: 'Gamma',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue(), 4)}</span> }),
-    mch.accessor(r => r.ce.vega,  { id: 'mce_vega',  header: 'Vega',     cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.ce.theta, { id: 'mce_theta', header: 'Theta',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.ce.delta, { id: 'mce_delta', header: 'Delta',    cell: i => <span style={{ color: '#26a69a' }}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.ce.iv,    { id: 'mce_iv',    header: 'IV',       cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.ce.gamma, { id: 'mce_gamma', header: 'Gamma',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue(), 4)}</span> }),
+    mch.accessor(r => r.ce.vega,  { id: 'mce_vega',  header: 'Vega',     cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.ce.theta, { id: 'mce_theta', header: 'Theta',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.ce.delta, { id: 'mce_delta', header: 'Delta',    cell: i => <span className={s.valTeal}>{fmtGreek(i.getValue())}</span> }),
     mch.accessor(r => r.ce.oi,    { id: 'mce_oi',    header: 'Call OI',  cell: i => {
       const pct = Math.min(100, (i.getValue() / maxCeOi) * 100);
-      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span style={{ color: '#E2E8F0', fontWeight: 600 }}>{fmtOi(i.getValue())}</span></div>;
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
     } }),
     mch.accessor(r => r.ce.chgPct, { id: 'mce_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     mch.accessor(r => r.ce.ltp,   { id: 'mce_price', header: 'Call LTP', cell: i => {
-      const row = i.row.original;
-      return (
-        <div className="oc-ltp-cell oc-ltp-cell-ce">
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-b" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'CE', action: 'B', price: i.getValue(), instrumentKey: row.ceKey, greeks: { delta: row.ce.delta, theta: row.ce.theta, vega: row.ce.vega, gamma: row.ce.gamma, iv: row.ce.iv } }); }}>B</button></span>
-          <span style={{ color: '#C0C0C0', fontWeight: 700 }}>{fmtPrice(i.getValue())}</span>
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-s" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'CE', action: 'S', price: i.getValue(), instrumentKey: row.ceKey, greeks: { delta: row.ce.delta, theta: row.ce.theta, vega: row.ce.vega, gamma: row.ce.gamma, iv: row.ce.iv } }); }}>S</button></span>
-        </div>
-      );
+      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
     } }),
     mch.accessor(r => r.strike, { id: 'mstrike', header: 'Strike',
       cell: i => { const row = i.row.original; return <span className="oc-strike-cell" style={{ color: row.isAtm ? '#e0a800' : '#C0C0C0', fontWeight: row.isAtm ? 800 : 700, display: 'block', width: '100%' }}>{i.getValue() % 1 === 0 ? i.getValue().toFixed(0) : i.getValue().toFixed(2)}</span>; },
     }),
     mch.accessor(r => r.pe.ltp,   { id: 'mpe_price', header: 'Put LTP',  cell: i => {
-      const row = i.row.original;
-      return (
-        <div className="oc-ltp-cell oc-ltp-cell-pe">
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-b" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'PE', action: 'B', price: i.getValue(), instrumentKey: row.peKey, greeks: { delta: row.pe.delta, theta: row.pe.theta, vega: row.pe.vega, gamma: row.pe.gamma, iv: row.pe.iv } }); }}>B</button></span>
-          <span style={{ color: '#C0C0C0', fontWeight: 700 }}>{fmtPrice(i.getValue())}</span>
-          <span className="oc-ltp-btn-wrap"><button className="oc-btn oc-btn-s" onClick={e => { e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: row.strike, type: 'PE', action: 'S', price: i.getValue(), instrumentKey: row.peKey, greeks: { delta: row.pe.delta, theta: row.pe.theta, vega: row.pe.vega, gamma: row.pe.gamma, iv: row.pe.iv } }); }}>S</button></span>
-        </div>
-      );
+      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
     } }),
     mch.accessor(r => r.pe.chgPct, { id: 'mpe_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     mch.accessor(r => r.pe.oi,    { id: 'mpe_oi',    header: 'Put OI',   cell: i => {
       const pct = Math.min(100, (i.getValue() / maxPeOi) * 100);
-      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span style={{ color: '#E2E8F0', fontWeight: 600 }}>{fmtOi(i.getValue())}</span></div>;
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
     } }),
-    mch.accessor(r => r.pe.delta, { id: 'mpe_delta', header: 'Delta',    cell: i => <span style={{ color: '#f23645' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.pe.theta, { id: 'mpe_theta', header: 'Theta',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.pe.vega,  { id: 'mpe_vega',  header: 'Vega',     cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
-    mch.accessor(r => r.pe.gamma, { id: 'mpe_gamma', header: 'Gamma',    cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue(), 4)}</span> }),
-    mch.accessor(r => r.pe.iv,    { id: 'mpe_iv',    header: 'IV',       cell: i => <span style={{ color: '#9CA3AF' }}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.pe.delta, { id: 'mpe_delta', header: 'Delta',    cell: i => <span className={s.valRed}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.pe.theta, { id: 'mpe_theta', header: 'Theta',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.pe.vega,  { id: 'mpe_vega',  header: 'Vega',     cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
+    mch.accessor(r => r.pe.gamma, { id: 'mpe_gamma', header: 'Gamma',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue(), 4)}</span> }),
+    mch.accessor(r => r.pe.iv,    { id: 'mpe_iv',    header: 'IV',       cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
   ], [maxCeOi, maxPeOi]);
 
   const columns = useMemo(() => {
@@ -1286,38 +1299,15 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   const expLabel = selectedExpiry ? fmtExpTs(selectedExpiry) : '—';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1d1a17', color: '#D1D5DB', position: 'relative' }}>
-      <style>{`
-        .oc-tbody tr.oc-row:hover td { background: rgba(255,255,255,0.03); }
-        .oc-tbody tr.oc-row-atm td { background: rgba(224,168,0,0.04); }
-        .oc-tbody tr.oc-row-atm:hover td { background: rgba(224,168,0,0.08); }
-        .oc-tbody tr.oc-row-odd td { background: transparent; }
-        .oc-tbody tr.oc-row-even td { background: rgba(255,255,255,0.015); }
-        .oc-gear:hover { background: rgba(255,255,255,0.1) !important; }
-        .oc-cb-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; user-select: none; }
-        .oc-cb-row:last-child { border-bottom: none; }
-        .oc-cb-row:hover { background: rgba(255,255,255,0.03); border-radius: 6px; }
-        .oc-cb-row.drag-over { background: rgba(79,142,247,0.1); border-radius: 6px; }
-        .oc-drag-handle { cursor: grab; opacity: 0.3; flex-shrink: 0; padding: 2px; }
-        .oc-drag-handle:hover { opacity: 0.8; }
-        .oc-ltp-cell { display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .oc-ltp-btn-wrap { opacity: 0; pointer-events: none; transition: none; }
-        .oc-tbody tr.oc-row[data-hover-side="CE"]:hover .oc-ltp-cell-ce .oc-ltp-btn-wrap { opacity: 1; pointer-events: auto; }
-        .oc-tbody tr.oc-row[data-hover-side="PE"]:hover .oc-ltp-cell-pe .oc-ltp-btn-wrap { opacity: 1; pointer-events: auto; }
-        .oc-btn { font-size: 11px; font-weight: 800; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; letter-spacing: 0.08em; line-height: 1.5; transition: all 0.15s; }
-        .oc-btn-b { background: rgba(38,166,154,0.15); color: #26a69a; border: 1px solid rgba(38,166,154,0.3); }
-        .oc-btn-b:hover { background: rgba(38,166,154,0.25); border-color: rgba(38,166,154,0.5); }
-        .oc-btn-s { background: rgba(242,54,69,0.15); color: #f23645; border: 1px solid rgba(242,54,69,0.3); }
-        .oc-btn-s:hover { background: rgba(242,54,69,0.25); border-color: rgba(242,54,69,0.5); }
-      `}</style>
+    <div className={s.root}>
 
       {/* Settings modal */}
       {settingsOpen && (
-        <div onClick={() => setSettingsOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 50, backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 300, padding: '18px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0' }}>Choose Columns</span>
-              <button onClick={() => setSettingsOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', padding: 2 }}>
+        <div onClick={() => setSettingsOpen(false)} className={s.settingsOverlay}>
+          <div onClick={e => e.stopPropagation()} className={s.settingsCard}>
+            <div className={s.settingsHeader}>
+              <span className={s.settingsTitle}>Choose Columns</span>
+              <button onClick={() => setSettingsOpen(false)} className={s.settingsCloseBtn}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </div>
@@ -1333,10 +1323,10 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
                   <span className="oc-drag-handle" draggable onDragStart={e => { e.stopPropagation(); dragKey.current = key; dragIdx.current = colOrder.indexOf(key); }} onDragEnd={() => { dragKey.current = null; dragIdx.current = null; }} onClick={e => e.stopPropagation()}>
                     <svg width="10" height="14" viewBox="0 0 10 14" fill="none"><circle cx="2.5" cy="2.5" r="1.5" fill="#9CA3AF"/><circle cx="7.5" cy="2.5" r="1.5" fill="#9CA3AF"/><circle cx="2.5" cy="7" r="1.5" fill="#9CA3AF"/><circle cx="7.5" cy="7" r="1.5" fill="#9CA3AF"/><circle cx="2.5" cy="11.5" r="1.5" fill="#9CA3AF"/><circle cx="7.5" cy="11.5" r="1.5" fill="#9CA3AF"/></svg>
                   </span>
-                  <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: colVis[key] ? '#f97316' : 'transparent', border: `1.5px solid ${colVis[key] ? '#f97316' : 'rgba(255,255,255,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease' }}>
+                  <div className={s.cbCheckbox} style={{ background: colVis[key] ? '#f97316' : 'transparent', border: `1.5px solid ${colVis[key] ? '#f97316' : 'rgba(255,255,255,0.2)'}` }}>
                     {colVis[key] && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
-                  <span style={{ fontSize: 13, color: colVis[key] ? '#E2E8F0' : '#6b7280', fontWeight: 500, flex: 1 }}>{MCX_COL_LABELS[key]}</span>
+                  <span className={s.cbLabel} style={{ color: colVis[key] ? '#E2E8F0' : '#6b7280' }}>{MCX_COL_LABELS[key]}</span>
                 </div>
               ))}
             </div>
@@ -1345,57 +1335,70 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: 'var(--bg-panel)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#E2E8F0', letterSpacing: '0.04em' }}>{underlying}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#f97316', background: 'rgba(249,115,22,0.1)', padding: '2px 7px', borderRadius: 4, border: '1px solid rgba(249,115,22,0.25)' }}>MCX</span>
-          {spot > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: '#4F8EF7', background: 'rgba(79,142,247,0.1)', padding: '4px 12px', borderRadius: 8, border: '1px solid rgba(79,142,247,0.2)' }}>{spot.toFixed(2)}</span>}
+      <div className={s.header}>
+        <div className={s.headerLeft} style={{ gap: 10 }}>
+          <span className={s.headerSymbol}>{underlying}</span>
+          <span className={s.headerMcxBadge}>MCX</span>
+          {spot > 0 && <span className={s.headerSpot}>{spot.toFixed(2)}</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>{expLabel}</span>
-          <button className="oc-gear" onClick={() => setSettingsOpen(true)} title="Choose columns"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, cursor: 'pointer', color: '#817E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, transition: 'background 0.15s' }}>
+        <div className={s.headerRight}>
+          <span className={s.headerExpLabel}>{expLabel}</span>
+          <button className={`oc-gear ${s.gearBtn}`} onClick={() => setSettingsOpen(true)} title="Choose columns">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 13.648 13.648" fill="currentColor">
               <path fillRule="evenodd" clipRule="evenodd" d="M5.09373 0.995125C5.16241 0.427836 5.64541 0 6.21747 0H7.43151C8.0039 0 8.48663 0.428191 8.55525 0.996829C8.5553 0.997248 8.55536 0.997666 8.5554 0.9981L8.65947 1.81525C8.80015 1.86677 8.93789 1.92381 9.07227 1.98601L9.72415 1.47911C10.1776 1.12819 10.8237 1.16381 11.2251 1.57622L12.0753 2.42643C12.4854 2.82551 12.5214 3.47159 12.1697 3.92431L11.6628 4.57692C11.725 4.71124 11.782 4.84882 11.8335 4.98924L12.6526 5.09337C12.653 5.09342 12.6534 5.09348 12.6539 5.09352C13.2211 5.16221 13.6492 5.64522 13.6484 6.21766V7.4312C13.6484 8.00358 13.2203 8.48622 12.6517 8.5549C12.6513 8.55496 12.6508 8.55502 12.6503 8.55506L11.8338 8.65909C11.7824 8.7996 11.7254 8.93729 11.663 9.07168L12.1696 9.72354C12.5218 10.1776 12.4847 10.823 12.0728 11.2245L11.2224 12.0749C10.8233 12.485 10.1772 12.5209 9.72452 12.1692L9.07187 11.6624C8.93756 11.7246 8.79995 11.7815 8.65952 11.833L8.55539 12.6521C8.55533 12.6525 8.55528 12.653 8.55522 12.6534C8.48652 13.2206 8.00353 13.6484 7.43151 13.6484H6.21747C5.64485 13.6484 5.16232 13.22 5.09373 12.6506C5.09367 12.6501 5.09361 12.6496 5.09355 12.6491L4.98954 11.8328C4.84901 11.7814 4.71133 11.7244 4.57692 11.662L3.92477 12.1688C3.47111 12.5199 2.82587 12.4838 2.42408 12.0724L1.57358 11.2219C1.16354 10.8229 1.12761 10.1769 1.47927 9.72417L1.98614 9.0715C1.92397 8.93721 1.86696 8.7996 1.81546 8.65919L0.996348 8.55505C0.995929 8.555 0.995526 8.55494 0.995107 8.5549C0.427838 8.48619 0 8.00325 0 7.4312V6.21724C0 5.64481 0.428228 5.16211 0.996871 5.09351L1.81538 4.98929C1.86677 4.84897 1.92362 4.7113 1.98597 4.5768L1.47915 3.92465C1.12701 3.47063 1.1643 2.82485 1.57625 2.42329L2.42671 1.57338C2.82634 1.16348 3.47226 1.12815 3.92438 1.4792L4.57644 1.98589C4.71105 1.92352 4.84888 1.86662 4.98946 1.81519L5.09373 0.995125ZM6.82448 4.43525C5.50742 4.43525 4.43541 5.50723 4.43541 6.82422C4.43541 8.14119 5.50742 9.21317 6.82448 9.21317C8.14154 9.21317 9.21356 8.14119 9.21356 6.82422C9.21356 5.50723 8.14154 4.43525 6.82448 4.43525ZM3.79381 6.82422C3.79381 5.15287 5.15311 3.79365 6.82448 3.79365C8.49586 3.79365 9.85515 5.15287 9.85515 6.82422C9.85515 8.49556 8.49586 9.85477 6.82448 9.85477C5.15311 9.85477 3.79381 8.49556 3.79381 6.82422Z" />
             </svg>
           </button>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, cursor: 'pointer', color: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26 }}>
+          <button onClick={onClose} className={s.closeBtn}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
 
       {/* Expiry tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.03)', flexShrink: 0, background: 'var(--bg-panel)', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Expiry</span>
+      <div className={s.expiryRowScrollable}>
+        <span className={s.expiryLabel}>Expiry</span>
         {expiries.length === 0
-          ? <span style={{ fontSize: 11, color: '#3D4150' }}>No expiries found for {underlying}</span>
+          ? <span className={s.expiryNoData}>No expiries found for {underlying}</span>
           : expiries.map(exp => (
-            <button key={exp} onClick={() => { setSelectedExpiry(exp); shouldScrollToAtm.current = true; }} style={{
-              padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, border: '1px solid', cursor: 'pointer', whiteSpace: 'nowrap',
-              background: selectedExpiry === exp ? 'rgba(249,115,22,0.15)' : 'transparent',
-              borderColor: selectedExpiry === exp ? 'rgba(249,115,22,0.4)' : 'rgba(255,255,255,0.08)',
-              color: selectedExpiry === exp ? '#f97316' : '#6B7280',
-            }}>{fmtExpTs(exp)}</button>
+            <button key={exp} onClick={() => { setSelectedExpiry(exp); shouldScrollToAtm.current = true; }}
+              className={`${s.expiryBtn} ${selectedExpiry === exp ? s.expiryBtnActive : s.expiryBtnInactive}`}>
+              {fmtExpTs(exp)}
+            </button>
           ))}
       </div>
 
       {/* Table */}
-      <div className="oc-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+      <div className={`oc-scroll ${s.tableScroll}`}>
         {rows.length === 0 ? (
-          <div style={{ padding: '60px', textAlign: 'center', fontSize: 13, color: '#3D4150' }}>
-            {expiries.length === 0 ? `No MCX options found for "${underlying}"` : selectedExpiry ? 'Loading…' : 'Select expiry'}
-          </div>
+          chainLoading ? (
+            <div className={s.skeletonWrap}>
+              {Array.from({ length: 14 }, (_, i) => (
+                <div key={i} className={s.skeletonRow}>
+                  {[0.7, 0.5, 0.6, 0.55, 0.65].map((w, j) => (
+                    <div key={j} className={s.skeletonCell} style={{ width: `${w * 14}%`, '--sk-d': `${((i * 5 + j) * 0.04) % 0.8}s` } as React.CSSProperties} />
+                  ))}
+                  <div className={`${s.skeletonCell} ${s.skeletonStrike}`} style={{ width: '10%' }} />
+                  {[0.65, 0.55, 0.6, 0.5, 0.7].map((w, j) => (
+                    <div key={j + 5} className={s.skeletonCell} style={{ width: `${w * 14}%`, '--sk-d': `${((i * 5 + j + 5) * 0.04) % 0.8}s` } as React.CSSProperties} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={s.tableEmpty}>
+              {expiries.length === 0 ? `No MCX options found for "${underlying}"` : 'Select expiry'}
+            </div>
+          )
         ) : (
-          <table style={{ width: totalWidth, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-panel)' }}>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <th colSpan={visibleCeCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#e0a800', letterSpacing: '0.08em', background: '#333333' }}>Call</th>
-                <th style={{ textAlign: 'center', padding: '10px 0', fontSize: 12, fontWeight: 700, color: '#9CA3AF', background: '#333333' }}>Strike</th>
-                <th colSpan={visiblePeCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#818cf8', letterSpacing: '0.08em', background: '#333333' }}>Put</th>
+          <table className={s.table} style={{ width: totalWidth }}>
+            <thead className={s.thead}>
+              <tr className={s.superHeaderRow}>
+                <th colSpan={visibleCeCols.length} className={s.thCall}>Call</th>
+                <th className={s.thStrike}>Strike</th>
+                <th colSpan={visiblePeCols.length} className={s.thPut}>Put</th>
               </tr>
               {table.getHeaderGroups().map(hg => (
-                <tr key={hg.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <tr key={hg.id} className={s.subHeaderRow}>
                   {hg.headers.map(h => {
                     const id = h.column.id;
                     const isStrike = id === 'mstrike';
@@ -1420,24 +1423,23 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
                   <React.Fragment key={row.id}>
                     {showAtmLine && (
                       <tr>
-                        <td colSpan={visibleCeCols.length} style={{ padding: '2px 0', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }} />
-                        <td style={{ textAlign: 'center', padding: '2px 0', fontSize: 11, fontWeight: 800, color: '#e0a800', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }}>{atmStrike ?? ''}</td>
-                        <td colSpan={visiblePeCols.length} style={{ padding: '2px 0', borderTop: '1px dashed rgba(224,168,0,0.4)', background: 'rgba(224,168,0,0.03)' }} />
+                        <td colSpan={visibleCeCols.length} className={s.atmDividerSide} />
+                        <td className={s.atmDividerCenter}>{atmStrike ?? ''}</td>
+                        <td colSpan={visiblePeCols.length} className={s.atmDividerSide} />
                       </tr>
                     )}
-                    <tr className={`oc-row ${data.isAtm ? 'oc-row-atm' : ri % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'}`}
+                    <tr className={`oc-row ${data.isAtm ? 'oc-row-atm' : ri % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'} ${s.dataRow}`}
                       ref={data.isAtm ? atmRowRef : undefined}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.10)' }}
                       onMouseMove={e => {
                         if (popup) return;
                         const tr = e.currentTarget;
-                        const strikeTd = tr.querySelector('td[data-col="mstrike"]') as HTMLElement | null;
-                        if (!strikeTd) return;
-                        const strikeR = strikeTd.getBoundingClientRect();
-                        if (e.clientX >= strikeR.left && e.clientX <= strikeR.right) { hideOverlay(); return; }
-                        const side = e.clientX < strikeR.left ? 'CE' : 'PE';
-                        const ceLtpTd = strikeTd.previousElementSibling as HTMLElement | null;
-                        const peLtpTd = strikeTd.nextElementSibling as HTMLElement | null;
+                        const hoveredTd = (e.target as HTMLElement).closest('td') as HTMLElement | null;
+                        const hoveredCol = hoveredTd?.dataset.col ?? '';
+                        // Only show overlay when hovering directly over CE or PE LTP cell
+                        if (hoveredCol !== 'mce_price' && hoveredCol !== 'mpe_price') { hideOverlay(); return; }
+                        const side = hoveredCol === 'mce_price' ? 'CE' : 'PE';
+                        const ceLtpTd = tr.querySelector('td[data-col="mce_price"]') as HTMLElement | null;
+                        const peLtpTd = tr.querySelector('td[data-col="mpe_price"]') as HTMLElement | null;
                         const ceR = ceLtpTd?.getBoundingClientRect();
                         const peR = peLtpTd?.getBoundingClientRect();
                         const trR = tr.getBoundingClientRect();
@@ -1470,37 +1472,47 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
         )}
       </div>
 
-      <div ref={ceOverlayRef} className="oc-bs-overlay" style={{ display: 'none', position: 'fixed', left: 0, top: 0, pointerEvents: 'none' }}>
-        <button className="oc-btn oc-btn-b" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'CE', action: 'B', price: d.ceLtp, instrumentKey: d.ceKey, greeks: d.ceGreeks }); }}>B</button>
-        <button className="oc-btn oc-btn-s" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'CE', action: 'S', price: d.ceLtp, instrumentKey: d.ceKey, greeks: d.ceGreeks }); }}>S</button>
-      </div>
-      <div ref={peOverlayRef} className="oc-bs-overlay" style={{ display: 'none', position: 'fixed', left: 0, top: 0, pointerEvents: 'none' }}>
-        <button className="oc-btn oc-btn-b" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'PE', action: 'B', price: d.peLtp, instrumentKey: d.peKey, greeks: d.peGreeks }); }}>B</button>
-        <button className="oc-btn oc-btn-s" style={{ pointerEvents: 'auto' }} onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.bottom + 6, strike: d.strike, type: 'PE', action: 'S', price: d.peLtp, instrumentKey: d.peKey, greeks: d.peGreeks }); }}>S</button>
-      </div>
+      {createPortal(<>
+        <div ref={ceOverlayRef} className={`oc-bs-overlay ${s.bsOverlay}`}>
+          <button className="oc-btn oc-btn-b" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'CE', action: 'B', price: d.ceLtp, instrumentKey: d.ceKey, greeks: d.ceGreeks }); }}>B</button>
+          <button className="oc-btn oc-btn-s" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'CE', action: 'S', price: d.ceLtp, instrumentKey: d.ceKey, greeks: d.ceGreeks }); }}>S</button>
+        </div>
+        <div ref={peOverlayRef} className={`oc-bs-overlay ${s.bsOverlay}`}>
+          <button className="oc-btn oc-btn-b" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'PE', action: 'B', price: d.peLtp, instrumentKey: d.peKey, greeks: d.peGreeks }); }}>B</button>
+          <button className="oc-btn oc-btn-s" onMouseDown={e => { e.stopPropagation(); const d = overlayDataRef.current; if (!d) return; const r = (e.target as HTMLElement).getBoundingClientRect(); hideOverlay(); setQty(1); setPopup({ x: r.left + r.width / 2, y: r.top, anchorBottom: r.bottom, strike: d.strike, type: 'PE', action: 'S', price: d.peLtp, instrumentKey: d.peKey, greeks: d.peGreeks }); }}>S</button>
+        </div>
+      </>, document.body)}
 
       {/* Qty popup — same as Nubra */}
-      {popup && (() => {
+      {popup && createPortal((() => {
         const isBuy = popup.action === 'B';
-        const accentColor = isBuy ? '#26a69a' : '#f23645';
-        const accentBg = isBuy ? 'rgba(38,166,154,0.12)' : 'rgba(242,54,69,0.12)';
-        const accentBorder = isBuy ? 'rgba(38,166,154,0.4)' : 'rgba(242,54,69,0.4)';
+        const isCe = popup.type === 'CE';
+        const typeColor = isCe ? '#22c55e' : '#ef4444';
+        const typeBg = isCe ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+        const typeBorder = isCe ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
+        const actionColor = isBuy ? '#4ade80' : '#f87171';
+        const actionBg = isBuy ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)';
+        const spaceBelow = window.innerHeight - popup.anchorBottom;
+        const showAbove = spaceBelow < 320;
+        const posStyle = showAbove
+          ? { bottom: window.innerHeight - popup.y, top: 'auto' as const }
+          : { top: popup.anchorBottom + 6, bottom: 'auto' as const };
         return (
-          <div ref={popupRef} style={{ position: 'fixed', left: popup.x, top: popup.y, transform: 'translateX(-50%)', zIndex: 9999, background: '#1a1a1a', border: `1px solid ${accentBorder}`, borderRadius: 10, padding: '10px 12px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 220, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ padding: '2px 8px', borderRadius: 5, background: accentBg, border: `1px solid ${accentBorder}` }}><span style={{ fontSize: 12, fontWeight: 800, color: accentColor }}>{popup.action === 'B' ? 'BUY' : 'SELL'}</span></div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa' }}>{popup.strike}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: popup.type === 'CE' ? '#facc15' : '#c084fc' }}>{popup.type}</span>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => setPopup(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4B5563', padding: 0, display: 'flex' }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+          <div ref={popupRef} className={s.popup} style={{ left: popup.x, ...posStyle }}>
+            <div className={s.popupHeader}>
+              <span className={s.popupActionBadge} style={{ color: actionColor, background: actionBg }}>{isBuy ? 'BUY' : 'SELL'}</span>
+              <span className={s.popupStrike}>{popup.strike}</span>
+              <span className={s.popupTypeBadge} style={{ color: typeColor, background: typeBg, border: `1px solid ${typeBorder}` }}>{popup.type}</span>
+              <div className={s.popupSpacer} />
+              <button onClick={() => setPopup(null)} className={s.popupCloseBtn}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
-            <div style={{ fontSize: 11, color: '#4B5563' }}>@ <span style={{ color: '#E2E8F0', fontWeight: 600 }}>₹{popup.price.toFixed(2)}</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, flex: 1 }}>Qty</span>
-              <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden' }}>
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ width: 26, height: 26, background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <input type="number" value={qty} min={1} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(v); }} onBlur={e => { const v = parseInt(e.target.value); setQty(isNaN(v) || v < 1 ? 1 : v); }} style={{ width: 54, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#E2E8F0', background: 'transparent', border: 'none', outline: 'none', MozAppearance: 'textfield' }} />
-                <button onClick={() => setQty(q => q + 1)} style={{ width: 26, height: 26, background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            <div className={s.popupLtpRow}>LTP <span className={s.popupLtpValue}>₹{popup.price.toFixed(2)}</span></div>
+            <div className={s.popupQtyRow}>
+              <span className={s.popupQtyLabel}>Qty</span>
+              <div className={s.popupStepper}>
+                <button onClick={() => setQty(q => Math.max(1, q - 1))} className={s.popupStepBtn}>−</button>
+                <input type="number" value={qty} min={1} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setQty(v); }} onBlur={e => { const v = parseInt(e.target.value); setQty(isNaN(v) || v < 1 ? 1 : v); }} className={s.popupQtyInput} />
+                <button onClick={() => setQty(q => q + 1)} className={s.popupStepBtn}>+</button>
               </div>
             </div>
             {isHistoricalMode && (
@@ -1560,10 +1572,10 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
               } finally {
                 setFetching(false);
               }
-            }} style={{ padding: '6px 0', borderRadius: 7, background: fetching ? 'rgba(255,255,255,0.05)' : accentBg, border: `1px solid ${accentBorder}`, color: fetching ? '#6B7280' : accentColor, fontSize: 12, fontWeight: 700, cursor: fetching ? 'not-allowed' : 'pointer', letterSpacing: '0.04em' }}>{fetching ? 'Fetching price…' : 'Add to Basket'}</button>
+            }} className={s.popupConfirmBtn} style={{ background: fetching ? 'rgba(255,255,255,0.05)' : typeBg, border: `1px solid ${typeBorder}`, color: fetching ? '#6B7280' : typeColor, cursor: fetching ? 'not-allowed' : 'pointer' }}>{fetching ? 'Fetching price…' : 'Add to Basket'}</button>
           </div>
         );
-      })()}
+      })(), document.body)}
     </div>
   );
 }

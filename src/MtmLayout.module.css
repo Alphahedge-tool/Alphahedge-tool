@@ -1,0 +1,526 @@
+/* ── MtmLayout.module.css ─────────────────────────────────────────────────── */
+
+/* ── Root container ──────────────────────────────────────────────────────── */
+.root {
+  padding: 8px;
+  gap: 4px;
+  background: var(--bg-base);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+}
+
+/* ── Left panel ──────────────────────────────────────────────────────────── */
+.leftPanel {
+  min-width: 0;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background: #171717;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.leftPanelHistorical {
+  background: rgba(255, 152, 0, 0.06);
+  border-radius: 16px;
+  border: 1.5px solid rgba(255, 152, 0, 0.45);
+  box-shadow: 0 0 25px rgba(255, 152, 0, 0.1) inset;
+}
+
+/* ── Toolbar row (search + controls) ────────────────────────────────────── */
+.toolbar {
+  padding: 7px 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Search box ──────────────────────────────────────────────────────────── */
+.searchWrap {
+  width: 35%;
+  position: relative;
+  min-width: 220px;
+}
+.searchBox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  background: #1A1E2B;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.searchBox:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #D1D4DC;
+  caret-color: #818cf8;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-width: 0;
+}
+.searchClearBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #787B86;
+  display: flex;
+  padding: 3px;
+  border-radius: 4px;
+}
+.searchClearBtn:hover {
+  color: #D1D4DC;
+}
+
+/* ── Search dropdown ─────────────────────────────────────────────────────── */
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  background: #0F1117;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 340px;
+}
+.dropdownList {
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.dropdownEmpty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #3D4150;
+}
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.08s;
+}
+.dropdownItem:hover {
+  background: rgba(79, 142, 247, 0.10);
+}
+.dropdownItemActive {
+  background: rgba(79, 142, 247, 0.10);
+}
+.dropdownItemIcon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dropdownItemBody {
+  flex: 1;
+  min-width: 0;
+}
+.dropdownItemName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #E0E3EB;
+}
+.dropdownItemExch {
+  font-size: 11px;
+  color: #565A6B;
+  margin-top: 1px;
+}
+.dropdownFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #4A4E5C;
+}
+
+/* ── Legs scroll area ────────────────────────────────────────────────────── */
+.legsScroll {
+  flex: 1;
+  padding: 0 10px 14px 10px;
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.legsInner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legsEmpty {
+  padding: 24px;
+  text-align: center;
+  color: #3D4150;
+  font-size: 13px;
+}
+.legsLoading {
+  padding: 24px;
+  text-align: center;
+  color: #3D4150;
+  font-size: 13px;
+}
+
+/* ── Column header row ───────────────────────────────────────────────────── */
+.colHeader {
+  background: #1E2130;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.colHeaderTh {
+  padding: 7px 6px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  color: #565A6B;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Group block ─────────────────────────────────────────────────────────── */
+.groupBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* ── Group header ────────────────────────────────────────────────────────── */
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  margin: 2px 0;
+}
+.groupAccentBar {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.groupSymbol {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.groupLegCount {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 500;
+  padding-left: 4px;
+}
+.groupNetLabel {
+  font-size: 10px;
+  color: #6B7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.groupNetMtm {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ── Legs table ──────────────────────────────────────────────────────────── */
+.legsTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  table-layout: fixed;
+}
+
+/* ── Leg row ─────────────────────────────────────────────────────────────── */
+.legRow {
+  transition: opacity 0.2s;
+}
+.legRowUnchecked {
+  opacity: 0.38;
+}
+.legRowBuy {
+  background: rgba(38, 166, 154, 0.05);
+}
+.legRowSell {
+  background: rgba(242, 54, 69, 0.05);
+}
+.legCell {
+  padding: 3px 3px;
+  vertical-align: middle;
+}
+.legCellFirst {
+  border-top-left-radius: 7px;
+  border-bottom-left-radius: 7px;
+}
+.legCellLast {
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+.legCellBorderBuy {
+  border-top: 1px solid rgba(38, 166, 154, 0.15);
+  border-bottom: 1px solid rgba(38, 166, 154, 0.15);
+}
+.legCellBorderBuyFirst {
+  border-left: 1px solid rgba(38, 166, 154, 0.15);
+}
+.legCellBorderBuyLast {
+  border-right: 1px solid rgba(38, 166, 154, 0.15);
+}
+.legCellBorderSell {
+  border-top: 1px solid rgba(242, 54, 69, 0.15);
+  border-bottom: 1px solid rgba(242, 54, 69, 0.15);
+}
+.legCellBorderSellFirst {
+  border-left: 1px solid rgba(242, 54, 69, 0.15);
+}
+.legCellBorderSellLast {
+  border-right: 1px solid rgba(242, 54, 69, 0.15);
+}
+
+/* ── Cell widgets ────────────────────────────────────────────────────────── */
+.cellBox {
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cellBoxCenter {
+  padding: 0 6px;
+}
+.cellVal {
+  font-size: 13px;
+  font-weight: 600;
+  color: #D1D4DC;
+  white-space: nowrap;
+}
+.cellValMono {
+  font-size: 13px;
+  font-weight: 600;
+  color: #D1D4DC;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cellValDim {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6B7280;
+  white-space: nowrap;
+}
+.cellValStrike {
+  font-size: 13px;
+  font-weight: 700;
+  color: #60a5fa;
+  font-variant-numeric: tabular-nums;
+}
+
+/* MTM cell */
+.mtmPos {
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(38, 166, 154, 0.10);
+  border: 1px solid rgba(38, 166, 154, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mtmNeg {
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(242, 54, 69, 0.10);
+  border: 1px solid rgba(242, 54, 69, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mtmValPos {
+  font-size: 13px;
+  font-weight: 800;
+  color: #26a69a;
+  font-variant-numeric: tabular-nums;
+}
+.mtmValNeg {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f23645;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Action B/S badge */
+.actionBuy {
+  width: 28px;
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(38, 166, 154, 0.15);
+  border: 1px solid rgba(38, 166, 154, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.actionSell {
+  width: 28px;
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(242, 54, 69, 0.15);
+  border: 1px solid rgba(242, 54, 69, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.actionLabelBuy { font-size: 13px; font-weight: 800; color: #26a69a; }
+.actionLabelSell { font-size: 13px; font-weight: 800; color: #f23645; }
+
+/* Type CE/PE badge */
+.typeBadge {
+  width: 36px;
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.typeCe { font-size: 13px; font-weight: 700; color: #facc15; }
+.typePe { font-size: 13px; font-weight: 700; color: #c084fc; }
+
+/* Checkbox */
+.checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.checkboxOn {
+  background: rgba(129, 140, 248, 0.15);
+  border: 1px solid rgba(129, 140, 248, 0.5);
+}
+.checkboxOff {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Lots stepper */
+.lotsStepper {
+  width: 88px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.lotsStepBtn {
+  width: 22px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lotsStepBtn:hover { color: #D1D4DC; }
+.lotsInput {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #E2E8F0;
+  background: transparent;
+  border: none;
+  outline: none;
+  min-width: 0;
+  width: 0;
+}
+
+/* Delete button */
+.deleteBtn {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.deleteBtn:hover { color: #f23645; }
+
+/* ── Right panel ─────────────────────────────────────────────────────────── */
+.rightPanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #171717;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Split divider ───────────────────────────────────────────────────────── */
+.divider {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+.divider:hover { background: rgba(255, 255, 255, 0.08); }

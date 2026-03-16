@@ -1,0 +1,601 @@
+/* ── WorkspaceRoot.module.css ─────────────────────────────────────────────── */
+
+/* ── WorkspaceRoot container ── */
+.workspaceRoot {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #171717;
+}
+
+/* ── Drawing toolbar + pane grid row ── */
+.bodyRow {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Pane grid ── */
+.paneGrid {
+  flex: 1;
+  display: grid;
+  min-height: 0;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ── WorkspaceToolbar ── */
+.toolbar {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 3px;
+  background: rgba(13, 13, 13, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  min-width: 0;
+  user-select: none;
+  font-family: inherit;
+  backdrop-filter: blur(12px);
+}
+
+/* ── Toolbar separator ── */
+.sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 10px 8px;
+  background: rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+/* ── Symbol search button ── */
+.symbolSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  background: #1a1e2b;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-width: 140px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.symbolLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.symbolPlaceholder {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+  letter-spacing: 0.02em;
+}
+
+/* ── View-type toggle group ── */
+.viewGroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+/* ── View-type toggle button (static base) ── */
+.viewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  user-select: none;
+  transition: color 0.12s, background 0.12s;
+}
+
+.viewBtnInactive {
+  font-weight: 400;
+  color: #787b86;
+}
+
+.viewBtnActive {
+  font-weight: 600;
+  color: #d1d4dc;
+}
+
+/* ── Generic toolbar icon/label button (tbBtn) ── */
+.tbBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tbBtnIconOnly {
+  gap: 0;
+  padding: 0 8px;
+}
+
+.tbBtnWithLabel {
+  gap: 6px;
+  padding: 0 11px;
+}
+
+.tbBtnActive {
+  font-weight: 600;
+}
+
+.tbBtnInactive {
+  font-weight: 500;
+}
+
+/* ── Icon wrapper inside buttons ── */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.labelWrap {
+  line-height: 1;
+}
+
+/* ── IntervalDropdown trigger button ── */
+.intervalBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #d1d4dc;
+  letter-spacing: 0.02em;
+  transition: color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+
+/* ── Dropdown chevron SVG (shared) ── */
+.chevronOpen {
+  transform: rotate(180deg);
+  transition: transform 0.15s;
+}
+
+.chevronClosed {
+  transform: none;
+  transition: transform 0.15s;
+}
+
+/* ── Dropdown portal backdrop ── */
+.dropdownBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+}
+
+/* ── Interval dropdown panel ── */
+.intervalPanel {
+  position: fixed;
+  z-index: 9501;
+  background: #0f1117;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 130px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.90);
+}
+
+.dropdownLabel {
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4a4e5c;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ── Interval item button ── */
+.intervalItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.1s;
+}
+
+.intervalItemActive {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.intervalItemInactive {
+  background: transparent;
+  font-weight: 500;
+  color: #9b9ea8;
+}
+
+/* ── LayoutButton trigger ── */
+.layoutBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.layoutBtnInactive {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #787b86;
+}
+
+.layoutBtnActive {
+  background: rgba(255, 152, 0, 0.10);
+  border: 1px solid rgba(255, 152, 0, 0.45);
+  color: #ff9800;
+}
+
+/* ── IndicatorsDropdown trigger ── */
+.indicatorsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  transition: all 0.12s;
+  white-space: nowrap;
+  user-select: none;
+  font-family: inherit;
+}
+
+.indicatorsBtnInactive {
+  background: transparent;
+  border: 1px solid transparent;
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.indicatorsBtnOpen {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.indicatorsBtnActive {
+  background: rgba(79, 142, 247, 0.12);
+  border: 1px solid rgba(79, 142, 247, 0.35);
+  font-weight: 600;
+  color: #4f8ef7;
+}
+
+.indicatorsFxIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 15px;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: -0.03em;
+  width: 20px;
+  height: 20px;
+}
+
+.indicatorsLabel {
+  line-height: 1;
+}
+
+.indicatorsBadge {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4f8ef7;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.indicatorsChevronWrap {
+  display: flex;
+  align-items: center;
+  line-height: 0;
+  opacity: 0.4;
+}
+
+/* ── Indicators dropdown panel ── */
+.indicatorsPanel {
+  position: fixed;
+  z-index: 9501;
+  background: #0f1117;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 8px;
+  width: 240px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.80), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.indicatorsPanelLabel {
+  padding: 2px 6px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4a4e5c;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ── VWAP / TWAP indicator card ── */
+.indicatorCardVwap {
+  border-radius: 7px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.indicatorCardVwapOn {
+  border: 1px solid rgba(255, 215, 0, 0.20);
+  background: rgba(255, 215, 0, 0.05);
+}
+
+.indicatorCardVwapOff {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.indicatorCardTwap {
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.indicatorCardTwapOn {
+  border: 1px solid rgba(0, 191, 255, 0.20);
+  background: rgba(0, 191, 255, 0.05);
+}
+
+.indicatorCardTwapOff {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Indicator toggle row button ── */
+.indicatorToggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+/* ── Toggle pill ── */
+.togglePill {
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.2s;
+  display: inline-block;
+}
+
+.togglePillOn {
+  background: #ffd700;
+}
+
+.togglePillOff {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.togglePillTwapOn {
+  background: #00bfff;
+}
+
+.toggleKnobBase {
+  position: absolute;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: left 0.2s, background 0.2s;
+}
+
+.toggleKnobOn {
+  left: 16px;
+  background: #000;
+}
+
+.toggleKnobOff {
+  left: 3px;
+  background: #787b86;
+}
+
+/* ── Indicator text block ── */
+.indicatorTextBlock {
+  flex: 1;
+  text-align: left;
+}
+
+.indicatorNameOn {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+
+.indicatorNameOff {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9b9ea8;
+  letter-spacing: 0.02em;
+}
+
+.indicatorDesc {
+  font-size: 10px;
+  color: #4a4e5c;
+  margin-top: 1px;
+}
+
+/* ── VWAP settings section ── */
+.vwapSettings {
+  border-top: 1px solid rgba(255, 215, 0, 0.12);
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settingsSectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4a4e5c;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+/* ── Color swatch row ── */
+.colorSwatchRow {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.colorSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s;
+}
+
+.colorSwatchCustomLabel {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.colorSwatchCustomInner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px dashed rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+  color: #787b86;
+}
+
+.colorInputHidden {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+/* ── Anchor period button row ── */
+.anchorRow {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.anchorBtn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.12s;
+}
+
+.anchorBtnActive {
+  background: rgba(255, 215, 0, 0.15);
+  font-weight: 700;
+}
+
+.anchorBtnInactive {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 500;
+  color: #787b86;
+}
+
+/* ── Expiry day button row ── */
+.expiryRow {
+  display: flex;
+  gap: 4px;
+}
+
+.expiryBtn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.12s;
+}
+
+.expiryBtnActive {
+  font-weight: 700;
+}
+
+.expiryBtnInactive {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 500;
+  color: #787b86;
+}

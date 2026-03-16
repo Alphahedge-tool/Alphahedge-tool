@@ -1,0 +1,340 @@
+/* ── ViewTypePicker ──────────────────────────────────────────────────────────── */
+
+.viewPickerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9B9EA8;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.viewPickerBtn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #D1D4DC;
+}
+
+.viewPickerChevron {
+  transition: transform 0.15s;
+}
+
+.viewPickerChevronOpen {
+  transform: rotate(180deg);
+}
+
+.viewPickerChevronClosed {
+  transform: rotate(0deg);
+}
+
+.viewPickerMenu {
+  position: fixed;
+  z-index: 9600;
+  background: #1f1f1f;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 130px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+}
+
+.viewPickerOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.viewPickerOptionActive {
+  background: rgba(255, 152, 0, 0.10);
+  font-weight: 700;
+  color: #FF9800;
+}
+
+.viewPickerOptionInactive {
+  background: transparent;
+  font-weight: 500;
+  color: #C4C7D0;
+}
+
+.viewPickerOptionInactive:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── PaneActionModal ─────────────────────────────────────────────────────────── */
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.modalCard {
+  background: rgba(17, 20, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  padding: 24px 20px 20px;
+  width: 320px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.modalTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #D1D4DC;
+  letter-spacing: 0.02em;
+}
+
+.modalCloseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #4A4E5C;
+  padding: 2px;
+  display: flex;
+}
+
+/* Search option button */
+.modalOptionBtnSearch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(255, 152, 0, 0.06);
+  border: 1px solid rgba(255, 152, 0, 0.20);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: left;
+}
+
+.modalOptionBtnSearch:hover {
+  background: rgba(255, 152, 0, 0.12);
+  border-color: rgba(255, 152, 0, 0.40);
+}
+
+/* Straddle option button */
+.modalOptionBtnStraddle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(123, 104, 238, 0.06);
+  border: 1px solid rgba(123, 104, 238, 0.18);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: left;
+}
+
+.modalOptionBtnStraddle:hover {
+  background: rgba(123, 104, 238, 0.12);
+  border-color: rgba(123, 104, 238, 0.38);
+}
+
+/* OI Profile option button */
+.modalOptionBtnOi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(255, 152, 0, 0.04);
+  border: 1px solid rgba(255, 152, 0, 0.14);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: left;
+}
+
+.modalOptionBtnOi:hover {
+  background: rgba(255, 152, 0, 0.10);
+  border-color: rgba(255, 152, 0, 0.32);
+}
+
+/* Option icon containers */
+.modalOptionIconSearch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(255, 152, 0, 0.14);
+  color: #FF9800;
+}
+
+.modalOptionIconStraddle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(123, 104, 238, 0.14);
+  color: #7B68EE;
+}
+
+.modalOptionIconOi {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(255, 152, 0, 0.12);
+  color: #FF9800;
+}
+
+/* Option text stacks */
+.modalOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modalOptionLabelSearch {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FF9800;
+}
+
+.modalOptionLabelStraddle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7B68EE;
+}
+
+.modalOptionLabelOi {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FF9800;
+}
+
+.modalOptionSubtitle {
+  font-size: 10px;
+  color: #787B86;
+}
+
+/* Divider */
+.modalDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.modalDividerLine {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.modalDividerLabel {
+  font-size: 9px;
+  color: #4A4E5C;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── EmptyPane ───────────────────────────────────────────────────────────────── */
+
+.emptyPane {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  background: #171717;
+  color: #4A4E5C;
+}
+
+.emptyPaneTextBlock {
+  text-align: center;
+}
+
+.emptyPaneTitle {
+  font-size: 13px;
+  color: #787B86;
+  margin-bottom: 4px;
+}
+
+.emptyPaneSubtitle {
+  font-size: 11px;
+  color: #4A4E5C;
+}
+
+/* ── PaneShell ───────────────────────────────────────────────────────────────── */
+
+.paneShell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: #171717;
+  transition: border-color 0.15s;
+}
+
+.paneShellActive {
+  border: 1px solid rgba(255, 152, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 152, 0, 0.15) inset;
+}
+
+.paneShellInactive {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
+
+.paneHeader {
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.paneContent {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}

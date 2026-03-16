@@ -1,0 +1,14 @@
+.divider {
+  position: relative;
+  overflow: hidden;
+}
+
+.centerLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}

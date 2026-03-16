@@ -35,6 +35,8 @@ import type { Instrument } from './useInstruments';
 import { wsManager } from './lib/WebSocketManager';
 import { fmtGex } from './lib/GexService';
 import type { StrikeSpec } from './lib/GexService';
+import s from './OIProfileView.module.css';
+import { cx } from './lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -195,50 +197,36 @@ function GlassSelect({
   };
 
   return (
-    <div style={{ flexShrink: 0 }}>
+    <div className={s.selectWrapper}>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          minWidth, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 8px', cursor: isDisabled ? 'not-allowed' : 'pointer', gap: 4,
-          border: '1px solid rgba(255,255,255,0.12)', background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, opacity: isDisabled ? 0.4 : 1, boxSizing: 'border-box', userSelect: 'none',
-          color: displayLabel ? '#D1D4DC' : '#52525b', fontSize: 12, fontWeight: 600,
-        }}
+        className={cx(s.selectBtn, open ? s.selectBtnOpen : s.selectBtnClosed, isDisabled ? s.selectBtnDisabled : '')}
+        style={{ minWidth }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+        <span className={displayLabel ? s.selectBtnText : s.selectBtnTextPlaceholder}>
           {displayLabel ?? (placeholder ?? 'Select…')}
         </span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className={s.selectChevron}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          minWidth: Math.max(minWidth, 160), overflow: 'hidden',
-        }}>
-          <div style={{ padding: 8, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div ref={dropRef} className={s.dropdown} style={{ top: pos.top, left: pos.left, minWidth: Math.max(minWidth, 160) }}>
+          <div className={s.dropdownSearchRow}>
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '5px 8px',
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 5, outline: 'none', fontSize: 12, color: '#D1D4DC',
-              }}
+              className={s.dropdownSearchInput}
             />
           </div>
-          <div style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 0' }}>
+          <div className={s.dropdownList}>
             {filtered.length === 0 && (
-              <div style={{ padding: '10px 12px', fontSize: 11, color: '#52525b', textAlign: 'center' }}>No matches</div>
+              <div className={s.dropdownEmpty}>No matches</div>
             )}
             {filtered.map(o => {
               const lbl = formatLabel ? formatLabel(o) : String(o);
@@ -251,16 +239,10 @@ function GlassSelect({
                     onChange(typeof first === 'number' ? Number(o) : o);
                     setOpen(false); setSearch('');
                   }}
-                  className="oi-select-option"
-                  style={{
-                    padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                    color: isActive ? '#FF9800' : '#D1D4DC',
-                    background: isActive ? 'rgba(255,152,0,0.08)' : undefined,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  }}
+                  className={cx('oi-select-option', isActive ? s.dropdownOptionActive : s.dropdownOptionInactive)}
                 >
                   <span>{lbl}</span>
-                  {isActive && <span style={{ fontSize: 10, color: '#FF9800' }}>✓</span>}
+                  {isActive && <span className={s.dropdownCheck}>✓</span>}
                 </div>
               );
             })}
@@ -565,50 +547,39 @@ function IvDateInput({ value, onCommit }: { value: string; onCommit: (v: string)
   const displayDate = `${String(selDay).padStart(2,'0')} ${MONTH_NAMES[selMonth-1]} ${selYear}`;
 
   return (
-    <div style={{ flexShrink: 0 }}>
+    <div className={s.selectWrapper}>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          height: 26, display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '0 8px', cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box',
-          border: '1px solid rgba(255,255,255,0.12)',
-          background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, color: '#D1D4DC', fontSize: 11, fontWeight: 600,
-        }}
+        className={cx(s.ivDateBtn, open ? s.ivDateBtnOpen : s.ivDateBtnClosed)}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5, flexShrink: 0 }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={s.ivDateCalIcon}>
           <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
         </svg>
         <span>{displayDate}</span>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 10, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          width: 230, padding: '12px 10px', userSelect: 'none',
-        }}>
+        <div ref={dropRef} className={s.calendarDropdown} style={{ top: pos.top, left: pos.left }}>
           {/* Month nav */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px' }}>
-            <button type="button" onClick={prevMonth} style={{ background: 'none', border: 'none', color: '#787B86', cursor: 'pointer', padding: '2px 6px', borderRadius: 4, fontSize: 14 }}>‹</button>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#D1D4DC' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
+          <div className={s.calNavRow}>
+            <button type="button" onClick={prevMonth} className={s.calNavBtn}>‹</button>
+            <span className={s.calMonthLabel}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
             <button type="button" onClick={nextMonth}
               disabled={viewYear > todayY || (viewYear === todayY && viewMonth >= todayM - 1)}
-              style={{ background: 'none', border: 'none', cursor: (viewYear > todayY || (viewYear === todayY && viewMonth >= todayM - 1)) ? 'not-allowed' : 'pointer', color: (viewYear > todayY || (viewYear === todayY && viewMonth >= todayM - 1)) ? '#3a3a3a' : '#787B86', padding: '2px 6px', borderRadius: 4, fontSize: 14 }}>›</button>
+              className={cx(viewYear > todayY || (viewYear === todayY && viewMonth >= todayM - 1) ? s.calNavBtnDisabled : s.calNavBtn)}>›</button>
           </div>
 
           {/* Day headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
+          <div className={s.calDayHeaders}>
             {DAY_NAMES.map(d => (
-              <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, color: '#52525b', padding: '2px 0' }}>{d}</div>
+              <div key={d} className={s.calDayHeader}>{d}</div>
             ))}
           </div>
 
           {/* Day cells */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+          <div className={s.calDayGrid}>
             {cells.map((d, i) => {
               if (!d) return <div key={i} />;
               const mm = String(viewMonth + 1).padStart(2, '0');
@@ -623,24 +594,15 @@ function IvDateInput({ value, onCommit }: { value: string; onCommit: (v: string)
                   type="button"
                   disabled={isFuture}
                   onClick={() => selectDay(d)}
-                  style={{
-                    height: 28, width: '100%', border: 'none', cursor: isFuture ? 'not-allowed' : 'pointer',
-                    borderRadius: 6, fontSize: 11, fontWeight: isSelected ? 700 : 500,
-                    background: isSelected ? '#FF9800' : isToday ? 'rgba(255,152,0,0.12)' : 'transparent',
-                    color: isSelected ? '#000' : isFuture ? '#2e2e2e' : isToday ? '#FF9800' : '#D1D4DC',
-                    outline: 'none',
-                  }}
+                  className={cx(s.calDayBtn, isSelected ? s.calDayBtnSelected : isFuture ? s.calDayBtnFuture : isToday ? s.calDayBtnToday : s.calDayBtnNormal)}
                 >{d}</button>
               );
             })}
           </div>
 
           {/* Today shortcut */}
-          <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 8, textAlign: 'center' }}>
-            <button type="button" onClick={() => { onCommit(today); setOpen(false); }} style={{
-              background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 5,
-              color: '#787B86', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: '3px 14px',
-            }}>Today</button>
+          <div className={s.calTodayRow}>
+            <button type="button" onClick={() => { onCommit(today); setOpen(false); }} className={s.calTodayBtn}>Today</button>
           </div>
         </div>,
         document.body
@@ -704,32 +666,22 @@ function ViewModeDropdown({
   ) ?? VIEW_OPTIONS[0];
 
   return (
-    <div style={{ padding: '0 6px', flexShrink: 0 }}>
+    <div className={s.selectWrapperPadded}>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 8px', gap: 4, cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box',
-          border: '1px solid rgba(255,255,255,0.12)',
-          background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, color: '#D1D4DC', fontSize: 12, fontWeight: 600, minWidth: 72,
-        }}
+        className={cx(s.selectBtn, open ? s.selectBtnOpen : s.selectBtnClosed)}
+        style={{ minWidth: 72 }}
       >
         <span>{activeOpt.label}</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className={s.selectChevron}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          minWidth: 160, padding: '4px 0', overflow: 'hidden',
-        }}>
+        <div ref={dropRef} className={s.dropdown} style={{ top: pos.top, left: pos.left, minWidth: 160, padding: '4px 0' }}>
           {VIEW_OPTIONS.map(opt => {
             const isActive = opt.viewMode === viewMode && (opt.viewMode === 'oi' || opt.gexMode === gexMode);
             return (
@@ -741,18 +693,13 @@ function ViewModeDropdown({
                   if (opt.gexMode) onGexMode(opt.gexMode);
                   setOpen(false);
                 }}
-                className="oi-select-option"
-                style={{
-                  padding: '7px 14px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                  background: isActive ? 'rgba(255,152,0,0.08)' : undefined,
-                }}
+                className={cx('oi-select-option', s.viewDropdownOption, isActive ? s.viewDropdownOptionActive : '')}
               >
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#FF9800' : '#D1D4DC' }}>{opt.label}</div>
-                  {opt.sub && <div style={{ fontSize: 10, color: '#52525b', marginTop: 1 }}>{opt.sub}</div>}
+                  <div className={cx(s.viewOptLabel, isActive ? s.viewOptLabelActive : s.viewOptLabelInactive)}>{opt.label}</div>
+                  {opt.sub && <div className={s.viewOptSub}>{opt.sub}</div>}
                 </div>
-                {isActive && <span style={{ fontSize: 10, color: '#FF9800' }}>✓</span>}
+                {isActive && <span className={s.dropdownCheck}>✓</span>}
               </div>
             );
           })}
@@ -787,48 +734,32 @@ function IntervalDropdown({ value, onChange }: { value: IntervalDef; onChange: (
   };
 
   return (
-    <div style={{ padding: '0 6px', flexShrink: 0 }}>
+    <div className={s.selectWrapperPadded}>
       <button
         ref={btnRef}
         type="button"
         onClick={handleOpen}
-        style={{
-          height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 8px', gap: 4, cursor: 'pointer', userSelect: 'none', boxSizing: 'border-box',
-          border: '1px solid rgba(255,255,255,0.12)',
-          background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-          borderRadius: 6, color: '#D1D4DC', fontSize: 12, fontWeight: 600, minWidth: 64,
-        }}
+        className={cx(s.selectBtn, open ? s.selectBtnOpen : s.selectBtnClosed)}
+        style={{ minWidth: 64 }}
       >
         <span>{value.label}</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className={s.selectChevron}>
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7"/>
         </svg>
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
-          position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999,
-          background: 'rgba(19,23,34,0.97)', border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 8, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-          minWidth: 120, padding: '4px 0', overflow: 'hidden',
-        }}>
+        <div ref={dropRef} className={s.dropdown} style={{ top: pos.top, left: pos.left, minWidth: 120, padding: '4px 0' }}>
           {INTERVALS.map(iv => {
             const isActive = iv.value === value.value;
             return (
               <div
                 key={iv.value}
                 onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onChange(iv); setOpen(false); }}
-                className="oi-select-option"
-                style={{
-                  padding: '7px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  color: isActive ? '#FF9800' : '#D1D4DC',
-                  background: isActive ? 'rgba(255,152,0,0.08)' : undefined,
-                }}
+                className={cx('oi-select-option', s.intervalOption, isActive ? s.intervalOptionActive : s.intervalOptionInactive)}
               >
                 <span>{iv.label}</span>
-                {isActive && <span style={{ fontSize: 10, color: '#FF9800' }}>✓</span>}
+                {isActive && <span className={s.dropdownCheck}>✓</span>}
               </div>
             );
           })}
@@ -1748,60 +1679,54 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex overflow-hidden" style={{ height: '100%', background: 'transparent' }}>
+    <div className={s.panelShell}>
 
       {/* Left: OI table */}
       <div
-        className="flex flex-col shrink-0 overflow-hidden"
+        className={s.tableCol}
         style={{
           width: tableCollapsed ? 0 : 220,
           borderRight: tableCollapsed ? 'none' : '1px solid #2a2a2a',
-          background: '#171717',
-          transition: 'width 0.2s ease',
         }}
       >
         {/* PCR totals */}
         {(underlying && expiry) && (
-          <div
-            className="flex gap-3 px-3 py-2 shrink-0"
-            style={{ borderBottom: '1px solid #2a2a2a' }}
-          >
+          <div className={s.pcrRow}>
             <div>
-              <span style={{ fontSize: 10, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CALL OI</span>
-              <p style={{ fontSize: 13, color: '#f23645', fontFamily: 'inherit', margin: 0 }}>{fmtOI(totalCallOI)}</p>
+              <span className={s.pcrLabel}>CALL OI</span>
+              <p className={s.pcrValueCall}>{fmtOI(totalCallOI)}</p>
             </div>
             <div>
-              <span style={{ fontSize: 10, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.08em' }}>PUT OI</span>
-              <p style={{ fontSize: 13, color: '#2ebd85', fontFamily: 'inherit', margin: 0 }}>{fmtOI(totalPutOI)}</p>
+              <span className={s.pcrLabel}>PUT OI</span>
+              <p className={s.pcrValuePut}>{fmtOI(totalPutOI)}</p>
             </div>
             <div>
-              <span style={{ fontSize: 10, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.08em' }}>PCR</span>
-              <p style={{ fontSize: 13, color: '#fafafa', fontFamily: 'inherit', margin: 0 }}>{pcr}</p>
+              <span className={s.pcrLabel}>PCR</span>
+              <p className={s.pcrValueNeutral}>{pcr}</p>
             </div>
           </div>
         )}
 
         {/* OI rows */}
-        <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        <div className={s.tableScroll}>
           {oiRows.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-center px-3"
-              style={{ fontSize: 10, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <div className={s.tableEmpty}>
               {underlying && expiry ? 'WAITING FOR LIVE DATA' : 'SELECT UNDERLYING & EXPIRY'}
             </div>
           ) : (
-            <table className="w-full border-collapse">
+            <table className={s.oiTable}>
               <thead>
-                <tr style={{ background: '#171717', borderBottom: '1px solid #2a2a2a' }}>
-                  <th className="text-right px-2 py-1" style={{ letterSpacing: '0.08em' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#f23645', textTransform: 'uppercase' }}>
+                <tr className={s.oiTableHead}>
+                  <th className={s.oiThLetter}>
+                    <span className={s.thLabelCall}>
                       {viewMode === 'oi' ? 'CALL OI' : 'CALL GEX'}
                     </span>
                   </th>
-                  <th className="text-center px-1 py-1" style={{ letterSpacing: '0.08em' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#FF9800', textTransform: 'uppercase' }}>STRIKE</span>
+                  <th className={s.oiThCenter}>
+                    <span className={s.thLabelStrike}>STRIKE</span>
                   </th>
-                  <th className="text-left px-2 py-1" style={{ letterSpacing: '0.08em' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#2ebd85', textTransform: 'uppercase' }}>
+                  <th className={s.oiThRight}>
+                    <span className={s.thLabelPut}>
                       {viewMode === 'oi' ? 'PUT OI' : 'PUT GEX'}
                     </span>
                   </th>
@@ -1819,34 +1744,28 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
                   const putPct  = viewMode === 'oi' ? (row.putOI  / Math.max(maxOI, 1)) * 100 : 0;
 
                   return (
-                    <tr
-                      key={row.strike}
-                      style={{
-                        borderBottom: '1px solid #2a2a2a',
-                        background: isHot ? 'rgba(255,152,0,0.08)' : undefined,
-                      }}
-                    >
-                      <td className="px-2 py-0.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <span style={{ fontSize: 12, fontWeight: 600, width: 56, textAlign: 'right', flexShrink: 0, color: viewMode === 'oi' ? '#f23645' : '#818cf8' }}>
+                    <tr key={row.strike} className={isHot ? s.oiRowHot : s.oiRow}>
+                      <td className={s.oiTdRight}>
+                        <div className={s.oiCellInner}>
+                          <span className={viewMode === 'oi' ? s.oiValueCall : s.oiValueCallGex}>
                             {viewMode === 'oi'
                               ? (row.callOI > 0 ? fmtOI(row.callOI) : '—')
                               : fmtGex(callGex)}
                           </span>
                           {viewMode === 'oi' && (
-                            <div style={{ height: 4, flexShrink: 0, width: callPct * 0.3 + 'px', background: '#f23645', minWidth: row.callOI > 0 ? 2 : 0, opacity: 0.7 }} />
+                            <div className={s.oiBarCall} style={{ width: callPct * 0.3 + 'px', minWidth: row.callOI > 0 ? 2 : 0 }} />
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-0.5 text-center" style={{ fontSize: 12, fontWeight: 700, color: '#FF9800' }}>
+                      <td className={s.oiTdCenter}>
                         {row.strike.toLocaleString('en-IN')}
                       </td>
-                      <td className="px-2 py-0.5 text-left">
-                        <div className="flex items-center gap-1">
+                      <td className={s.oiTdLeft}>
+                        <div className={s.oiCellInnerLeft}>
                           {viewMode === 'oi' && (
-                            <div style={{ height: 4, flexShrink: 0, width: putPct * 0.3 + 'px', background: '#2ebd85', minWidth: row.putOI > 0 ? 2 : 0, opacity: 0.7 }} />
+                            <div className={s.oiBarPut} style={{ width: putPct * 0.3 + 'px', minWidth: row.putOI > 0 ? 2 : 0 }} />
                           )}
-                          <span style={{ fontSize: 12, fontWeight: 600, width: 56, flexShrink: 0, color: viewMode === 'oi' ? '#2ebd85' : '#fb923c' }}>
+                          <span className={viewMode === 'oi' ? s.oiValuePut : s.oiValuePutGex}>
                             {viewMode === 'oi'
                               ? (row.putOI > 0 ? fmtOI(row.putOI) : '—')
                               : fmtGex(putGex)}
@@ -1862,26 +1781,23 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
         </div>
 
         {/* Legend */}
-        <div
-          className="flex gap-3 px-3 py-1.5 shrink-0"
-          style={{ borderTop: '1px solid #2a2a2a', fontSize: 9, color: '#52525b', letterSpacing: '0.08em', textTransform: 'uppercase' }}
-        >
+        <div className={s.legend}>
           {viewMode === 'oi' ? (<>
-            <span className="flex items-center gap-1">
-              <span style={{ width: 8, height: 3, background: '#f23645', display: 'inline-block' }} />
+            <span className={s.legendItem}>
+              <span className={s.legendSwatchCall} />
               CALL
             </span>
-            <span className="flex items-center gap-1">
-              <span style={{ width: 8, height: 3, background: '#2ebd85', display: 'inline-block' }} />
+            <span className={s.legendItem}>
+              <span className={s.legendSwatchPut} />
               PUT
             </span>
           </>) : (<>
-            <span className="flex items-center gap-1">
-              <span style={{ width: 8, height: 3, background: '#818cf8', display: 'inline-block' }} />
+            <span className={s.legendItem}>
+              <span className={s.legendSwatchCallGex} />
               CALL GEX
             </span>
-            <span className="flex items-center gap-1">
-              <span style={{ width: 8, height: 3, background: '#fb923c', display: 'inline-block' }} />
+            <span className={s.legendItem}>
+              <span className={s.legendSwatchPutGex} />
               PUT GEX
             </span>
           </>)}
@@ -1889,25 +1805,16 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
       </div>
 
       {/* Right: toolbar + chart */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={s.rightCol}>
 
         {/* Toolbar */}
-        <div
-          className="flex items-center shrink-0 glass-bar"
-          style={{ height: 36 }}
-        >
+        <div className={`glass-bar ${s.toolbar}`}>
           {/* Table collapse toggle */}
           <button
             type="button"
             onMouseDown={e => { e.preventDefault(); setTableCollapsed(c => !c); }}
             title={tableCollapsed ? 'Show OI table' : 'Hide OI table'}
-            style={{
-              width: 28, height: 36, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 0, background: 'none', border: 'none',
-              borderRight: '1px solid #2a2a2a', cursor: 'pointer',
-              color: '#a78bfa',
-            }}
+            className={s.tableToggleBtn}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               {tableCollapsed
@@ -1918,7 +1825,7 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
           </button>
 
           {/* Symbol */}
-          <div style={{ padding: '0 6px' }}>
+          <div className={s.selectWrapperPadded}>
             <GlassSelect
               value={underlying || null}
               options={underlyings}
@@ -1928,10 +1835,10 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
             />
           </div>
 
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+          <div className={s.toolbarSep} />
 
           {/* Expiry */}
-          <div style={{ padding: '0 6px' }}>
+          <div className={s.selectWrapperPadded}>
             <GlassSelect
               value={expiry}
               options={expiries}
@@ -1943,20 +1850,20 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
             />
           </div>
 
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+          <div className={s.toolbarSep} />
 
           {/* Interval — dropdown */}
           <IntervalDropdown value={interval} onChange={setInterval} />
 
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+          <div className={s.toolbarSep} />
 
           {/* IV start date */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 6px', flexShrink: 0 }}>
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#787B86', letterSpacing: '0.08em', textTransform: 'uppercase' }}>IV FROM</span>
+          <div className={s.ivFromGroup}>
+            <span className={s.ivFromLabel}>IV FROM</span>
             <IvDateInput value={ivStartDate} onCommit={setIvStartDate} />
           </div>
 
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+          <div className={s.toolbarSep} />
 
           {/* OI / GEX dropdown */}
           <ViewModeDropdown
@@ -1965,43 +1872,40 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
             onGexMode={m => { setGexMode(m); setTimeout(redrawCanvas, 0); }}
           />
 
-          {/* Status area — DaisyUI */}
-          <span className="flex items-center gap-2 ml-auto mr-2">
+          {/* Status area */}
+          <span className={s.statusArea}>
             {loading && (
-              <span className="flex items-center gap-1.5">
-                <span className="loading loading-dots loading-xs" style={{ color: '#787B86' }} />
-                <span style={{ fontSize: 11, color: '#52525b', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Fetching</span>
+              <span className={s.loadingGroup}>
+                <span className={`loading loading-dots loading-xs ${s.loadingDotColor}`} />
+                <span className={s.loadingLabel}>Fetching</span>
               </span>
             )}
             {error && (
-              <span className="flex items-center gap-1" title={error}>
+              <span className={s.errorGroup} title={error}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f23645" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="#f23645"/></svg>
-                <span style={{ fontSize: 11, color: '#f23645', letterSpacing: '0.06em', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{error}</span>
+                <span className={s.errorLabel}>{error}</span>
               </span>
             )}
             {!loading && !error && wsLive && (
-              <span className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#2ebd85' }} />
-                  <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#2ebd85' }} />
+              <span className={s.liveGroup}>
+                <span className={s.livePingWrapper}>
+                  <span className={s.livePing} />
+                  <span className={s.liveDot} />
                 </span>
-                <span style={{ fontSize: 11, color: '#2ebd85', letterSpacing: '0.1em', fontWeight: 600 }}>LIVE</span>
+                <span className={s.liveLabel}>LIVE</span>
               </span>
             )}
           </span>
         </div>
 
         {/* Chart area + ATM IV pane */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+        <div className={s.chartArea}>
 
         {/* Candle chart */}
-        <div className="relative overflow-hidden" ref={wrapperRef} style={{ background: '#171717', flex: '1 1 100%', minHeight: 60 }}>
-          <div ref={chartDivRef} style={{ position: 'absolute', inset: 0 }} />
+        <div className={s.chartWrapper} ref={wrapperRef}>
+          <div ref={chartDivRef} className={s.chartDiv} />
 
-          <canvas
-            ref={canvasRef}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}
-          />
+          <canvas ref={canvasRef} className={s.oiCanvas} />
 
           {/* Hover tooltip */}
           {tooltip.visible && (() => {
@@ -2016,53 +1920,41 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
             const netGex  = callGex + putGex;
             const pcrTip  = viewMode === 'oi' && tooltip.callOI > 0 ? (tooltip.putOI / tooltip.callOI).toFixed(2) : null;
             return (
-              <div style={{
-                position: 'absolute',
-                left: Math.max(4, left),
-                top:  Math.max(4, top),
-                width: tipW,
-                zIndex: 20,
-                pointerEvents: 'none',
-                background: '#171717',
-                border: '1px solid #2a2a2a',
-                borderRadius: 0,
-                padding: '7px 10px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.95)',
-              }}>
-                <div style={{ fontSize: 11, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>STRIKE</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#FF9800', marginBottom: 6 }}>{tooltip.strike.toLocaleString('en-IN')}</div>
-                <div style={{ height: 1, background: '#333', marginBottom: 5 }} />
+              <div className={s.tooltip} style={{ left: Math.max(4, left), top: Math.max(4, top) }}>
+                <div className={s.tooltipSectionLabel}>STRIKE</div>
+                <div className={s.tooltipStrikeValue}>{tooltip.strike.toLocaleString('en-IN')}</div>
+                <div className={s.tooltipDivider} />
 
                 {viewMode === 'oi' ? (<>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>CALL OI</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#FF433D' }}>{fmtOI(tooltip.callOI)}</span>
+                  <div className={s.tooltipRow}>
+                    <span className={s.tooltipKey}>CALL OI</span>
+                    <span className={s.tooltipValCall}>{fmtOI(tooltip.callOI)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: pcrTip ? 5 : 0 }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>PUT OI</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1DB954' }}>{fmtOI(tooltip.putOI)}</span>
+                  <div className={pcrTip ? s.tooltipRowMb5 : s.tooltipRowLast}>
+                    <span className={s.tooltipKey}>PUT OI</span>
+                    <span className={s.tooltipValPut}>{fmtOI(tooltip.putOI)}</span>
                   </div>
                 </>) : (<>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>CALL GEX</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#FF9800' }}>{fmtGex(callGex)}</span>
+                  <div className={s.tooltipRow}>
+                    <span className={s.tooltipKey}>CALL GEX</span>
+                    <span className={s.tooltipValCallGex}>{fmtGex(callGex)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>PUT GEX</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#fb923c' }}>{fmtGex(putGex)}</span>
+                  <div className={s.tooltipRowMb5}>
+                    <span className={s.tooltipKey}>PUT GEX</span>
+                    <span className={s.tooltipValPutGex}>{fmtGex(putGex)}</span>
                   </div>
-                  <div style={{ height: 1, background: '#333', marginBottom: 5 }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>NET GEX</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: netGex >= 0 ? '#1DB954' : '#FF433D' }}>{fmtGex(netGex)}</span>
+                  <div className={s.tooltipDivider} />
+                  <div className={s.tooltipRowLast}>
+                    <span className={s.tooltipKey}>NET GEX</span>
+                    <span className={s.tooltipValPcr} style={{ color: netGex >= 0 ? '#1DB954' : '#FF433D' }}>{fmtGex(netGex)}</span>
                   </div>
                 </>)}
 
                 {pcrTip && (<>
-                  <div style={{ height: 1, background: '#333', marginBottom: 5, marginTop: 5 }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, color: '#888', letterSpacing: '0.06em' }}>PCR</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: Number(pcrTip) >= 1 ? '#1DB954' : '#FF433D' }}>{pcrTip}</span>
+                  <div className={s.tooltipDividerMt} />
+                  <div className={s.tooltipRowLast}>
+                    <span className={s.tooltipKey}>PCR</span>
+                    <span className={s.tooltipValPcr} style={{ color: Number(pcrTip) >= 1 ? '#1DB954' : '#FF433D' }}>{pcrTip}</span>
                   </div>
                 </>)}
               </div>
@@ -2070,8 +1962,8 @@ function OIProfilePanel({ instruments, underlyings, defaultUnderlying = '', barF
           })()}
 
           {!underlying && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none" style={{ zIndex: 5 }}>
-              <p style={{ fontSize: 10, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.1em' }}>SELECT UNDERLYING & EXPIRY</p>
+            <div className={s.chartPlaceholder}>
+              <p className={s.chartPlaceholderText}>SELECT UNDERLYING & EXPIRY</p>
             </div>
           )}
         </div>
@@ -2094,18 +1986,9 @@ export default function OIProfileView({ instruments }: Props) {
   const underlyings = useMemo(() => getUnderlyings(instruments), [instruments]);
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateRows: '1fr 1fr',
-        gridTemplateColumns: '1fr 1fr',
-        height: '100%',
-        gap: 1,
-        background: '#2a2a2a',
-      }}
-    >
+    <div className={s.viewRoot}>
       {/* Top-left: NIFTY */}
-      <div style={{ gridRow: 1, gridColumn: 1, overflow: 'hidden', minHeight: 0 }}>
+      <div className={s.panelCell} style={{ gridRow: 1, gridColumn: 1 }}>
         <OIProfilePanel
           instruments={instruments}
           underlyings={underlyings}
@@ -2115,7 +1998,7 @@ export default function OIProfileView({ instruments }: Props) {
       </div>
 
       {/* Top-right: BANKNIFTY */}
-      <div style={{ gridRow: 1, gridColumn: 2, overflow: 'hidden', minHeight: 0 }}>
+      <div className={s.panelCell} style={{ gridRow: 1, gridColumn: 2 }}>
         <OIProfilePanel
           instruments={instruments}
           underlyings={underlyings}
@@ -2125,7 +2008,7 @@ export default function OIProfileView({ instruments }: Props) {
       </div>
 
       {/* Bottom: SENSEX — spans both columns */}
-      <div style={{ gridRow: 2, gridColumn: '1 / -1', overflow: 'hidden', minHeight: 0 }}>
+      <div className={s.panelCell} style={{ gridRow: 2, gridColumn: '1 / -1' }}>
         <OIProfilePanel
           instruments={instruments}
           underlyings={underlyings}

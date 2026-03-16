@@ -1,7 +1,7 @@
 'use client';
 
 const DB_NAME = 'urjaa_instruments';
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 const STORE_NAME = 'cache';
 const KEY = 'instruments_blob';
 const DATE_KEY = 'instruments_date';
@@ -14,7 +14,9 @@ const DHAN_STORE = 'dhan_cache';
 const DHAN_KEY = 'dhan_instruments';
 const DHAN_DATE_KEY = 'dhan_date';
 
-// ── Pre-market candle store ──
+const AUTH_STORE  = 'auth_cache';   // { token, date } keyed by 'upstox'|'nubra'
+const CREDS_STORE = 'user_creds';   // broker credentials keyed by google sub
+
 const PM_STORE = 'premarket_candles';
 
 // Stored value shape: { date: string; candles: Record<interval, number[][]> }
@@ -36,6 +38,12 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(PM_STORE)) {
         db.createObjectStore(PM_STORE);
+      }
+      if (!db.objectStoreNames.contains(AUTH_STORE)) {
+        db.createObjectStore(AUTH_STORE);
+      }
+      if (!db.objectStoreNames.contains(CREDS_STORE)) {
+        db.createObjectStore(CREDS_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -218,6 +226,68 @@ export async function loadDhanInstruments(): Promise<{ data: string; date: strin
         resolve(null);
       }
     };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ── Auth tokens (Upstox + Nubra) ──────────────────────────────────────────────
+// Stored as { token: string; date: string } keyed by broker name.
+// date = IST YYYY-MM-DD — lets SetupScreen know if the token was created today.
+
+export interface AuthEntry { token: string; date: string; }
+
+export async function saveAuthToken(key: 'upstox' | 'nubra', token: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AUTH_STORE, 'readwrite');
+    tx.objectStore(AUTH_STORE).put({ token, date: todayIST() }, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadAuthToken(key: 'upstox' | 'nubra'): Promise<AuthEntry | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AUTH_STORE, 'readonly');
+    const req = tx.objectStore(AUTH_STORE).get(key);
+    tx.oncomplete = () => resolve(req.result ?? null);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clearAuthToken(key: 'upstox' | 'nubra'): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AUTH_STORE, 'readwrite');
+    tx.objectStore(AUTH_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ── User broker credentials (stored per Google sub) ───────────────────────────
+export interface UserCreds {
+  upstox?: { phone: string; pin: string; totp_secret: string; api_key: string; api_secret: string; };
+  nubra?:  { phone: string; mpin: string; totp_secret: string; };
+}
+
+export async function saveUserCreds(sub: string, creds: UserCreds): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CREDS_STORE, 'readwrite');
+    tx.objectStore(CREDS_STORE).put(creds, sub);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadUserCreds(sub: string): Promise<UserCreds | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CREDS_STORE, 'readonly');
+    const req = tx.objectStore(CREDS_STORE).get(sub);
+    tx.oncomplete = () => resolve(req.result ?? null);
     tx.onerror = () => reject(tx.error);
   });
 }

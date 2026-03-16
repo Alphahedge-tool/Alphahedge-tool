@@ -1,10 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import pako from 'pako';
 import { saveBlob, loadBlob, clearBlob } from './db';
 
-const URL = '/instruments-gz';
+// Module-level cache — survives React remounts (hot reload, StrictMode double-invoke, etc.)
+// Once parsed for the day, never hits IndexedDB or Worker again until page is fully closed.
+let _cachedInstruments: Instrument[] | null = null;
+let _cachedDate: string = '';
+
+// Parse JSON bytes off the main thread — prevents multi-hundred ms freeze on 100k+ instruments
+function parseInstrumentsOffThread(bytes: Uint8Array): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./instruments.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e) => {
+      worker.terminate();
+      if (e.data.ok) resolve(e.data.json);
+      else reject(new Error(e.data.error));
+    };
+    worker.onerror = (err) => { worker.terminate(); reject(err); };
+    worker.postMessage(bytes);
+  });
+}
+
+const INSTRUMENTS_URL = '/instruments-gz';
 
 export type Instrument = {
   instrument_key: string;
@@ -55,32 +74,45 @@ export function useInstruments() {
 
     async function load() {
       try {
-        // 1. Try cache first
+        const today = todayIST();
+
+        // 0. Module-level memory cache — already parsed this session, instant return
+        if (_cachedInstruments && _cachedDate === today) {
+          if (!cancelled) {
+            startTransition(() => setInstruments(_cachedInstruments!));
+            setStatus({ phase: 'ready', total: _cachedInstruments!.length });
+          }
+          return;
+        }
+
+        // 1. Try IndexedDB cache
         setStatus({ phase: 'checking' });
         const cached = await loadBlob();
 
         if (cached && !cancelled) {
-          const today = todayIST();
-          const cacheStale = cached.date !== today || isPastInstrumentRefresh();
+          // Stale only when: cache is from a previous day AND it's past 3:30 AM IST
+          const cacheStale = cached.date !== today && isPastInstrumentRefresh();
 
           if (!cacheStale) {
-            // Cache is fresh — use it
+            // Cache is fresh — parse off main thread so UI never freezes
             setStatus({ phase: 'cache-hit' });
-            const json = JSON.parse(new TextDecoder().decode(cached.data)) as Instrument[];
+            const json = await parseInstrumentsOffThread(cached.data) as Instrument[];
             if (!cancelled) {
-              setInstruments(json);
+              _cachedInstruments = json;
+              _cachedDate = today;
+              startTransition(() => setInstruments(json));
               setStatus({ phase: 'ready', total: json.length });
             }
             return;
           }
 
-          // Cache is stale (different day or past 15:30) — delete and re-fetch
+          // Cache is stale — delete and re-fetch
           await clearBlob();
         }
 
         // 2. Download fresh instruments
         setStatus({ phase: 'downloading', progress: 0 });
-        const response = await fetch(URL);
+        const response = await fetch(INSTRUMENTS_URL);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const contentLength = response.headers.get('content-length');
@@ -116,16 +148,18 @@ export function useInstruments() {
         setStatus({ phase: 'decompressing' });
         const decompressed = pako.inflate(gz);
 
-        // 5. Parse
+        // 5. Parse off main thread — JSON.parse of 100k+ instruments blocks for ~300ms
         setStatus({ phase: 'parsing' });
-        const json = JSON.parse(new TextDecoder().decode(decompressed)) as Instrument[];
+        const json = await parseInstrumentsOffThread(decompressed) as Instrument[];
 
         // 6. Store with today's IST date
         setStatus({ phase: 'storing' });
-        await saveBlob(decompressed, todayIST());
+        await saveBlob(decompressed, today);
 
         if (!cancelled) {
-          setInstruments(json);
+          _cachedInstruments = json;
+          _cachedDate = today;
+          startTransition(() => setInstruments(json));
           setStatus({ phase: 'ready', total: json.length });
         }
       } catch (err) {

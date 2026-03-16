@@ -7,6 +7,7 @@ import * as React from 'react';
 import { cx, focusRing } from '../lib/utils';
 import { useIsMobile } from '../lib/useMobile';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from './Drawer';
+import s from './Sidebar.module.css';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar:state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -70,7 +71,7 @@ export const SidebarProvider = React.forwardRef<
       <div
         ref={ref}
         style={{ '--sidebar-width': SIDEBAR_WIDTH, ...style } as React.CSSProperties}
-        className={cx('flex min-h-svh w-full bg-[#171717] text-[#D1D4DC]', className)}
+        className={cx(s.provider, className)}
         {...props}
       >
         {children}
@@ -89,13 +90,13 @@ export const Sidebar = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
       return (
         <Drawer open={openMobile} onOpenChange={setOpenMobile}>
           <DrawerContent style={{ '--sidebar-width': SIDEBAR_WIDTH } as React.CSSProperties}>
-            <span className="sr-only">
+            <span className={s.srOnly}>
               <DrawerTitle>Navigation</DrawerTitle>
             </span>
-            <div className="relative flex h-full w-full flex-col">
-              <DrawerClose className="absolute right-3 top-3 p-1 text-[#787B86] hover:text-[#D1D4DC] transition-colors" asChild>
+            <div className={s.mobileInner}>
+              <DrawerClose className={s.drawerClose} asChild>
                 <button aria-label="Close sidebar">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M18 6 6 18M6 6l12 12"/>
                   </svg>
                 </button>
@@ -115,7 +116,7 @@ export const Sidebar = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
         <div
           ref={ref}
           data-state={state}
-          className={cx('fixed inset-y-0 left-0 z-40 h-full w-[220px] hidden md:flex', className)}
+          className={cx(s.panel, className)}
           style={{
             transform: collapsed ? 'translateX(-220px)' : 'translateX(0)',
             transition: 'transform 300ms cubic-bezier(0.22, 1, 0.36, 1)',
@@ -123,7 +124,7 @@ export const Sidebar = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
           }}
           {...props}
         >
-          <div className="glass-sidebar flex h-full w-full flex-col">
+          <div className={cx('glass-sidebar', s.glassInner)}>
             {children}
           </div>
         </div>
@@ -142,20 +143,15 @@ export const SidebarTrigger = React.forwardRef<
   return (
     <button
       ref={ref}
-      className={cx(
-        'inline-flex items-center justify-center p-1.5 rounded transition-colors',
-        'text-[#787B86] hover:text-[#D1D4DC] hover:bg-[#2A2E39]',
-        focusRing,
-        className,
-      )}
+      className={cx(s.trigger, focusRing, className)}
       onClick={e => { onClick?.(e); toggleSidebar(); }}
       {...props}
     >
       {/* PanelLeft icon */}
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>
       </svg>
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className={s.srOnly}>Toggle Sidebar</span>
     </button>
   );
 });
@@ -164,21 +160,21 @@ SidebarTrigger.displayName = 'SidebarTrigger';
 // ── Header / Content / Footer ─────────────────────────────────────────────────
 export const SidebarHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cx('flex flex-col gap-2 p-3', className)} {...props} />
+    <div ref={ref} className={cx(s.sidebarHeader, className)} {...props} />
   ),
 );
 SidebarHeader.displayName = 'SidebarHeader';
 
 export const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cx('flex min-h-0 flex-1 flex-col gap-1 overflow-auto', className)} {...props} />
+    <div ref={ref} className={cx(s.sidebarContent, className)} {...props} />
   ),
 );
 SidebarContent.displayName = 'SidebarContent';
 
 export const SidebarFooter = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cx('flex flex-col gap-2 p-3 border-t border-[#2A2E39]', className)} {...props} />
+    <div ref={ref} className={cx(s.sidebarFooter, className)} {...props} />
   ),
 );
 SidebarFooter.displayName = 'SidebarFooter';
@@ -186,7 +182,7 @@ SidebarFooter.displayName = 'SidebarFooter';
 // ── Group ─────────────────────────────────────────────────────────────────────
 export const SidebarGroup = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cx('flex w-full min-w-0 flex-col px-3 py-2', className)} {...props} />
+    <div ref={ref} className={cx(s.sidebarGroup, className)} {...props} />
   ),
 );
 SidebarGroup.displayName = 'SidebarGroup';
@@ -195,7 +191,7 @@ export const SidebarGroupLabel = React.forwardRef<HTMLDivElement, React.Componen
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cx('mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9B9EA8]', className)}
+      className={cx(s.sidebarGroupLabel, className)}
       {...props}
     />
   ),
@@ -204,7 +200,7 @@ SidebarGroupLabel.displayName = 'SidebarGroupLabel';
 
 export const SidebarGroupContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cx('w-full', className)} {...props} />
+    <div ref={ref} className={cx(s.sidebarGroupContent, className)} {...props} />
   ),
 );
 SidebarGroupContent.displayName = 'SidebarGroupContent';
@@ -212,7 +208,7 @@ SidebarGroupContent.displayName = 'SidebarGroupContent';
 // ── Menu ─────────────────────────────────────────────────────────────────────
 export const SidebarMenu = React.forwardRef<HTMLUListElement, React.ComponentProps<'ul'>>(
   ({ className, ...props }, ref) => (
-    <ul ref={ref} className={cx('flex w-full min-w-0 flex-col gap-1', className)} {...props} />
+    <ul ref={ref} className={cx(s.sidebarMenu, className)} {...props} />
   ),
 );
 SidebarMenu.displayName = 'SidebarMenu';
@@ -234,23 +230,15 @@ export const SidebarLink = React.forwardRef<
   <button
     ref={ref}
     data-active={isActive}
-    className={cx(
-      'flex w-full items-center justify-between rounded px-2 py-2.5 text-[13.5px] font-[500] transition-colors duration-100 cursor-pointer',
-      'text-[#C0C3CC] hover:bg-[#2A2E39] hover:text-[#E0E3EA]',
-      'data-[active=true]:bg-[#2b2b2b] data-[active=true]:text-[#E5E7EB] data-[active=true]:rounded-lg',
-      focusRing,
-      className,
-    )}
+    className={cx(s.sidebarLink, focusRing, className)}
     {...props}
   >
-    <span className="flex items-center gap-2.5">
-      {icon && <span className="shrink-0">{icon}</span>}
-      <span className="truncate">{children}</span>
+    <span className={s.linkIconWrap}>
+      {icon && <span className={s.linkIcon}>{icon}</span>}
+      <span className={s.linkText}>{children}</span>
     </span>
     {badge != null && (
-      <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded px-1 text-[10px] font-semibold bg-[rgba(255,152,0,0.15)] text-[#FF9800]">
-        {badge}
-      </span>
+      <span className={s.badge}>{badge}</span>
     )}
   </button>
 ));

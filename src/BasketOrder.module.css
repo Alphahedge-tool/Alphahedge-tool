@@ -1,0 +1,799 @@
+/* ── Margin Breakdown ────────────────────────────────────────────────────────── */
+
+.mbRoot {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mbLoadingRow {
+  padding: 10px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mbSpinner {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+.mbLoadingText {
+  font-size: 11px;
+  color: #565A6B;
+}
+
+.mbTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px 4px;
+}
+
+.mbTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #E2E8F0;
+  letter-spacing: 0.04em;
+}
+
+.mbBenefit {
+  font-size: 11px;
+  font-weight: 600;
+  color: #26a69a;
+}
+
+.mbSummaryCard {
+  margin: 0 20px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.mbSummaryGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  padding: 12px 16px;
+}
+
+.mbSummaryCell {}
+
+.mbSummaryCellLabel {
+  font-size: 10px;
+  color: #6B7280;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.mbSummaryCellValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #E2E8F0;
+  font-family: var(--font-family-sans);
+}
+
+.mbToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0 8px;
+  color: #565A6B;
+}
+
+.mbToggleChevron {
+  transition: transform 0.2s;
+}
+
+.mbToggleChevronExpanded {
+  transform: rotate(180deg);
+}
+
+.mbLegsTable {
+  margin: 0 20px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.mbLegsHeader {
+  display: grid;
+  grid-template-columns: 36px 1fr 90px 68px 90px 90px 100px;
+  padding: 6px 12px;
+  background: #333;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mbLegsHeaderCell {
+  font-size: 9px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+
+.mbLegsHeaderCellRight {
+  font-size: 9px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+
+.mbLegRow {
+  display: grid;
+  grid-template-columns: 36px 1fr 90px 68px 90px 90px 100px;
+  align-items: center;
+  padding: 7px 12px;
+}
+
+.mbLegRowBorder {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mbBsBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.mbBsBadgeBuy {
+  background: rgba(38, 166, 154, 0.18);
+  border: 1px solid rgba(38, 166, 154, 0.45);
+}
+
+.mbBsBadgeSell {
+  background: rgba(242, 54, 69, 0.18);
+  border: 1px solid rgba(242, 54, 69, 0.45);
+}
+
+.mbBsBadgeText {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.mbBsBadgeTextBuy  { color: #26a69a; }
+.mbBsBadgeTextSell { color: #f23645; }
+
+.mbInstrumentText {
+  font-size: 11px;
+  font-weight: 600;
+  color: #E2E8F0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mbStrikeText {
+  font-size: 11px;
+  color: #E2E8F0;
+  text-align: right;
+  font-family: var(--font-family-sans);
+}
+
+.mbStrikeTypeCe { color: #26a69a; }
+.mbStrikeTypePe { color: #f23645; }
+
+.mbQtyText {
+  font-size: 11px;
+  color: #9CA3AF;
+  text-align: right;
+  font-family: var(--font-family-sans);
+}
+
+.mbNumericRight {
+  font-size: 11px;
+  color: #E2E8F0;
+  text-align: right;
+  font-family: var(--font-family-sans);
+}
+
+.mbTotalMargin {
+  font-size: 11px;
+  font-weight: 600;
+  color: #E2E8F0;
+  text-align: right;
+  font-family: var(--font-family-sans);
+}
+
+/* ── DomCard ─────────────────────────────────────────────────────────────────── */
+
+.domCard {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 2px;
+}
+
+.domCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.domCardHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.domCardTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #E2E8F0;
+  letter-spacing: 0.03em;
+}
+
+.domCardLtp {
+  font-size: 13px;
+  font-weight: 800;
+  color: #E2E8F0;
+  font-family: var(--font-family-sans);
+}
+
+.domCardLiveIndicatorLive {
+  font-size: 9px;
+  font-weight: 700;
+  color: #26a69a;
+  letter-spacing: 0.06em;
+}
+
+.domCardLiveIndicatorPending {
+  font-size: 9px;
+  font-weight: 700;
+  color: #6B7280;
+  letter-spacing: 0.06em;
+}
+
+.domCardCloseBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #374151;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.domColHeaders {
+  display: grid;
+  grid-template-columns: 1fr 72px 1px 72px 1fr;
+  padding: 5px 14px 4px;
+  background: #333333;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.domColAskLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #f23645;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.domColAskLabelRight {
+  font-size: 9px;
+  font-weight: 700;
+  color: #f23645;
+  letter-spacing: 0.07em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.domColBidLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #26a69a;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.domColBidLabelRight {
+  font-size: 9px;
+  font-weight: 700;
+  color: #26a69a;
+  letter-spacing: 0.07em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.domRows {
+  padding: 4px 14px 8px;
+}
+
+.domRow {
+  display: grid;
+  grid-template-columns: 1fr 72px 1px 72px 1fr;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.domRowBorder {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.domBarCell {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.domBarCellEnd {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.domAskBar {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(242, 54, 69, 0.12);
+  border-radius: 2px 0 0 2px;
+}
+
+.domBidBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(38, 166, 154, 0.12);
+  border-radius: 0 2px 2px 0;
+}
+
+.domQtyText {
+  font-size: 10px;
+  color: #9CA3AF;
+  position: relative;
+  z-index: 1;
+}
+
+.domAskPrice {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f23645;
+  text-align: right;
+  font-family: var(--font-family-sans);
+}
+
+.domDivider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  align-self: stretch;
+  margin: 0 4px;
+}
+
+.domBidPrice {
+  font-size: 11px;
+  font-weight: 700;
+  color: #26a69a;
+  font-family: var(--font-family-sans);
+}
+
+/* ── DomSidePanel ────────────────────────────────────────────────────────────── */
+
+.domPanel {
+  background: #1d1a17;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  width: 300px;
+  flex-shrink: 0;
+  font-family: var(--font-family-sans);
+}
+
+.domPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1d1a17;
+}
+
+.domPanelHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.domPanelTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #E2E8F0;
+  letter-spacing: 0.04em;
+}
+
+.domPanelCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4F8EF7;
+  background: rgba(79, 142, 247, 0.1);
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 142, 247, 0.2);
+}
+
+.domPanelCloseBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #4B5563;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.domPanelCards {
+  max-height: 480px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
+/* ── BasketOrder ─────────────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.basket {
+  background: #1d1a17;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-family: var(--font-family-sans);
+}
+
+.basketHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  background: var(--bg-panel, #1d1a17);
+  cursor: grab;
+  user-select: none;
+}
+
+.basketHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.basketTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #E2E8F0;
+  letter-spacing: 0.04em;
+}
+
+.basketLegCount {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4F8EF7;
+  background: rgba(79, 142, 247, 0.1);
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(79, 142, 247, 0.2);
+}
+
+.basketClearBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(242, 54, 69, 0.1);
+  border: 1px solid rgba(242, 54, 69, 0.35);
+  color: #f23645;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+
+.basketColHeaders {
+  display: grid;
+  grid-template-columns: 68px 1fr 96px 80px 72px 90px 36px;
+  padding: 7px 20px;
+  background: #333333;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.basketColHeaderCell {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+}
+
+.basketColHeaderCellCenter {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+.basketLegsScroll {
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
+.basketGroupHeader {
+  padding: 5px 20px 4px;
+  background: rgba(255, 255, 255, 0.035);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.basketGroupSymbol {
+  font-size: 10px;
+  font-weight: 800;
+  color: #9CA3AF;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.basketGroupCount {
+  font-size: 10px;
+  color: #4B5563;
+  font-weight: 600;
+}
+
+.basketLegRow {
+  display: grid;
+  grid-template-columns: 68px 1fr 96px 80px 72px 90px 36px;
+  align-items: center;
+  padding: 8px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.1s;
+}
+
+.basketLegRowActive {
+  background: rgba(107, 158, 248, 0.04);
+}
+
+.basketLegRowInactive {
+  background: transparent;
+}
+
+.bsBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 22px;
+  border-radius: 5px;
+}
+
+.bsBadgeBuy {
+  background: rgba(38, 166, 154, 0.18);
+  border: 1px solid rgba(38, 166, 154, 0.5);
+}
+
+.bsBadgeSell {
+  background: rgba(242, 54, 69, 0.18);
+  border: 1px solid rgba(242, 54, 69, 0.5);
+}
+
+.bsBadgeText {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.bsBadgeTextBuy  { color: #26a69a; }
+.bsBadgeTextSell { color: #f23645; }
+
+.instrNameCol {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.instrNamePrimary {
+  font-size: 13px;
+  font-weight: 700;
+  color: #E2E8F0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.instrNameSecondary {
+  font-size: 10px;
+  color: #6B7280;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.orderTypeCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.orderTypeBadge {
+  height: 22px;
+  border-radius: 5px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.orderTypeBadgeText {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9CA3AF;
+  letter-spacing: 0.04em;
+}
+
+.qtyStepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+  height: 24px;
+}
+
+.qtyStepperBtn {
+  width: 20px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: #9CA3AF;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.qtyValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: #E2E8F0;
+  min-width: 18px;
+  text-align: center;
+}
+
+.timePickerCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeInput {
+  width: 66px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: #E2E8F0;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+
+.domToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: all 0.15s;
+}
+
+.domToggleBtnActive {
+  background: rgba(107, 158, 248, 0.12);
+  border: 1px solid rgba(107, 158, 248, 0.3);
+}
+
+.domToggleIcon { flex-shrink: 0; }
+
+.domToggleBtnInactive {
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.domToggleBtnPrice {
+  font-size: 13px;
+  font-weight: 700;
+  color: #C0C0C0;
+  font-family: var(--font-family-sans);
+}
+
+.removeBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.basketFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.basketFooterLabel {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 500;
+  flex: 1;
+}
+
+.executeBtn {
+  padding: 7px 24px;
+  border-radius: 7px;
+  border: 1px solid rgba(37, 99, 235, 0.5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+}
+
+.executeBtnReady {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  opacity: 1;
+}
+
+.executeBtnExecuting {
+  background: rgba(37, 99, 235, 0.4);
+  cursor: default;
+  box-shadow: none;
+  opacity: 0.7;
+}
