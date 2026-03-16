@@ -18,6 +18,7 @@ import HistoricalWorkspace from './HistoricalWorkspace';
 import { wsManager } from './lib/WebSocketManager';
 import { useWsConnected } from './hooks/useMarketData';
 import { cx } from './lib/utils';
+import { useGoogleAuth } from './AppContext';
 import {
   SidebarProvider,
   Sidebar,
@@ -39,6 +40,7 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import './index.css';
+import mtm from './MtmLayout.module.css';
 
 function isMarketOpen(): boolean {
   const now = new Date();
@@ -1687,47 +1689,16 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 flex"
-      style={{
-        display: visible ? 'flex' : 'none',
-        padding: 8,
-        gap: 6,
-        background: 'var(--bg-base)',
-        width: '100%',
-        height: '100%',
-        minWidth: 0,
-        minHeight: 0,
-        alignItems: 'stretch',
-      }}
+      className={`absolute inset-0 flex ${mtm.root}`}
+      style={{ display: visible ? 'flex' : 'none' }}
     >
       {/* Left panel */}
-      <div style={{
-        width: `${leftPct}%`, minWidth: 0, flexShrink: 0,
-        background: isHistoricalMode ? 'rgba(255,152,0,0.06)' : '#171717',
-        borderRadius: isHistoricalMode ? 16 : 10,
-        border: isHistoricalMode ? '1.5px solid rgba(255,152,0,0.45)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHistoricalMode ? '0 0 25px rgba(255,152,0,0.1) inset' : 'none',
-        display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minHeight: 0,
-      }}>
+      <div className={`${mtm.leftPanel} ${isHistoricalMode ? mtm.leftPanelHistorical : ''}`}
+        style={{ width: `${leftPct}%` }}>
         {/* Search bar + dropdown */}
-        <div style={{ padding: '7px 10px', position: 'relative', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <div style={{ width: '35%', position: 'relative', minWidth: 220 }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 28,
-                padding: '0 4px',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 4,
-                transition: 'background 0.12s',
-                minWidth: 0,
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-            >
+        <div className={mtm.toolbar}>
+          <div className={mtm.searchWrap}>
+            <div className={mtm.searchBox}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#787B86" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
                 <circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" />
               </svg>
@@ -1759,17 +1730,16 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                   else if (e.key === 'Escape') { setShowMtmDropdown(false); }
                 }}
                 placeholder="Search instruments..."
-                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: '#D1D4DC', caretColor: '#818cf8', fontWeight: 600, letterSpacing: '0.02em', minWidth: 0 }}
+                className={mtm.searchInput}
               />
-              {mtmQuery && <button onClick={() => { if (mtmInputRef.current) mtmInputRef.current.value = ''; handleMtmSearch(''); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#787B86', display: 'flex', padding: 3, borderRadius: 4 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>}
+              {mtmQuery && <button onClick={() => { if (mtmInputRef.current) mtmInputRef.current.value = ''; handleMtmSearch(''); }} className={mtm.searchClearBtn}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>}
             </div>
             {/* Dropdown */}
             {showMtmDropdown && (
-              <div ref={mtmDropdownRef} style={{ position: 'absolute', top: '100%', left: 12, right: 12, zIndex: 999, background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 340 }}>
-                {/* Results list */}
-                <div ref={mtmListRef} style={{ overflowY: 'auto', flex: 1, scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+              <div ref={mtmDropdownRef} className={mtm.dropdown}>
+                <div ref={mtmListRef} className={mtm.dropdownList}>
                   {deferredMtmResults.length === 0 ? (
-                    <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: '#3D4150' }}>No results for "{deferredMtmQuery}"</div>
+                    <div className={mtm.dropdownEmpty}>No results for "{deferredMtmQuery}"</div>
                   ) : mtmRenderResults.map((ins, i) => {
                     const nubraAt = (ins as any).nubraAssetType as string ?? '';
                     const isMcx = ins.exchange === 'MCX';
@@ -1795,16 +1765,16 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                           }
                         }}
                         onMouseEnter={() => setMtmCursor(i)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 14px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.03)', background: i === mtmCursor ? 'rgba(79,142,247,0.10)' : 'transparent', transition: 'background 0.08s' }}
+                        className={`${mtm.dropdownItem} ${i === mtmCursor ? mtm.dropdownItemActive : ''}`}
                       >
-                        <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 7, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div className={mtm.dropdownItemIcon}>
                           {ins.exchange === 'NSE' ? <img src="https://s3-symbol-logo.tradingview.com/source/NSE.svg" alt="NSE" style={{ width: 20, height: 20, objectFit: 'contain', opacity: 0.85 }} />
                             : ins.exchange === 'BSE' ? <img src="https://s3-symbol-logo.tradingview.com/source/BSE.svg" alt="BSE" style={{ width: 20, height: 20, objectFit: 'contain', opacity: 0.85 }} />
                               : <span style={{ fontSize: 9, fontWeight: 700, color: '#9598A1' }}>{ins.exchange}</span>}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#E0E3EB' }}><Highlight text={ins.trading_symbol} query={deferredMtmQuery} /></div>
-                          <div style={{ fontSize: 11, color: '#565A6B', marginTop: 1 }}>{ins.exchange}</div>
+                        <div className={mtm.dropdownItemBody}>
+                          <div className={mtm.dropdownItemName}><Highlight text={ins.trading_symbol} query={deferredMtmQuery} /></div>
+                          <div className={mtm.dropdownItemExch}>{ins.exchange}</div>
                         </div>
                         {nubraAt && (
                           <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: atBg[nubraAt] ?? 'rgba(255,255,255,0.05)', color: atColor[nubraAt] ?? '#565A6B', fontWeight: 700, textTransform: 'uppercase', flexShrink: 0, letterSpacing: '0.03em' }}>{nubraAt}</span>
@@ -1813,9 +1783,9 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     );
                   })}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)', flexShrink: 0 }}>
-                  <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>↵</kbd> select</span>
-                  <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>Esc</kbd> close</span>
+                <div className={mtm.dropdownFooter}>
+                  <span><kbd>↵</kbd> select</span>
+                  <span><kbd>Esc</kbd> close</span>
                 </div>
               </div>
             )}
@@ -2244,8 +2214,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           <MtmTheme2Table legs={legs} updateLeg={updateLeg} removeLeg={removeLeg} showGreeks={showGreeks} />
         ) : (
           /* ── Theme 1: card / grouped layout ── */
-          <div style={{ flex: 1, padding: '0 10px 14px 10px', overflowX: 'auto', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className={mtm.legsScroll}>
+            <div className={mtm.legsInner}>
               {/* Shared column header row */}
               {showGreeks ? (
                 <div style={{ background: '#333333', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 0, padding: '8px 11px' }}>
@@ -2325,16 +2295,11 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       <div
         onMouseDown={onMouseDown}
         onDoubleClick={() => setLeftPct(48)}
-        style={{ width: 12, flexShrink: 0, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <div style={{ width: 4, height: 32, borderRadius: 2, background: 'rgba(255,255,255,0.08)', transition: 'background 0.15s' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.22)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.08)'; }}
-        />
-      </div>
+        className={mtm.divider}
+      />
 
       {/* Right panel — Strategy Chart */}
-      <div style={{ flex: 1, minWidth: 0, background: '#171717', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className={mtm.rightPanel}>
         <StrategyChart legs={legs} ocSymbol={chartSymbol || ocSymbol} ocExchange={chartExchange || ocExchange} instruments={instruments} nubraInstruments={nubraInstruments} nubraIndexes={nubraIndexes} isHistoricalMode={isHistoricalMode} />
       </div>
     </div>
@@ -2343,6 +2308,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
+  const { googleUser, signOut } = useGoogleAuth();
   const { instruments, status } = useInstruments();
 
   // Nubra instruments loaded from IndexedDB — shared across MTM + StrategyChart
@@ -2848,10 +2814,8 @@ export default function App() {
         {/* Logo */}
         <SidebarHeader>
           <div className="flex items-center gap-2 px-1 py-1">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-[rgba(255,152,0,0.15)] border border-[rgba(255,152,0,0.3)]">
-              <IconBolt />
-            </div>
-            <span className="text-[13px] font-bold tracking-[0.15em] text-[#FF9800]" style={{ fontFamily: 'var(--font-family-sans)' }}>Urjaa</span>
+            <img src="/alphahede.ico" style={{ borderRadius: 7, flexShrink: 0, width: 'var(--sidebar-logo-size)', height: 'var(--sidebar-logo-size)', transition: 'width 280ms ease, height 280ms ease' }} alt="AlphaHedge" />
+            <span className="text-[13px] font-bold text-[#D1D4DC]" style={{ fontFamily: 'var(--font-family-sans)', whiteSpace: 'nowrap', overflow: 'hidden', opacity: 'var(--sidebar-text-opacity, 1)', transition: 'opacity 200ms ease', width: 'var(--sidebar-text-width, auto)' }}>Alpha<em style={{ fontStyle: 'normal', color: '#4f54c8' }}>Hedge</em></span>
           </div>
         </SidebarHeader>
 
@@ -3014,7 +2978,7 @@ export default function App() {
       </Sidebar>
 
       {/* ── Main area ───────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col min-w-0 h-screen">
+      <div className="flex flex-1 flex-col min-w-0 h-screen" style={{ marginLeft: 'var(--sidebar-w)', transition: 'margin-left 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}>
         {/* Top bar */}
         <header className="glass-navbar flex h-12 shrink-0 items-center gap-3 px-4" style={{ minHeight: 48, fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>
           <SidebarTrigger />
@@ -3066,6 +3030,32 @@ export default function App() {
                 <span style={{ position: 'absolute', top: 3, right: 3, minWidth: 14, height: 14, borderRadius: 7, background: '#2563eb', fontSize: 9, fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>{basketLegs.length}</span>
               )}
             </button>
+
+            {/* Profile avatar + sign out */}
+            {googleUser && (
+              <div style={{ position: 'relative' }} className="group">
+                <button
+                  title={`${googleUser.name}\n${googleUser.email}\nClick to sign out`}
+                  onClick={signOut}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.12)', overflow: 'hidden', cursor: 'pointer', background: 'transparent', padding: 0, transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(248,113,113,0.7)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)'; }}
+                >
+                  {googleUser.picture
+                    ? <img src={googleUser.picture} referrerPolicy="no-referrer" alt={googleUser.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 13, fontWeight: 700, color: '#D1D4DC' }}>{googleUser.name?.[0]?.toUpperCase()}</span>
+                  }
+                </button>
+                {/* Tooltip */}
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', minWidth: 160, zIndex: 200, pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s' }}
+                  className="group-hover:opacity-100"
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#D1D4DC', whiteSpace: 'nowrap' }}>{googleUser.name}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2, whiteSpace: 'nowrap' }}>{googleUser.email}</div>
+                  <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#f87171', fontWeight: 600 }}>Click to sign out</div>
+                </div>
+              </div>
+            )}
           </div>
 
         </header>

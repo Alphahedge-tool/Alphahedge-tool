@@ -234,13 +234,25 @@ export async function loadDhanInstruments(): Promise<{ data: string; date: strin
 // Stored as { token: string; date: string } keyed by broker name.
 // date = IST YYYY-MM-DD — lets SetupScreen know if the token was created today.
 
-export interface AuthEntry { token: string; date: string; }
+export interface AuthEntry {
+  token: string;
+  date: string;
+  // Nubra extras
+  auth_token?: string;
+  raw_cookie?: string;
+  device_id?: string;
+  // Upstox extras (none currently needed beyond token)
+}
 
-export async function saveAuthToken(key: 'upstox' | 'nubra', token: string): Promise<void> {
+export async function saveAuthToken(
+  key: 'upstox' | 'nubra',
+  token: string,
+  extras?: Omit<AuthEntry, 'token' | 'date'>,
+): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(AUTH_STORE, 'readwrite');
-    tx.objectStore(AUTH_STORE).put({ token, date: todayIST() }, key);
+    tx.objectStore(AUTH_STORE).put({ token, date: todayIST(), ...extras }, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

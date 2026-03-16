@@ -54,6 +54,27 @@ async function fetchMargin(legs: BasketLeg[]): Promise<MarginResult | null> {
   // Use the first leg's entrySpot as custom_spot (in paisa)
   const customSpot = Math.round((validLegs[0].entrySpot ?? 0) * 100);
 
+  // Calculate DTE from today (IST) to expiry date
+  function dteFromExpiry(expiry: string): number {
+    try {
+      // Nubra expiry: YYYYMMDD
+      const expiryDate = new Date(`${expiry.slice(0,4)}-${expiry.slice(4,6)}-${expiry.slice(6,8)}T00:00:00+05:30`);
+      const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      nowIST.setHours(0, 0, 0, 0);
+      const dte = Math.round((expiryDate.getTime() - nowIST.getTime()) / (1000 * 60 * 60 * 24));
+      return Math.max(0, dte);
+    } catch {
+      return 0;
+    }
+  }
+
+  // Use the earliest expiry leg's DTE as expiry_offset (most conservative)
+  const expiryOffset = validLegs.reduce((minDte, l) => {
+    const dte = dteFromExpiry(l.expiry);
+    return dte < minDte ? dte : minDte;
+  }, Infinity);
+  const finalOffset = isFinite(expiryOffset) ? expiryOffset : 0;
+
   const makeEvaluateLeg = (l: BasketLeg) => ({
     ref_id:   l.refId!,
     price:    Math.round(l.price * 100),
@@ -68,7 +89,7 @@ async function fetchMargin(legs: BasketLeg[]): Promise<MarginResult | null> {
     // Single evaluate call for all legs (1 leg or many)
     const result = await callEvaluateApi(sessionToken, deviceId, {
       custom_spot:   customSpot,
-      expiry_offset: 4,
+      expiry_offset: finalOffset,
       payoff:        true,
       legs:          validLegs.map(makeEvaluateLeg),
     });

@@ -40,13 +40,21 @@ export const SidebarProvider = React.forwardRef<
 
   const toggleSidebar = React.useCallback(() => setOpen(!open), [open, setOpen]);
 
+  const sidebarW = open ? SIDEBAR_WIDTH : SIDEBAR_ICON_WIDTH;
+
   return (
     <Ctx.Provider value={{ open, setOpen, toggleSidebar }}>
       <div
         ref={ref}
         data-sidebar-animate={mounted.current ? 'true' : 'false'}
         className={cn(s.provider, className)}
-        style={style}
+        style={{
+          ...style,
+          '--sidebar-w': `${sidebarW}px`,
+          '--sidebar-text-opacity': open ? '1' : '0',
+          '--sidebar-text-width': open ? 'auto' : '0',
+          '--sidebar-logo-size': open ? '28px' : '32px',
+        } as React.CSSProperties}
         {...props}
       >
         {children}
