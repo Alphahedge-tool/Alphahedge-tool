@@ -201,16 +201,16 @@
 
 /* ── Column header row ───────────────────────────────────────────────────── */
 .colHeader {
-  background: #1E2130;
+  background: #0d1220;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 84, 200, 0.2);
 }
 .colHeaderTh {
   padding: 7px 6px;
   text-align: left;
   font-weight: 700;
   font-size: 11px;
-  color: #565A6B;
+  color: #6366c8;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;

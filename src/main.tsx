@@ -13,12 +13,12 @@ function Root() {
   });
 
   const [stage, setStage] = useState<Stage>(() => {
-    // On refresh: if google user + broker tokens exist, skip straight to app
     try {
-      const hasUser  = !!localStorage.getItem('google_user');
-      const hasNubra = !!(localStorage.getItem('nubra_session_token') || localStorage.getItem('nubra_raw_cookie'));
+      const hasUser   = !!localStorage.getItem('google_user');
+      const hasNubra  = !!(localStorage.getItem('nubra_session_token') || localStorage.getItem('nubra_raw_cookie'));
       const hasUpstox = !!localStorage.getItem('upstox_token');
-      if (hasUser && hasNubra && hasUpstox) return 'app';
+      if (hasUser && hasNubra && hasUpstox) return 'app';   // tokens valid → straight to app
+      if (hasUser) return 'setup';                           // user exists but need tokens → setup
     } catch { /* ignore */ }
     return 'landing';
   });
@@ -34,11 +34,8 @@ function Root() {
         setGoogleUser(user);
         localStorage.setItem('google_user', JSON.stringify(user));
         window.history.replaceState({}, '', window.location.pathname);
-        // If tokens already exist in localStorage, skip setup entirely
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-        const hasNubra  = localStorage.getItem('nubra_login_date') === today && !!localStorage.getItem('nubra_session_token');
-        const hasUpstox = !!localStorage.getItem('upstox_token');
-        setStage(hasNubra && hasUpstox ? 'app' : 'setup');
+        // Always go through setup so tokens are validated/refreshed
+        setStage('setup');
       } catch { /* ignore */ }
     } else if (authError) {
       window.history.replaceState({}, '', window.location.pathname);
