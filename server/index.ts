@@ -201,9 +201,8 @@ const nubraAuthAgent = new Agent({
 });
 
 // Generate a TOTP code from a base32 secret (RFC 6238, 6-digit, 30s step)
-function generateTOTP(secret: string): string {
+function generateTOTP(secret: string, windowOffset = 0): string {
   const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  // Decode base32 → bytes
   let bits = '';
   for (const c of secret.toUpperCase().replace(/=+$/, '')) {
     const val = base32Chars.indexOf(c);
@@ -215,14 +214,11 @@ function generateTOTP(secret: string): string {
     keyBytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
   }
 
-  // Time counter (30-second step)
-  const epoch = Math.floor(Date.now() / 1000);
-  const counter = Math.floor(epoch / 30);
+  const counter = Math.floor(Date.now() / 1000 / 30) + windowOffset;
   const counterBuf = Buffer.alloc(8);
   counterBuf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
   counterBuf.writeUInt32BE(counter >>> 0, 4);
 
-  // HMAC-SHA1
   const hmac = createHmac('sha1', Buffer.from(keyBytes)).update(counterBuf).digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
   const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset + 1] << 16 | hmac[offset + 2] << 8 | hmac[offset + 3]) % 1_000_000;
@@ -409,23 +405,34 @@ app.post('/api/nubra-login', async (req, reply) => {
   const deviceId = getDeviceId();
 
   try {
-    // Step 1: TOTP login → auth_token (SDK expects 201)
-    const totpCode = generateTOTP(totp_secret);
-    const step1 = await fetch(`${NUBRA_API}/totp/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-device-id': deviceId,
-        'x-device-origin': 'DESKTOP',
-      },
-      body: JSON.stringify({ phone, totp: parseInt(totpCode) }),
-      dispatcher: nubraAuthAgent,
-    } as any);
+    // Step 1: TOTP login → auth_token
+    // Try current window then ±1 to handle clock skew; send as integer (Nubra requires uint32)
+    let step1: any = null;
+    let step1Data: any = null;
+    let authToken: string | undefined;
 
-    const step1Data = await step1.json() as any;
-    const authToken = step1Data.auth_token ?? step1Data.data?.auth_token;
-    if ((step1.status !== 200 && step1.status !== 201) || !authToken) {
-      return reply.status(step1.status).send({
+    for (const windowOffset of [0, -1, 1]) {
+      const totpInt = parseInt(generateTOTP(totp_secret, windowOffset), 10);
+      const res = await fetch(`${NUBRA_API}/totp/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+          'x-device-origin': 'DESKTOP',
+        },
+        body: JSON.stringify({ phone, totp: totpInt }),
+        dispatcher: nubraAuthAgent,
+      } as any);
+      const data = await res.json() as any;
+      console.log(`[nubra-login] totp/login offset=${windowOffset} totp=${totpInt} status=${res.status}`, JSON.stringify(data).slice(0, 200));
+      authToken = data.auth_token ?? data.data?.auth_token;
+      step1 = res;
+      step1Data = data;
+      if ((res.status === 200 || res.status === 201) && authToken) break;
+    }
+
+    if (!step1 || (step1.status !== 200 && step1.status !== 201) || !authToken) {
+      return reply.status(step1?.status ?? 502).send({
         error: 'TOTP login failed',
         detail: step1Data,
       });
@@ -1040,15 +1047,20 @@ function saveToken(access_token: string) {
 }
 
 app.post('/api/upstox-login', async (req, reply) => {
-  // Return cached token if still valid
-  const cached = loadCachedToken();
-  if (cached) {
-    console.log('[upstox-login] returning cached token');
-    return reply.send({ access_token: cached.access_token, cached: true });
-  }
-
   // Prefer credentials from request body (sent from browser IDB), fall back to env
   const body = (req.body ?? {}) as Record<string, string>;
+  const force = body.force === 'true' || body.force === true as any;
+
+  // Return cached token if still valid and not forced
+  if (!force) {
+    const cached = loadCachedToken();
+    if (cached) {
+      console.log('[upstox-login] returning cached token');
+      return reply.send({ access_token: cached.access_token, cached: true });
+    }
+  } else {
+    console.log('[upstox-login] force=true — skipping cache, re-logging in');
+  }
   const API_KEY      = body.api_key      || process.env.UPSTOX_API_KEY      || '';
   const API_SECRET   = body.api_secret   || process.env.UPSTOX_API_SECRET   || '';
   const REDIRECT_URI = process.env.UPSTOX_REDIRECT_URI ?? 'http://127.0.0.1:3001/upstox/callback';

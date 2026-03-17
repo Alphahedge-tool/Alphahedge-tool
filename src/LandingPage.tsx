@@ -95,8 +95,7 @@ function AuthModal({ onClose, onEnter }: { onClose: () => void; onEnter: (user?:
 
         {/* logo */}
         <div className={s.modalLogo}>
-          <img src="/alphahede.ico" width={44} height={44} style={{ borderRadius: 12 }} alt="AlphaHedge" />
-          <div className={s.modalBrand}>Alpha<em>Hedge</em></div>
+          <img src="/alpha-logo-blue.jpg" height={48} style={{ borderRadius: 10, display: 'block' }} alt="AlphaHedge" />
           <div className={s.modalTagline}>Professional Options Terminal</div>
         </div>
 
@@ -202,8 +201,7 @@ export default function LandingPage({ onEnter, googleUser, onSignOut }: Props) {
       {/* ── Nav ── */}
       <nav className={s.nav}>
         <a className={s.navLogo} href="#">
-          <img src="/alphahede.ico" width={38} height={38} style={{ borderRadius: 10 }} alt="AlphaHedge" />
-          <span className={s.navBrand}>Alpha<em>Hedge</em></span>
+          <img src="/alpha-logo-blue.jpg" style={{ height: 44, width: 'auto', maxWidth: 180, objectFit: 'contain' }} alt="AlphaHedge" />
         </a>
         <div className={s.navLinks}>
           <button className={s.navLink}>Features</button>
@@ -376,7 +374,7 @@ export default function LandingPage({ onEnter, googleUser, onSignOut }: Props) {
       {/* ── Footer ── */}
       <footer className={s.footer}>
         <div className={s.footerLeft}>
-          <img src="/alphahede.ico" width={22} height={22} style={{ borderRadius: 6 }} alt="AlphaHedge" />
+          <img src="/alpha-logo-blue.jpg" height={20} style={{ borderRadius: 4, display: 'block' }} alt="AlphaHedge" />
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© 2026 AlphaHedge. All rights reserved.</span>
         </div>
         <div className={s.footerRight}>

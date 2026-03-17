@@ -34,6 +34,7 @@ export interface StrategyLeg {
   exchange?: string;  // exchange of the underlying (NSE/BSE/MCX)
   entryTime?: string; // HH:MM:SS when user entered the leg (IST)
   entryDate?: string; // YYYY-MM-DD date of entry (IST)
+  currLtp?: number;   // live LTP from parent (App) — used to keep chart MTM in sync
 }
 
 interface StrategyChartProps {
@@ -65,6 +66,7 @@ type OptionInfo = {
 interface SeriesSet {
   underlyings: Map<string, ISeriesApi<'Line'>>; // keyed by symbol
   mtm: ISeriesApi<'Baseline'> | null;
+  mtmPerUnderlying: Map<string, ISeriesApi<'Line'>>; // keyed by symbol — only when >1 underlying
   options: Map<string, ISeriesApi<'Line'>>;
   deltas:  Map<string, ISeriesApi<'Line'>>;
   ivs:     Map<string, ISeriesApi<'Line'>>;
@@ -73,6 +75,7 @@ interface SeriesSet {
 interface AccumData {
   underlyings: Map<string, LineData[]>; // keyed by symbol
   mtm: BaselineData[];
+  mtmPerUnderlying: Map<string, LineData[]>; // keyed by symbol — only when >1 underlying
   options: Map<string, LineData[]>;
   deltas:  Map<string, LineData[]>;
   ivs:     Map<string, LineData[]>;
@@ -399,6 +402,28 @@ function computeMtmFromOptions(
   });
 }
 
+// Compute MTM broken down per underlying symbol (only legs belonging to that symbol)
+function computeMtmPerUnderlyingSymbol(
+  legInfos: { key: string }[],
+  uniqueLegs: StrategyLeg[],
+  optionsMap: Map<string, LineData[]>,
+): Map<string, LineData[]> {
+  const result = new Map<string, LineData[]>();
+  const uniqueSymbols = [...new Set(uniqueLegs.map(l => l.symbol))];
+  if (uniqueSymbols.length <= 1) return result; // only useful for multi-underlying
+
+  for (const sym of uniqueSymbols) {
+    const symLegInfos = legInfos.filter(info => {
+      const leg = uniqueLegs.find(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}` === info.key);
+      return leg?.symbol === sym;
+    });
+    if (symLegInfos.length === 0) continue;
+    const data = computeMtmFromOptions(symLegInfos, uniqueLegs, optionsMap);
+    result.set(sym, data as unknown as LineData[]);
+  }
+  return result;
+}
+
 // Fetch underlying close for a date (Nubra for NSE/BSE, Upstox for MCX)
 async function fetchUnderlyingForDate(
   u: UnderlyingInfo,
@@ -581,20 +606,22 @@ const IV_COLORS    = ['#a78bfa', '#c4b5fd', '#ddd6fe'];
 const ATM_IV_COLOR = '#f97316';
 
 // ── ATM IV helpers (mirrors OIProfileView) ────────────────────────────────────
-function expiryToMs(exp: string): number {
+function expiryToMs(exp: string | number | null | undefined): number {
+  if (exp == null) return 0;
+  const s = String(exp);
   // YYYYMMDD → ms
-  if (/^\d{8}$/.test(exp)) {
-    return Date.UTC(+exp.slice(0,4), +exp.slice(4,6)-1, +exp.slice(6,8));
+  if (/^\d{8}$/.test(s)) {
+    return Date.UTC(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
   }
   // "DD Mon YY" e.g. "17 Mar 26"
   const MMAP: Record<string,number> = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  const m = exp.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
+  const m = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2,4})$/);
   if (m) {
     const yy = m[3].length === 2 ? 2000 + +m[3] : +m[3];
     return Date.UTC(yy, MMAP[m[2]] ?? 0, +m[1]);
   }
   // "YYYY-MM-DD"
-  const m2 = exp.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m2) return Date.UTC(+m2[1], +m2[2]-1, +m2[3]);
   return 0;
 }
@@ -605,6 +632,48 @@ function toNubraChainValue(underlying: string, expiryMs: number): string {
   const mm   = d.toLocaleString('en-IN', { month: '2-digit', timeZone: 'Asia/Kolkata' });
   const dd   = d.toLocaleString('en-IN', { day: '2-digit', timeZone: 'Asia/Kolkata' });
   return `${underlying}_${yyyy}${mm}${dd}`;
+}
+
+/** Snap ms timestamp to 1-minute bar boundary in IST */
+const IST_OFFSET_SEC = 19800;
+function snapToMinBar(tsMs: number): number {
+  const s = Math.floor(tsMs / 1000);
+  return Math.floor((s + IST_OFFSET_SEC) / 60) * 60 - IST_OFFSET_SEC;
+}
+
+/**
+ * Find the nearest actual strike available in nubraInstruments for a given
+ * underlying + expiry. Compares expiry by ms so format differences don't matter.
+ */
+function calcATMStrike(
+  spot: number,
+  nubraInstruments: NubraInstrument[],
+  assetSym: string,
+  expiry: string,
+): number {
+  if (spot <= 0) return 0;
+  const sym = assetSym.toUpperCase();
+  const expiryMs = expiryToMs(expiry);
+  const opts = nubraInstruments.filter(i => {
+    if (i.strike_price == null) return false;
+    if (expiryMs > 0 && i.expiry) {
+      if (expiryToMs(String(i.expiry)) !== expiryMs) return false;
+    }
+    return (
+      i.asset?.toUpperCase() === sym ||
+      i.nubra_name?.toUpperCase() === sym ||
+      i.stock_name?.toUpperCase().startsWith(sym)
+    );
+  });
+  if (opts.length === 0) return 0;
+  // strike_price is in paise → convert to rupees
+  let best = opts[0];
+  let bestDiff = Math.abs((best.strike_price! / 100) - spot);
+  for (const o of opts) {
+    const diff = Math.abs((o.strike_price! / 100) - spot);
+    if (diff < bestDiff) { best = o; bestDiff = diff; }
+  }
+  return best.strike_price! / 100;
 }
 
 async function fetchAtmIvChart(
@@ -672,7 +741,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRef    = useRef<SeriesSet>({
-    underlyings: new Map(), mtm: null, options: new Map(), deltas: new Map(), ivs: new Map(),
+    underlyings: new Map(), mtm: null, mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map(),
   });
   const fetchAllRef    = useRef<() => void>(() => {});
   const wsRef          = useRef<WebSocket | null>(null);
@@ -689,7 +758,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const greeksRangeSigRef = useRef<string>(''); // signature for historical range greeks load
 
   const accumRef = useRef<AccumData>({
-    underlyings: new Map(), mtm: [], options: new Map(), deltas: new Map(), ivs: new Map(),
+    underlyings: new Map(), mtm: [], mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map(),
   });
 
   const scrollToLatest = useCallback(() => {
@@ -709,6 +778,10 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [loading,     setLoading]     = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState('');
+  // DOM popup in positions overlay
+  const [domLegIdx,   setDomLegIdx]   = useState<number | null>(null);
+  const [domBook,     setDomBook]     = useState<{ bids: {price:number;qty:number}[]; asks: {price:number;qty:number}[]; ltp: number } | null>(null);
+  const domWsRef = useRef<WebSocket | null>(null);
   const [showPositions, setShowPositions] = useState(false);
   const [, setLegendItems] = useState<{ label: string; color: string }[]>([]);
   const [chartReady,  setChartReady]  = useState(false);
@@ -717,16 +790,29 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [toDate,   setToDate]   = useState<string | null>(null);
   // Toolbar visibility toggles
   const [showSpot,    setShowSpot]    = useState(true);
-  const [showOptions, setShowOptions] = useState(true);
+  const [showOptions, setShowOptions] = useState(false);
   const [showMtm,     setShowMtm]     = useState(true);
   const [showDelta,   setShowDelta]   = useState(false);
   const [showIv,      setShowIv]      = useState(false);
   const [showAtmIv,   setShowAtmIv]   = useState(false);
-  const showDeltaRef = useRef(showDelta);
-  const showIvRef    = useRef(showIv);
-  showDeltaRef.current = showDelta;
-  showIvRef.current    = showIv;
-  const atmIvSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const showDeltaRef    = useRef(showDelta);
+  const showIvRef       = useRef(showIv);
+  const showAtmIvRef    = useRef(showAtmIv);
+  const showOptionsRef  = useRef(showOptions);
+  showDeltaRef.current    = showDelta;
+  showIvRef.current       = showIv;
+  showAtmIvRef.current    = showAtmIv;
+  showOptionsRef.current  = showOptions;
+  const optionsFetchedRef = useRef(false); // true once options data has been loaded
+  const atmIvSeriesRef        = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const atmIvLiveBarRef       = useRef<Map<string, LineData>>(new Map());   // sym → live bar
+  const atmIvCurrentStrikeRef = useRef<Map<string, number>>(new Map());     // sym → current ATM strike (rupees)
+  const atmIvSubRefIds        = useRef<Map<string, Set<number>>>(new Map()); // sym → subscribed ATM ref_ids
+  const atmIvLatestIv         = useRef<Map<string, Map<number, number>>>(new Map()); // sym → (refId → IV)
+  const atmIvSubscribeFnRef   = useRef<((sym: string, expiry: string, strike: number) => void) | null>(null);
+
+  // MTM tooltip state
+  const [mtmTooltip, setMtmTooltip] = useState<{ x: number; y: number; time: number; value: number } | null>(null);
 
   const uniqueLegs = legs.filter((leg, i, arr) =>
     arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
@@ -924,7 +1010,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       chart.remove();
       chartRef.current = null;
       setChartReady(false);
-      seriesRef.current = { underlyings: new Map(), mtm: null, options: new Map(), deltas: new Map(), ivs: new Map() };
+      seriesRef.current = { underlyings: new Map(), mtm: null, mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map() };
     };
   }, []);
 
@@ -1042,7 +1128,42 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       chart.priceScale('mtm').applyOptions({ scaleMargins: { top: 0.58, bottom: 0.04 }, visible: true, borderColor: '#2a2a2a' });
     }
 
+    // Per-underlying MTM lines — only when >1 underlying
     const uniqueSyms = [...new Set(uniqueLegs.map(l => l.symbol))];
+    // Remove stale per-underlying MTM series
+    for (const [sym, s] of ss.mtmPerUnderlying) {
+      if (!uniqueSyms.includes(sym)) { try { chart.removeSeries(s); } catch { /**/ } ss.mtmPerUnderlying.delete(sym); }
+    }
+    if (uniqueSyms.length > 1) {
+      const MTM_PER_COLORS = ['#60a5fa', '#fb923c', '#34d399', '#a78bfa', '#f472b6'];
+      uniqueSyms.forEach((sym, idx) => {
+        if (!ss.mtmPerUnderlying.has(sym)) {
+          const color = MTM_PER_COLORS[idx % MTM_PER_COLORS.length];
+          const s = chart.addSeries(LineSeries, {
+            color, lineWidth: 2 as 2,
+            title: `MTM ${sym}`,
+            priceScaleId: 'mtm',
+            lineStyle: 0, // solid
+            priceFormat: {
+              type: 'custom',
+              minMove: 0.01,
+              formatter: (v: number) => {
+                const abs = Math.abs(v);
+                if (abs >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+                if (abs >= 1000)   return `₹${(v / 1000).toFixed(1)}K`;
+                return `₹${v.toFixed(0)}`;
+              },
+            },
+          }, 0);
+          ss.mtmPerUnderlying.set(sym, s);
+        }
+      });
+    } else {
+      // Only 1 underlying — remove all per-underlying series
+      for (const [, s] of ss.mtmPerUnderlying) { try { chart.removeSeries(s); } catch { /**/ } }
+      ss.mtmPerUnderlying.clear();
+    }
+
     const items: { label: string; color: string }[] = uniqueSyms.map((sym, idx) => ({ label: sym, color: UNDERLYING_COLORS[idx % UNDERLYING_COLORS.length] }));
     let ci = 0, pi = 0;
     for (const leg of uniqueLegs) {
@@ -1060,8 +1181,9 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     const acc   = accumRef.current;
     const ts    = chart?.timeScale();
 
-    const savedRange       = prepend ? ts?.getVisibleLogicalRange() : null;
-    const snapUnderlyings  = new Map(acc.underlyings);
+    const savedRange           = prepend ? ts?.getVisibleLogicalRange() : null;
+    const snapUnderlyings      = new Map(acc.underlyings);
+    const snapMtmPerUnderlying = new Map(acc.mtmPerUnderlying);
     const snapMtm          = acc.mtm.slice();
     const snapOptions = new Map(acc.options);
     const snapDeltas  = new Map(acc.deltas);
@@ -1101,6 +1223,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     requestAnimationFrame(() => {
       for (const [sym, data] of snapUnderlyings) ss.underlyings.get(sym)?.setData(data);
       if (ss.mtm && snapMtm.length) ss.mtm.setData(snapMtm);
+      for (const [sym, data] of snapMtmPerUnderlying) ss.mtmPerUnderlying.get(sym)?.setData(data);
       for (const [key, data] of snapOptions) ss.options.get(key)?.setData(data);
       for (const [key, data] of snapDeltas)  ss.deltas.get(key)?.setData(data);
       for (const [key, data] of snapIvs)     ss.ivs.get(key)?.setData(data);
@@ -1181,8 +1304,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           .catch((e: any) => console.warn('[StrategyChart] underlying failed:', u.symbol, date, e.message))
       ),
 
-      // Each option: close only — Greeks loaded lazily on toggle
-      ...legInfos.map((info) =>
+      // Each option: close only — only fetch if Options toggle is ON
+      ...(showOptionsRef.current ? legInfos.map((info) =>
         fetchOptionCloseForDateAny(info, date, today, entryTimeIst, isHistoricalMode)
           .then(({ close }) => {
             const filtered = entryUnix ? close.filter(pt => (pt.time as number) >= entryUnix) : close;
@@ -1193,12 +1316,13 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
             }
           })
           .catch((e: any) => console.warn('[StrategyChart] option failed', info.symbol ?? info.instrumentKey ?? 'MCX', date, e.message))
-      ),
+      ) : []),
     ]);
 
     // Recompute MTM fresh from ALL accumulated option data
     if (gotAny && legInfos.length > 0) {
       acc.mtm = computeMtmFromOptions(legInfos, uniqueLegs, acc.options);
+      acc.mtmPerUnderlying = computeMtmPerUnderlyingSymbol(legInfos, uniqueLegs, acc.options);
     }
 
     return gotAny;
@@ -1213,7 +1337,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     setFromDate(null);
     setToDate(null);
 
-    accumRef.current = { underlyings: new Map(), mtm: [], options: new Map(), deltas: new Map(), ivs: new Map() };
+    accumRef.current = { underlyings: new Map(), mtm: [], mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map() };
     loadedDatesRef.current   = new Set();
     greeksLoadedRef.current  = new Set();
     greeksRangeSigRef.current = '';
@@ -1221,6 +1345,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     isLoadingMoreRef.current = false;
     loadLockRef.current      = false;
     mcxAutoScrollRef.current = false;
+    optionsFetchedRef.current = false;
 
     const underlyings = resolveUnderlyings();
     const hasMcx = underlyings.some(u => u.source === 'MCX');
@@ -1265,7 +1390,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               })
               .catch((e: any) => console.warn('[StrategyChart] underlying range failed:', u.symbol, e.message))
           ),
-          ...legInfos.map((info) =>
+          ...(showOptionsRef.current ? legInfos.map((info) =>
             fetchOptionCloseRangeAny(info, startDate, today, startTimeIst)
               .then(({ close }) => {
                 const filtered = entryUnix ? close.filter(pt => (pt.time as number) >= entryUnix) : close;
@@ -1275,11 +1400,12 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                 }
               })
               .catch((e: any) => console.warn('[StrategyChart] option range failed', info.symbol ?? info.instrumentKey ?? 'MCX', e.message))
-          ),
+          ) : []),
         ]);
 
         if (gotAny) {
           accumRef.current.mtm = computeMtmFromOptions(legInfos, uniqueLegs, accumRef.current.options);
+          accumRef.current.mtmPerUnderlying = computeMtmPerUnderlyingSymbol(legInfos, uniqueLegs, accumRef.current.options);
           oldestDateRef.current = startDate;
           setFromDate(startDate);
           setToDate(today);
@@ -1295,13 +1421,26 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           setToDate(startDate);
           flushAccum(false);
         } else {
-          errors.push('No data for today — market may not have opened yet');
+          // No candle data yet — market may not have opened. But if currLtp is
+          // already live (pushed by the currLtp sync effect), don't show an error.
+          const hasLiveLtp = legsRef.current.some(l => (l.currLtp ?? 0) > 0);
+          if (!hasLiveLtp) {
+            errors.push('No data for today — market may not have opened yet');
+          }
         }
       }
     } catch (e: any) {
       errors.push(e.message ?? String(e));
     } finally {
-      if (errors.length) setError(errors[0]);
+      // Only surface errors when there is truly no data on the chart.
+      // If underlyings or options loaded successfully, suppress soft errors
+      // (e.g. a single unresolved leg) so the chart isn't misleading.
+      if (errors.length) {
+        const acc = accumRef.current;
+        const hasData = acc.underlyings.size > 0 || acc.options.size > 0;
+        if (!hasData) setError(errors[0]);
+      }
+      if (showOptionsRef.current) optionsFetchedRef.current = true;
       setLoading(false);
     }
   }, [ocSymbol, uniqueLegs, resolveUnderlyings, resolveOption, fetchDay, flushAccum, isHistoricalMode, scrollToLatest]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1343,6 +1482,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       requestAnimationFrame(() => {
         for (const [sym, data] of acc.underlyings) ss.underlyings.get(sym)?.setData(data);
         if (ss.mtm && acc.mtm.length) ss.mtm.setData(acc.mtm);
+        for (const [sym, data] of acc.mtmPerUnderlying) ss.mtmPerUnderlying.get(sym)?.setData(data);
         for (const [key, data] of acc.options) ss.options.get(key)?.setData(data);
         for (const [key, data] of acc.deltas)  ss.deltas.get(key)?.setData(data);
         for (const [key, data] of acc.ivs)     ss.ivs.get(key)?.setData(data);
@@ -1414,9 +1554,71 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     if (acc.options.size === 0) return;
     const legInfos = uniqueLegs.map(l => ({ key: `${l.symbol}:${l.strike}${l.type}:${l.expiry}` }));
     acc.mtm = computeMtmFromOptions(legInfos, uniqueLegs, acc.options);
+    acc.mtmPerUnderlying = computeMtmPerUnderlyingSymbol(legInfos, uniqueLegs, acc.options);
     const ss = seriesRef.current;
     if (ss.mtm) ss.mtm.setData(acc.mtm);
+    for (const [sym, data] of acc.mtmPerUnderlying) ss.mtmPerUnderlying.get(sym)?.setData(data);
   }, [mtmKey, uniqueLegs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync live MTM bar from currLtp prop (keeps chart in sync with the tab) ───
+  // Runs whenever any leg's currLtp changes — no refetch needed
+  useEffect(() => {
+    if (uniqueLegs.length === 0) return;
+    // Only sync if at least one leg has a live currLtp
+    const hasLive = uniqueLegs.some(l => (l.currLtp ?? 0) > 0);
+    if (!hasLive) return;
+
+    const nowUnix = Math.floor(Date.now() / 60000) * 60;
+    const t = nowUnix as unknown as Time;
+
+    let total = 0;
+    for (const leg of uniqueLegs) {
+      const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+      total += (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
+    }
+
+    // Update accum + series for total MTM
+    const acc = accumRef.current;
+    const ss  = seriesRef.current;
+    const mtmPt: BaselineData = { time: t, value: total };
+    const last = acc.mtm[acc.mtm.length - 1];
+    if (last && (last.time as number) === nowUnix) acc.mtm[acc.mtm.length - 1] = mtmPt;
+    else acc.mtm.push(mtmPt);
+    ss.mtm?.update(mtmPt);
+
+    // Also update acc.options so per-underlying MTM is consistent
+    for (const leg of uniqueLegs) {
+      const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+      const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+      const optPts = acc.options.get(key) ?? [];
+      const lastOpt = optPts[optPts.length - 1];
+      const pt: LineData = { time: t, value: ltp };
+      if (lastOpt && (lastOpt.time as number) === nowUnix) optPts[optPts.length - 1] = pt;
+      else optPts.push(pt);
+      acc.options.set(key, optPts);
+      ss.options.get(key)?.update(pt);
+    }
+
+    // Per-underlying MTM lines
+    if (ss.mtmPerUnderlying.size > 0) {
+      const uniqueSymbols = [...new Set(uniqueLegs.map(l => l.symbol))];
+      for (const sym of uniqueSymbols) {
+        const symLegs = uniqueLegs.filter(l => l.symbol === sym);
+        let symTotal = 0;
+        for (const leg of symLegs) {
+          const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+          symTotal += (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
+        }
+        const symPt: LineData = { time: t, value: symTotal };
+        const symPts = acc.mtmPerUnderlying.get(sym) ?? [];
+        const lastSym = symPts[symPts.length - 1];
+        if (lastSym && (lastSym.time as number) === nowUnix) symPts[symPts.length - 1] = symPt;
+        else symPts.push(symPt);
+        acc.mtmPerUnderlying.set(sym, symPts);
+        ss.mtmPerUnderlying.get(sym)?.update(symPt);
+      }
+    }
+  }, [legs.map(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}:${(l.currLtp ?? 0).toFixed(2)}`).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fetch when legs / symbol / mode change ──────────────────────────────
   useEffect(() => {
@@ -1462,8 +1664,46 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       nubraSymToLegSym.set(u.symbol.toUpperCase(), u.symbol);
     }
 
+    // Reset ATM IV live state whenever this effect re-runs
+    atmIvLiveBarRef.current.clear();
+    atmIvCurrentStrikeRef.current.clear();
+    atmIvSubRefIds.current.clear();
+    atmIvLatestIv.current.clear();
+
     const ws = new WebSocket('ws://localhost:8765');
     wsRef.current = ws;
+
+    // Uses wsRef.current so it always sends on the live socket — safe to call from any effect
+    const subscribeAtmGreeks = atmIvSubscribeFnRef.current = (sym: string, expiry: string, atmStrike: number) => {
+      const sock = wsRef.current;
+      if (!sock || sock.readyState !== WebSocket.OPEN) return;
+      const strikePaise = Math.round(atmStrike * 100);
+      const expiryMs = expiryToMs(expiry);
+      const matchSym = (i: NubraInstrument) =>
+        i.asset?.toUpperCase() === sym.toUpperCase() ||
+        i.nubra_name?.toUpperCase() === sym.toUpperCase() ||
+        i.stock_name?.toUpperCase().startsWith(sym.toUpperCase());
+      const matchExpiry = (i: NubraInstrument) =>
+        expiryMs > 0 && i.expiry ? expiryToMs(String(i.expiry)) === expiryMs : String(i.expiry) === expiry;
+      const ce = nubraInstruments.find(i => i.option_type === 'CE' && matchExpiry(i) && Math.abs((i.strike_price ?? 0) - strikePaise) < 2 && matchSym(i));
+      const pe = nubraInstruments.find(i => i.option_type === 'PE' && matchExpiry(i) && Math.abs((i.strike_price ?? 0) - strikePaise) < 2 && matchSym(i));
+      if (!ce || !pe) {
+        console.warn(`[ATM IV] CE/PE not found — sym=${sym} expiry=${expiry} strike=${atmStrike} (paise=${strikePaise}) ce=${!!ce} pe=${!!pe}`);
+        return;
+      }
+      const ceId = Number(ce.ref_id);
+      const peId = Number(pe.ref_id);
+      const prevIds = atmIvSubRefIds.current.get(sym);
+      if (prevIds?.has(ceId) && prevIds?.has(peId)) return;
+      if (prevIds && prevIds.size > 0) {
+        sock.send(JSON.stringify({ action: 'unsubscribe', session_token: sessionToken, data_type: 'greeks', ref_ids: [...prevIds] }));
+      }
+      atmIvSubRefIds.current.set(sym, new Set([ceId, peId]));
+      atmIvLatestIv.current.set(sym, new Map());
+      const atmMsg = { action: 'subscribe', session_token: sessionToken, data_type: 'greeks', symbols: [], ref_ids: [ceId, peId], exchange: ce.exchange || 'NSE' };
+      console.log(`[ATM IV] subscribing greeks — sym=${sym} expiry=${expiry} strike=${atmStrike} CE=${ceId} PE=${peId}`);
+      sock.send(JSON.stringify(atmMsg));
+    };
 
     ws.onopen = () => {
       // greeks per refId — direct per-leg LTP, no symbol ambiguity
@@ -1480,6 +1720,27 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           action: 'subscribe', session_token: sessionToken,
           data_type: 'index', symbols: syms, exchange: exch,
         }));
+      }
+
+      // Seed ATM IV greeks immediately from last known spot (no need to wait for next index tick)
+      console.log('[ATM IV] ws.onopen — seeding ATM greeks, showAtmIv=', showAtmIvRef.current);
+      if (showAtmIvRef.current && isMarketOpen()) {
+        const now = Date.now();
+        for (const u of underlyingInfos) {
+          const spotPts = accumRef.current.underlyings.get(u.symbol);
+          const lastSpot = spotPts?.length ? spotPts[spotPts.length - 1].value : 0;
+          if (lastSpot <= 0) continue;
+          const legsForU = legsRef.current.filter(l => l.symbol === u.symbol || legsRef.current.every(x => x.symbol === l.symbol));
+          const expiry = [...new Set(legsForU.map(l => l.expiry))]
+            .map(exp => ({ exp, ms: expiryToMs(exp) }))
+            .filter(x => x.ms > 0)
+            .sort((a, b) => Math.abs(a.ms - now) - Math.abs(b.ms - now))[0]?.exp;
+          if (!expiry) continue;
+          const atmStrike = calcATMStrike(lastSpot, nubraInstruments, u.symbol, expiry);
+          if (atmStrike <= 0) continue;
+          atmIvCurrentStrikeRef.current.set(u.symbol, atmStrike);
+          subscribeAtmGreeks(u.symbol, expiry, atmStrike);
+        }
       }
     };
 
@@ -1525,6 +1786,30 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         }
       }
 
+      // ATM IV: if this ref_id belongs to a subscribed ATM CE/PE, update that sym's series only
+      if (showAtmIvRef.current) {
+        const refId = Number(d.ref_id);
+        for (const [sym, refIds] of atmIvSubRefIds.current) {
+          if (!refIds.has(refId)) continue;
+          const iv = d.iv != null && d.iv > 0 ? d.iv * 100 : 0;
+          if (iv <= 0) break;
+          const symIvMap = atmIvLatestIv.current.get(sym) ?? new Map<number, number>();
+          symIvMap.set(refId, iv);
+          atmIvLatestIv.current.set(sym, symIvMap);
+          if (symIvMap.size >= 2) {
+            const atmIv = [...symIvMap.values()].reduce((a, b) => a + b, 0) / symIvMap.size;
+            const nowBarSec = snapToMinBar(Date.now()) as unknown as Time;
+            const series = atmIvSeriesRef.current.get(sym);
+            if (series) {
+              const pt: LineData = { time: nowBarSec, value: atmIv };
+              atmIvLiveBarRef.current.set(sym, pt);
+              try { series.update(pt); } catch { /* lwc guard */ }
+            }
+          }
+          break;
+        }
+      }
+
       // Recompute MTM from latest accumulated option prices
       if (ss.mtm) {
         let mtmTotal = 0; let hasAll = true;
@@ -1540,6 +1825,29 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           if (last && (last.time as number) === nowUnix) acc.mtm[acc.mtm.length - 1] = mtmPt;
           else acc.mtm.push(mtmPt);
           ss.mtm.update(mtmPt);
+        }
+        // Per-underlying live MTM update
+        if (ss.mtmPerUnderlying.size > 0) {
+          const uniqueSymbols = [...new Set(freshLegs.map(l => l.symbol))];
+          for (const sym of uniqueSymbols) {
+            const symLegs = freshLegs.filter(l => l.symbol === sym);
+            let symTotal = 0; let symHasAll = true;
+            for (const leg of symLegs) {
+              const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
+              const latest = pts?.length ? pts[pts.length - 1].value : 0;
+              if (!latest) { symHasAll = false; break; }
+              symTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
+            }
+            if (symHasAll) {
+              const pt: LineData = { time: nowUnix as unknown as Time, value: symTotal };
+              const symPts = acc.mtmPerUnderlying.get(sym) ?? [];
+              const last = symPts[symPts.length - 1];
+              if (last && (last.time as number) === nowUnix) symPts[symPts.length - 1] = pt;
+              else symPts.push(pt);
+              acc.mtmPerUnderlying.set(sym, symPts);
+              ss.mtmPerUnderlying.get(sym)?.update(pt);
+            }
+          }
         }
       }
     };
@@ -1565,6 +1873,26 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const uPts = acc.underlyings.get(legSym) ?? [];
       upsert(uPts, ss.underlyings.get(legSym) ?? null, { time: nowUnix as unknown as Time, value: spot });
       acc.underlyings.set(legSym, uPts);
+
+      // ATM IV: track spot → subscribe CE+PE greeks for nearest ATM strike
+      if (showAtmIvRef.current) {
+        const now = Date.now();
+        const legsForSym = legsRef.current.filter(l => l.symbol === legSym || legsRef.current.every(x => x.symbol === l.symbol));
+        const expiry = [...new Set(legsForSym.map(l => l.expiry))]
+          .map(exp => ({ exp, ms: expiryToMs(exp) }))
+          .filter(x => x.ms > 0)
+          .sort((a, b) => Math.abs(a.ms - now) - Math.abs(b.ms - now))[0]?.exp;
+        const sampleOpt = nubraInstruments.find(i => i.option_type === 'CE' && (i.asset?.toUpperCase().includes(legSym.toUpperCase()) || i.nubra_name?.toUpperCase().includes(legSym.toUpperCase())));
+        console.log(`[ATM IV] index tick sym=${legSym} spot=${spot} expiry=${expiry} nubraInstruments=${nubraInstruments.length} sample_expiry=${sampleOpt?.expiry} sample_strike=${sampleOpt?.strike_price} sample_asset=${sampleOpt?.asset}`);
+        if (!expiry) return;
+        const newStrike = calcATMStrike(spot, nubraInstruments, legSym, expiry);
+        console.log(`[ATM IV] calcATMStrike=${newStrike} prev=${atmIvCurrentStrikeRef.current.get(legSym)}`);
+        if (newStrike <= 0) return;
+        if (newStrike !== atmIvCurrentStrikeRef.current.get(legSym)) {
+          atmIvCurrentStrikeRef.current.set(legSym, newStrike);
+          subscribeAtmGreeks(legSym, expiry, newStrike);
+        }
+      }
     };
 
     ws.onmessage = (e) => {
@@ -1594,6 +1922,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       wsTickRef.current = [];
       if (wsFlushTimerRef.current) clearTimeout(wsFlushTimerRef.current);
       wsFlushPendingRef.current = false;
+      atmIvSubscribeFnRef.current = null;
     };
   }, [ocSymbol, ocExchange, uniqueLegs.map(l => `${l.symbol}:${l.strike}${l.type}${l.expiry}:${l.refId ?? ''}`).join(','), chartReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1686,6 +2015,30 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         if (last && (last.time as number) === nowUnix) acc.mtm[acc.mtm.length - 1] = mtmPt;
         else acc.mtm.push(mtmPt);
         ss.mtm.update(mtmPt);
+        // Per-underlying live MTM for MCX
+        if (ss.mtmPerUnderlying.size > 0) {
+          const uniqueSymbols = [...new Set(freshLegs.map(l => l.symbol))];
+          for (const sym of uniqueSymbols) {
+            const symLegs = freshLegs.filter(l => l.symbol === sym);
+            let symTotal = 0; let symHasAll = true;
+            for (const leg of symLegs) {
+              const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
+              const latest = pts?.length ? pts[pts.length - 1].value : 0;
+              if (!latest) { symHasAll = false; break; }
+              symTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
+            }
+            if (symHasAll) {
+              const nowUnix2 = Math.floor(Date.now() / 60000) * 60;
+              const pt: LineData = { time: nowUnix2 as unknown as Time, value: symTotal };
+              const symPts = acc.mtmPerUnderlying.get(sym) ?? [];
+              const lastPt = symPts[symPts.length - 1];
+              if (lastPt && (lastPt.time as number) === nowUnix2) symPts[symPts.length - 1] = pt;
+              else symPts.push(pt);
+              acc.mtmPerUnderlying.set(sym, symPts);
+              ss.mtmPerUnderlying.get(sym)?.update(pt);
+            }
+          }
+        }
       }
     };
 
@@ -1749,11 +2102,17 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   useEffect(() => {
     const ss = seriesRef.current;
     for (const s of ss.options.values()) s.applyOptions({ visible: showOptions });
+    // Lazy-load: fetch options data the first time the toggle is turned ON
+    if (showOptions && !optionsFetchedRef.current) {
+      optionsFetchedRef.current = true;
+      fetchAllRef.current();
+    }
   }, [showOptions]);
 
   useEffect(() => {
     const ss = seriesRef.current;
     ss.mtm?.applyOptions({ visible: showMtm });
+    for (const s of ss.mtmPerUnderlying.values()) s.applyOptions({ visible: showMtm });
   }, [showMtm]);
 
   useEffect(() => {
@@ -1932,7 +2291,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         .filter(x => x.ms > 0)
         .sort((a, b) => Math.abs(a.ms - now) - Math.abs(b.ms - now));
       if (sortedExpiries.length === 0) continue;
-      const { ms: expiryMs } = sortedExpiries[0];
+      const { expiry: nearestExpiry, ms: expiryMs } = sortedExpiries[0];
 
       // Create series if not yet exists for this underlying
       if (!seriesMap.has(u.symbol)) {
@@ -1953,6 +2312,19 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           if (pts.length && s) s.setData(sortDedup(pts));
         })
         .catch(e => console.warn(`[StrategyChart] ATM IV fetch failed (${u.symbol})`, e.message));
+
+      // If WS already open (e.g. ATM IV toggled on after connect), seed immediately
+      if (isMarketOpen() && wsRef.current?.readyState === WebSocket.OPEN) {
+        const spotPts = accumRef.current.underlyings.get(u.symbol);
+        const lastSpot = spotPts?.length ? spotPts[spotPts.length - 1].value : 0;
+        if (lastSpot > 0) {
+          const atmStrike = calcATMStrike(lastSpot, nubraInstruments, u.symbol, nearestExpiry);
+          if (atmStrike > 0) {
+            atmIvCurrentStrikeRef.current.set(u.symbol, atmStrike);
+            atmIvSubscribeFnRef.current?.(u.symbol, nearestExpiry, atmStrike);
+          }
+        }
+      }
     }
 
     return () => {
@@ -1961,6 +2333,44 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAtmIv, chartReady, uniqueLegs.map(l => `${l.symbol}:${l.expiry}`).join(','), ocSymbol, ocExchange]);
+
+  // ── DOM orderbook WS for positions overlay ───────────────────────────────────
+  useEffect(() => {
+    if (domLegIdx === null) {
+      domWsRef.current?.close();
+      domWsRef.current = null;
+      setDomBook(null);
+      return;
+    }
+    const leg = legs[domLegIdx];
+    if (!leg?.refId) { setDomBook(null); return; }
+    const sessionToken = localStorage.getItem('nubra_session_token');
+    if (!sessionToken) return;
+
+    domWsRef.current?.close();
+    setDomBook(null);
+    const ws = new WebSocket('ws://localhost:8765');
+    domWsRef.current = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ action: 'subscribe', session_token: sessionToken, data_type: 'orderbook', ref_ids: [leg.refId] }));
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'orderbook' && msg.data?.ref_id === leg.refId) {
+          const d = msg.data;
+          setDomBook({
+            ltp:  (d.last_traded_price ?? 0) / 100,
+            bids: (d.bids ?? []).slice(0, 5).map((b: any) => ({ price: b.price / 100, qty: b.quantity })),
+            asks: (d.asks ?? []).slice(0, 5).map((a: any) => ({ price: a.price / 100, qty: a.quantity })),
+          });
+        }
+      } catch { /**/ }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+    return () => { ws.close(); domWsRef.current = null; };
+  }, [domLegIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasContent = (!!ocSymbol || uniqueLegs.length > 0) && uniqueLegs.length > 0;
 
@@ -2114,7 +2524,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               <span style={{ fontSize: 13, fontWeight: 400, color: '#565A6B', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
             </div>
             <button
-              onClick={() => setShowPositions(false)}
+              onClick={() => { setShowPositions(false); setDomLegIdx(null); }}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#374151', padding: 2, display: 'flex', alignItems: 'center' }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f23645'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#374151'; }}
@@ -2127,12 +2537,12 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
           {/* Column headers */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '44px 1fr 52px 64px 64px',
+            display: 'grid', gridTemplateColumns: '44px 1fr 52px 64px 64px 24px',
             padding: '5px 14px 4px',
             background: '#333333',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
           }}>
-            {['B/S', 'Instrument', 'Lots', 'Entry', 'Time'].map((h, i) => (
+            {['B/S', 'Instrument', 'Lots', 'Entry', 'Time', ''].map((h, i) => (
               <span key={i} style={{ fontSize: 13, fontWeight: 400, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i >= 2 ? 'right' : 'left', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>{h}</span>
             ))}
           </div>
@@ -2144,55 +2554,145 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               const legColor = leg.type === 'CE'
                 ? CE_COLORS[legs.filter((l, j) => j < i && l.type === 'CE').length % CE_COLORS.length]
                 : PE_COLORS[legs.filter((l, j) => j < i && l.type === 'PE').length % PE_COLORS.length];
+              const domOpen = domLegIdx === i;
               return (
-                <div
-                  key={i}
-                  style={{
-                    display: 'grid', gridTemplateColumns: '44px 1fr 52px 64px 64px',
-                    alignItems: 'center', padding: '7px 14px',
-                    borderBottom: i < legs.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                >
-                  {/* B/S badge */}
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 34, height: 18, borderRadius: 4,
-                    background: isBuy ? 'rgba(38,166,154,0.18)' : 'rgba(242,54,69,0.18)',
-                    border: `1px solid ${isBuy ? 'rgba(38,166,154,0.45)' : 'rgba(242,54,69,0.45)'}`,
-                  }}>
-                    <span style={{ fontSize: 13, fontWeight: 400, color: isBuy ? '#26a69a' : '#f23645', letterSpacing: '0.05em', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                      {isBuy ? 'BUY' : 'SELL'}
+                <div key={i} style={{ borderBottom: i < legs.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                  {/* Main row */}
+                  <div
+                    style={{
+                      display: 'grid', gridTemplateColumns: '44px 1fr 52px 64px 64px 24px',
+                      alignItems: 'center', padding: '7px 14px',
+                      transition: 'background 0.1s',
+                      background: domOpen ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (!domOpen) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)'; }}
+                    onMouseLeave={e => { if (!domOpen) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                  >
+                    {/* B/S badge */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 34, height: 18, borderRadius: 4,
+                      background: isBuy ? 'rgba(38,166,154,0.18)' : 'rgba(242,54,69,0.18)',
+                      border: `1px solid ${isBuy ? 'rgba(38,166,154,0.45)' : 'rgba(242,54,69,0.45)'}`,
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 400, color: isBuy ? '#26a69a' : '#f23645', letterSpacing: '0.05em', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                        {isBuy ? 'BUY' : 'SELL'}
+                      </span>
+                    </div>
+
+                    {/* Instrument */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: legColor, flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                        {leg.strike} <span style={{ color: leg.type === 'CE' ? '#26a69a' : '#f23645' }}>{leg.type}</span>
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 400, color: '#4B5563', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                        {leg.expiry ? `${leg.expiry.slice(6, 8)}/${leg.expiry.slice(4, 6)}` : ''}
+                      </span>
+                    </div>
+
+                    {/* Lots */}
+                    <span style={{ fontSize: 13, fontWeight: 400, color: '#9CA3AF', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                      ×{leg.lots}
                     </span>
+
+                    {/* Entry price */}
+                    <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                      ₹{leg.price.toFixed(2)}
+                    </span>
+
+                    {/* Entry time */}
+                    <span style={{ fontSize: 13, fontWeight: 400, color: leg.entryTime ? '#e0a800' : '#374151', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+                      {leg.entryTime ? leg.entryTime.slice(0, 5) : '—'}
+                    </span>
+
+                    {/* ⋮ DOM toggle */}
+                    <button
+                      onClick={() => { setDomLegIdx(domOpen ? null : i); setDomBook(null); }}
+                      title="Order book"
+                      style={{
+                        background: 'transparent', border: 'none', cursor: leg.refId ? 'pointer' : 'default',
+                        color: domOpen ? '#60a5fa' : '#4B5563',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 20, height: 20, borderRadius: 3, padding: 0,
+                        opacity: leg.refId ? 1 : 0.3,
+                      }}
+                      onMouseEnter={e => { if (leg.refId) (e.currentTarget as HTMLButtonElement).style.color = '#60a5fa'; }}
+                      onMouseLeave={e => { if (!domOpen) (e.currentTarget as HTMLButtonElement).style.color = '#4B5563'; }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 4 16" fill="currentColor">
+                        <circle cx="2" cy="2"  r="1.5"/>
+                        <circle cx="2" cy="8"  r="1.5"/>
+                        <circle cx="2" cy="14" r="1.5"/>
+                      </svg>
+                    </button>
                   </div>
 
-                  {/* Instrument */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: legColor, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                      {leg.strike} <span style={{ color: leg.type === 'CE' ? '#26a69a' : '#f23645' }}>{leg.type}</span>
-                    </span>
-                    <span style={{ fontSize: 13, fontWeight: 400, color: '#4B5563', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                      {leg.expiry ? `${leg.expiry.slice(6, 8)}/${leg.expiry.slice(4, 6)}` : ''}
-                    </span>
-                  </div>
-
-                  {/* Lots */}
-                  <span style={{ fontSize: 13, fontWeight: 400, color: '#9CA3AF', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                    ×{leg.lots}
-                  </span>
-
-                  {/* Entry price */}
-                  <span style={{ fontSize: 13, fontWeight: 400, color: '#E2E8F0', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                    ₹{leg.price.toFixed(2)}
-                  </span>
-
-                  {/* Entry time */}
-                  <span style={{ fontSize: 13, fontWeight: 400, color: leg.entryTime ? '#e0a800' : '#374151', textAlign: 'right', fontFamily: "'Work Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
-                    {leg.entryTime ? leg.entryTime.slice(0, 5) : '—'}
-                  </span>
+                  {/* Inline bid/ask DOM */}
+                  {domOpen && (
+                    <div style={{
+                      margin: '0 14px 8px',
+                      background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                      fontSize: 11,
+                    }}>
+                      {/* DOM header */}
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 60px 1px 60px 1fr',
+                        padding: '4px 10px',
+                        background: '#2a2a2a',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)',
+                      }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#f23645', letterSpacing: '0.07em' }}>QTY</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#f23645', letterSpacing: '0.07em', textAlign: 'right' }}>ASK</span>
+                        <span />
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#26a69a', letterSpacing: '0.07em' }}>BID</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#26a69a', letterSpacing: '0.07em', textAlign: 'right' }}>QTY</span>
+                      </div>
+                      {/* LTP row */}
+                      {domBook && (
+                        <div style={{ textAlign: 'center', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: '#E2E8F0', fontFamily: 'monospace' }}>
+                          LTP ₹{domBook.ltp.toFixed(2)}
+                        </div>
+                      )}
+                      {/* Rows */}
+                      {!domBook ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', color: '#565A6B', fontSize: 10 }}>
+                          <span style={{ width: 6, height: 6, border: '1.5px solid rgba(255,255,255,0.15)', borderTopColor: '#60a5fa', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                          Connecting…
+                        </div>
+                      ) : (
+                        <div style={{ padding: '3px 10px 6px' }}>
+                          {Array(5).fill(null).map((_, ri) => {
+                            const ask = domBook.asks[ri] ?? null;
+                            const bid = domBook.bids[ri] ?? null;
+                            const maxQty = Math.max(...domBook.bids.map(b => b.qty), ...domBook.asks.map(a => a.qty), 1);
+                            const askBar = ask ? (ask.qty / maxQty) * 100 : 0;
+                            const bidBar = bid ? (bid.qty / maxQty) * 100 : 0;
+                            return (
+                              <div key={ri} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 1px 60px 1fr', alignItems: 'center', padding: '2px 0', borderBottom: ri < 4 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
+                                {/* Ask qty bar */}
+                                <div style={{ position: 'relative', height: 16, display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${askBar}%`, background: 'rgba(242,54,69,0.12)', borderRadius: '2px 0 0 2px' }} />
+                                  <span style={{ fontSize: 10, color: '#9CA3AF', position: 'relative', zIndex: 1 }}>{ask ? ask.qty.toLocaleString('en-IN') : '—'}</span>
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#f23645', textAlign: 'right', fontFamily: 'monospace' }}>{ask ? ask.price.toFixed(2) : '—'}</span>
+                                <div style={{ width: 1, background: 'rgba(255,255,255,0.08)', alignSelf: 'stretch', margin: '0 3px' }} />
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#26a69a', fontFamily: 'monospace' }}>{bid ? bid.price.toFixed(2) : '—'}</span>
+                                {/* Bid qty bar */}
+                                <div style={{ position: 'relative', height: 16, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${bidBar}%`, background: 'rgba(38,166,154,0.12)', borderRadius: '0 2px 2px 0' }} />
+                                  <span style={{ fontSize: 10, color: '#9CA3AF', position: 'relative', zIndex: 1 }}>{bid ? bid.qty.toLocaleString('en-IN') : '—'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

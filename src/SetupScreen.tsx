@@ -30,6 +30,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
   const [loading,   setLoading]   = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [otp,       setOtp]       = useState('');
+  const [regenMode, setRegenMode] = useState(false); // true = re-generate flow (OTP + fresh Upstox)
 
   // Upstox fields — initialize directly from localStorage so form is pre-filled immediately
   const [upPhone,  setUpPhone]  = useState(() => localStorage.getItem('upstox_phone')      ?? '');
@@ -46,12 +47,13 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
   const [hasValidCache, setHasValidCache] = useState(false); // today's tokens cached
 
   // ── Run auto-login with saved credentials ─────────────────────────────────
-  const runAutoLogin = useCallback(async (creds: UserCreds) => {
+  const runAutoLogin = useCallback(async (creds: UserCreds, force = false) => {
     setPhase('logging-in');
     setErr('');
 
-    // Skip if already logged in today
-    const alreadyToday = localStorage.getItem('nubra_login_date') === todayIST()
+    // Skip if already logged in today (unless forced re-generate)
+    const alreadyToday = !force
+      && localStorage.getItem('nubra_login_date') === todayIST()
       && !!localStorage.getItem('nubra_session_token');
 
     try {
@@ -60,7 +62,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
       const upRes  = await fetch('/api/upstox-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds.upstox ?? {}),
+        body: JSON.stringify({ ...(creds.upstox ?? {}), force }),
       });
       const upData = await upRes.json();
       if (upData.access_token) {
@@ -252,10 +254,32 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
         raw_cookie: rawCookie,
         device_id:  data.device_id,
       }).catch(() => {});
+      if (regenMode) {
+        // Nubra done via OTP — now do fresh Upstox login, then enter app
+        setMsg('Connecting Upstox…');
+        setPhase('logging-in');
+        const upRes = await fetch('/api/upstox-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...creds.upstox, force: true }),
+        });
+        const upData = await upRes.json();
+        if (upData.access_token) {
+          localStorage.setItem('upstox_token', upData.access_token);
+          saveAuthToken('upstox', upData.access_token).catch(() => {});
+        } else {
+          setErr(`Upstox: ${upData.error ?? 'Login failed'}`);
+          setPhase('error'); setLoading(false); return;
+        }
+        setRegenMode(false);
+        setMsg('Loading instruments…');
+        setPhase('loading-instr');
+      } else {
+        runAutoLogin(creds);
+      }
       setLoading(false);
-      runAutoLogin(creds);
     } catch (e: any) { setErr(e.message); setLoading(false); }
-  }, [otp, nuPhone, nuMpin, tempToken, upPhone, upPin, upTotp, upKey, upSecret, sub, runAutoLogin]);
+  }, [otp, nuPhone, nuMpin, tempToken, upPhone, upPin, upTotp, upKey, upSecret, sub, runAutoLogin, regenMode]);
 
   const progressPct = () => {
     switch (instrStatus.phase) {
@@ -370,7 +394,14 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
                 </Btn>
                 {hasValidCache && (
                   <button onClick={() => {
+                    localStorage.removeItem('nubra_login_date');
+                    localStorage.removeItem('nubra_session_token');
+                    localStorage.removeItem('nubra_auth_token');
+                    localStorage.removeItem('nubra_raw_cookie');
+                    localStorage.removeItem('upstox_token');
                     setHasValidCache(false);
+                    setRegenMode(true);
+                    handleSendOtp();
                   }} style={{ display: 'block', width: '100%', marginTop: 6, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.25)', cursor: 'pointer' }}>
                     Re-generate token
                   </button>

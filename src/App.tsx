@@ -32,6 +32,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  useSidebar,
 } from './components/ui/sidebar';
 import {
   useReactTable,
@@ -809,6 +810,27 @@ function MtmGroupTable({ group, showGreeks, columns }: { group: { symbol: string
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+function SidebarLogoHeader() {
+  const { open } = useSidebar();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 4px', minHeight: 48 }}>
+      {open ? (
+        <img
+          src="/alpha-logo-white.jpg"
+          style={{ height: 42, width: 'auto', maxWidth: 190, objectFit: 'contain', display: 'block', transition: 'opacity 200ms ease' }}
+          alt="AlphaHedge"
+        />
+      ) : (
+        <img
+          src="/alphahede.ico"
+          style={{ width: 36, height: 36, borderRadius: 9, display: 'block', objectFit: 'contain', flexShrink: 0, transition: 'opacity 200ms ease' }}
+          alt="AlphaHedge"
+        />
       )}
     </div>
   );
@@ -2813,10 +2835,7 @@ export default function App() {
       <Sidebar>
         {/* Logo */}
         <SidebarHeader>
-          <div className="flex items-center gap-2 px-1 py-1">
-            <img src="/alphahede.ico" style={{ borderRadius: 7, flexShrink: 0, width: 'var(--sidebar-logo-size)', height: 'var(--sidebar-logo-size)', transition: 'width 280ms ease, height 280ms ease' }} alt="AlphaHedge" />
-            <span className="text-[13px] font-bold text-[#D1D4DC]" style={{ fontFamily: 'var(--font-family-sans)', whiteSpace: 'nowrap', overflow: 'hidden', opacity: 'var(--sidebar-text-opacity, 1)', transition: 'opacity 200ms ease', width: 'var(--sidebar-text-width, auto)' }}>Alpha<em style={{ fontStyle: 'normal', color: '#4f54c8' }}>Hedge</em></span>
-          </div>
+          <SidebarLogoHeader />
         </SidebarHeader>
 
         {/* Nav */}
@@ -3443,6 +3462,22 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* ── Watermark ─────────────────────────────────────────────── */}
+      <img
+        src="/alpha-watermark.png"
+        alt="Alpha Hedge"
+        style={{
+          position: 'fixed',
+          bottom: 18,
+          right: 18,
+          width: 48,
+          height: 48,
+          opacity: 0.48,
+          pointerEvents: 'none',
+          zIndex: 9999,
+          userSelect: 'none',
+        }}
+      />
     </SidebarProvider>
   );
 
