@@ -374,40 +374,37 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
             </div>
 
             {err && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 10 }}>{err}</p>}
-            {nuTotpKey && upKey && upPhone ? (
-              <>
-                <Btn loading={loading} onClick={() => {
-                  if (hasValidCache) {
-                    // Tokens already cached today — go straight to app
-                    setMsg('Loading instruments…');
-                    setPhase('loading-instr');
-                  } else {
-                    // No valid tokens — login via API
-                    const creds: UserCreds = {
-                      upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
-                      nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
-                    };
-                    runAutoLogin(creds);
-                  }
-                }}>
-                  {hasValidCache ? 'Enter App →' : 'Generate Auth Token →'}
+
+            {hasValidCache ? (
+              /* ── Today's tokens are valid ── */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Btn loading={loading} onClick={() => { setMsg('Loading instruments…'); setPhase('loading-instr'); }}>
+                  Go to App →
                 </Btn>
-                {hasValidCache && (
-                  <button onClick={() => {
-                    localStorage.removeItem('nubra_login_date');
-                    localStorage.removeItem('nubra_session_token');
-                    localStorage.removeItem('nubra_auth_token');
-                    localStorage.removeItem('nubra_raw_cookie');
-                    localStorage.removeItem('upstox_token');
-                    setHasValidCache(false);
-                    setRegenMode(true);
-                    handleSendOtp();
-                  }} style={{ display: 'block', width: '100%', marginTop: 6, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.25)', cursor: 'pointer' }}>
-                    Re-generate token
-                  </button>
-                )}
-              </>
+                <button onClick={() => {
+                  localStorage.removeItem('nubra_login_date');
+                  localStorage.removeItem('nubra_session_token');
+                  localStorage.removeItem('nubra_auth_token');
+                  localStorage.removeItem('nubra_raw_cookie');
+                  localStorage.removeItem('upstox_token');
+                  setHasValidCache(false);
+                }} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.45)', cursor: 'pointer' }}>
+                  Re-generate Auth Token
+                </button>
+              </div>
+            ) : nuTotpKey && upKey && upPhone ? (
+              /* ── Creds saved, TOTP available — auto login ── */
+              <Btn loading={loading} onClick={() => {
+                const creds: UserCreds = {
+                  upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
+                  nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
+                };
+                runAutoLogin(creds);
+              }}>
+                Generate Auth Token →
+              </Btn>
             ) : (
+              /* ── First time: send OTP to get TOTP secret ── */
               <Btn loading={loading} onClick={handleSendOtp}>Send Nubra OTP →</Btn>
             )}
             <button onClick={onReady} style={{ display: 'block', width: '100%', marginTop: 8, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}>Skip for now</button>

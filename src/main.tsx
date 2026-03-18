@@ -14,11 +14,14 @@ function Root() {
 
   const [stage, setStage] = useState<Stage>(() => {
     try {
-      const hasUser   = !!localStorage.getItem('google_user');
-      const hasNubra  = !!(localStorage.getItem('nubra_session_token') || localStorage.getItem('nubra_raw_cookie'));
-      const hasUpstox = !!localStorage.getItem('upstox_token');
-      if (hasUser && hasNubra && hasUpstox) return 'app';   // tokens valid → straight to app
-      if (hasUser) return 'setup';                           // user exists but need tokens → setup
+      const todayIST   = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const hasUser    = !!localStorage.getItem('google_user');
+      const hasNubra   = !!(localStorage.getItem('nubra_session_token') || localStorage.getItem('nubra_raw_cookie'));
+      const hasUpstox  = !!localStorage.getItem('upstox_token');
+      const loginDate  = localStorage.getItem('nubra_login_date');
+      const tokensValid = hasNubra && hasUpstox && loginDate === todayIST;
+      if (hasUser && tokensValid) return 'app';   // today's tokens → straight to app
+      if (hasUser) return 'setup';                 // user exists but tokens stale/missing → setup
     } catch { /* ignore */ }
     return 'landing';
   });

@@ -1,39 +1,41 @@
 /* CandleChart.module.css */
 
 /* ── Root ── */
-.root { background: #171717; }
+.root { background: #141210; }
 
 /* ── Toolbar ── */
 .toolbar {
-  height: 38px; flex-shrink: 0; display: flex; align-items: center;
-  padding: 0 8px; gap: 0;
-  background: #171717;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  height: 42px; flex-shrink: 0; display: flex; align-items: center;
+  padding: 0 10px; gap: 0;
+  background: #1a1714;
+  border-bottom: 1px solid rgba(120,80,30,0.22);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.5);
   overflow: hidden; min-width: 0;
 }
 
 /* ── Symbol search button ── */
 .symbolBtn {
   display: inline-flex; align-items: center; gap: 8px;
-  height: 30px; padding: 0 10px;
-  background: #1A1E2B;
-  border: 1px solid rgba(255,255,255,0.09);
+  height: 30px; padding: 0 12px;
+  background: #0f0e0c;
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 6px; cursor: pointer;
-  flex-shrink: 0; min-width: 140px; max-width: 220px;
+  flex-shrink: 0; min-width: 160px; max-width: 240px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .symbolBtn:hover {
-  border-color: rgba(255,255,255,0.18);
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.24);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .symbolName {
-  font-size: 12px; font-weight: 600; color: #E2E8F0;
-  letter-spacing: 0.02em;
+  font-size: 12.5px; font-weight: 700; color: #E8EAF0;
+  letter-spacing: 0.03em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* ── Toolbar divider ── */
-.tbSep { width: 1px; height: 16px; background: rgba(255,255,255,0.08); margin: 0 6px; flex-shrink: 0; }
+.tbSep { width: 1px; height: 18px; background: rgba(255,255,255,0.07); margin: 0 8px; flex-shrink: 0; }
 
 /* ── Status indicators ── */
 .statusWrap { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
@@ -59,28 +61,42 @@
 .liveLabel { font-size: 10px; color: #2ebd85; font-weight: 600; letter-spacing: 0.08em; }
 
 /* ── Right-side toolbar group ── */
-.rightGroup { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.rightGroup { margin-left: auto; display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 
 /* ── Generic indicator toggle button ── */
 .indicatorBtn {
-  display: inline-flex; align-items: center; gap: 5px;
-  height: 26px; padding: 0 9px;
-  background: transparent; border: 1px solid transparent;
-  border-radius: 4px; cursor: pointer;
-  font-size: 11px; font-weight: 400;
-  color: #787B86;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px; cursor: pointer;
+  font-size: 11.5px; font-weight: 500;
+  color: #8B8E9E;
   transition: all 0.12s; white-space: nowrap;
+  letter-spacing: 0.02em;
 }
-.indicatorBtn:hover { background: rgba(255,255,255,0.06); color: #C4C7D0; }
+.indicatorBtn:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.18);
+  color: #D8DBE8;
+}
 
 /* VWAP active */
-.indicatorBtnVwapOn  { background: rgba(255,215,0,0.10); border-color: rgba(255,215,0,0.30); color: #FFD700; font-weight: 600; }
+.indicatorBtnVwapOn  { background: rgba(255,215,0,0.14); border-color: rgba(255,215,0,0.5); color: #FFE033; font-weight: 700; }
 /* TWAP active */
-.indicatorBtnTwapOn  { background: rgba(0,191,255,0.10); border-color: rgba(0,191,255,0.30); color: #00BFFF; font-weight: 600; }
+.indicatorBtnTwapOn  { background: rgba(0,191,255,0.14); border-color: rgba(0,191,255,0.5); color: #33CFFF; font-weight: 700; }
 /* OI active */
-.indicatorBtnOiOn    { background: rgba(46,189,133,0.10); border-color: rgba(46,189,133,0.30); color: #2ebd85; font-weight: 600; }
+.indicatorBtnOiOn    { background: rgba(46,189,133,0.14); border-color: rgba(46,189,133,0.5); color: #3DD99A; font-weight: 700; }
 /* OC active */
-.indicatorBtnOcOn    { background: rgba(255,152,0,0.14); border-color: rgba(255,152,0,0.45); color: #FFB74D; font-weight: 700; height: 28px; padding: 0 10px; font-size: 11px; border-radius: 5px; }
+.indicatorBtnOcOn    { background: rgba(255,152,0,0.18); border-color: rgba(255,152,0,0.55); color: #FFC166; font-weight: 700; }
+
+/* Icon inside indicator buttons */
+.indicatorIcon { display: flex; align-items: center; flex-shrink: 0; opacity: 0.7; transition: opacity 0.12s; }
+.indicatorBtn:hover .indicatorIcon { opacity: 1; }
+.indicatorBtnVwapOn .indicatorIcon,
+.indicatorBtnTwapOn .indicatorIcon,
+.indicatorBtnOiOn   .indicatorIcon,
+.indicatorBtnOcOn   .indicatorIcon { opacity: 1; }
 
 /* VWAP anchor picker button */
 .anchorBtn {

@@ -1079,6 +1079,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           color, lineWidth: 2 as 2, title: label,
           priceFormat: { type: 'price', precision: 2, minMove: 0.05 },
           priceScaleId: 'left',
+          visible: showOptionsRef.current,
         }, 0));
         chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.04, bottom: 0.52 }, borderColor: '#2a2a2a' });
       }
@@ -1304,8 +1305,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           .catch((e: any) => console.warn('[StrategyChart] underlying failed:', u.symbol, date, e.message))
       ),
 
-      // Each option: close only — only fetch if Options toggle is ON
-      ...(showOptionsRef.current ? legInfos.map((info) =>
+      // Each option: always fetch close for MTM computation — visibility toggled separately
+      ...legInfos.map((info) =>
         fetchOptionCloseForDateAny(info, date, today, entryTimeIst, isHistoricalMode)
           .then(({ close }) => {
             const filtered = entryUnix ? close.filter(pt => (pt.time as number) >= entryUnix) : close;
@@ -1316,7 +1317,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
             }
           })
           .catch((e: any) => console.warn('[StrategyChart] option failed', info.symbol ?? info.instrumentKey ?? 'MCX', date, e.message))
-      ) : []),
+      ),
     ]);
 
     // Recompute MTM fresh from ALL accumulated option data
@@ -1390,7 +1391,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               })
               .catch((e: any) => console.warn('[StrategyChart] underlying range failed:', u.symbol, e.message))
           ),
-          ...(showOptionsRef.current ? legInfos.map((info) =>
+          // Always fetch option close for MTM — visibility toggled separately
+          ...legInfos.map((info) =>
             fetchOptionCloseRangeAny(info, startDate, today, startTimeIst)
               .then(({ close }) => {
                 const filtered = entryUnix ? close.filter(pt => (pt.time as number) >= entryUnix) : close;
@@ -1400,7 +1402,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                 }
               })
               .catch((e: any) => console.warn('[StrategyChart] option range failed', info.symbol ?? info.instrumentKey ?? 'MCX', e.message))
-          ) : []),
+          ),
         ]);
 
         if (gotAny) {
@@ -1440,7 +1442,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         const hasData = acc.underlyings.size > 0 || acc.options.size > 0;
         if (!hasData) setError(errors[0]);
       }
-      if (showOptionsRef.current) optionsFetchedRef.current = true;
+      optionsFetchedRef.current = true;
       setLoading(false);
     }
   }, [ocSymbol, uniqueLegs, resolveUnderlyings, resolveOption, fetchDay, flushAccum, isHistoricalMode, scrollToLatest]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2102,11 +2104,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   useEffect(() => {
     const ss = seriesRef.current;
     for (const s of ss.options.values()) s.applyOptions({ visible: showOptions });
-    // Lazy-load: fetch options data the first time the toggle is turned ON
-    if (showOptions && !optionsFetchedRef.current) {
-      optionsFetchedRef.current = true;
-      fetchAllRef.current();
-    }
   }, [showOptions]);
 
   useEffect(() => {

@@ -7,7 +7,7 @@ import type { NubraInstrument } from './useNubraInstruments';
 import type { BasketLeg } from './BasketOrder';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-export type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm';
+export type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home' | 'ivchart';
 
 export interface Greeks { delta: number; theta: number; vega: number; gamma: number; iv: number; }
 export interface Leg {

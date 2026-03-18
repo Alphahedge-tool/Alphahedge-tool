@@ -2628,8 +2628,12 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               title="Toggle VWAP"
               className={cx(s.indicatorBtn, vwapShow ? s.indicatorBtnVwapOn : '')}
             >
-              <span className={cx(s.checkBox, vwapShow ? s.checkBoxVwapOn : s.checkBoxVwap)}>
-                {vwapShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
+              <span className={s.indicatorIcon}>
+                {/* Volume-weighted line icon */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12 C6 6, 10 18, 14 10, 18 4, 21 8"/>
+                  <path d="M3 20h18" strokeOpacity="0.3"/>
+                </svg>
               </span>
               VWAP
             </button>
@@ -2654,8 +2658,12 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               title="Toggle TWAP"
               className={cx(s.indicatorBtn, twapShow ? s.indicatorBtnTwapOn : '')}
             >
-              <span className={cx(s.checkBox, twapShow ? s.checkBoxTwapOn : s.checkBoxTwap)}>
-                {twapShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#00BFFF" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
+              <span className={s.indicatorIcon}>
+                {/* Time-weighted straight line icon */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="3" y1="14" x2="21" y2="10"/>
+                  <path d="M3 20h18" strokeOpacity="0.3"/>
+                </svg>
               </span>
               TWAP
             </button>
@@ -2682,8 +2690,13 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                   title="Toggle OI profile overlay"
                   className={cx(s.indicatorBtn, oiShow ? s.indicatorBtnOiOn : '')}
                 >
-                  <span className={cx(s.checkBox, oiShow ? s.checkBoxOiOn : s.checkBoxOi)}>
-                    {oiShow && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#2ebd85" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                  <span className={s.indicatorIcon}>
+                    {/* OI profile — bar chart with call/put symmetry */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="10" width="4" height="10" rx="1"/>
+                      <rect x="10" y="4" width="4" height="16" rx="1"/>
+                      <rect x="18" y="7" width="4" height="13" rx="1"/>
+                    </svg>
                   </span>
                   OI Profile
                 </button>
@@ -2709,13 +2722,15 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                   title="Open Option Chain"
                   className={cx(s.indicatorBtn, optionChainOpen ? s.indicatorBtnOcOn : '')}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2v20"/>
-                    <path d="M8 10H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4"/>
-                    <path d="M16 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/>
-                    <path d="M8 20H7a2 2 0 0 1-2-2v-2c0-1.1.9-2 2-2h1"/>
-                    <path d="M16 14h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1"/>
-                  </svg>
+                  <span className={s.indicatorIcon}>
+                    {/* Option chain — layered table icon */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <line x1="12" y1="3" x2="12" y2="21"/>
+                      <line x1="3" y1="9" x2="21" y2="9"/>
+                      <line x1="3" y1="15" x2="21" y2="15"/>
+                    </svg>
+                  </span>
                   OC
                 </button>
               </>

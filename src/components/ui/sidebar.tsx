@@ -29,30 +29,42 @@ export const SidebarProvider = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement> & { defaultOpen?: boolean }
 >(({ defaultOpen = true, className, children, style, ...props }, ref) => {
   const [open, setOpenState] = React.useState(defaultOpen);
-  // Suppress transition on first paint — only animate after first interaction
-  const mounted = React.useRef(false);
+  const divRef = React.useRef<HTMLDivElement>(null);
+
+  // Merge forwarded ref + local ref
+  const setRef = React.useCallback((node: HTMLDivElement | null) => {
+    (divRef as { current: HTMLDivElement | null }).current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) (ref as { current: HTMLDivElement | null }).current = node;
+  }, [ref]);
 
   const setOpen = React.useCallback((v: boolean) => {
-    mounted.current = true;
     setOpenState(v);
+    // Update CSS vars directly on DOM — zero React re-renders during animation
+    const el = divRef.current;
+    if (el) {
+      el.style.setProperty('--sidebar-w', v ? `${SIDEBAR_WIDTH}px` : `${SIDEBAR_ICON_WIDTH}px`);
+      el.style.setProperty('--sidebar-text-opacity', v ? '1' : '0');
+      el.style.setProperty('--sidebar-logo-size', v ? '28px' : '32px');
+    }
     document.cookie = `${COOKIE_NAME}=${v}; path=/; max-age=${60 * 60 * 24 * 7}`;
   }, []);
 
-  const toggleSidebar = React.useCallback(() => setOpen(!open), [open, setOpen]);
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  const toggleSidebar = React.useCallback(() => setOpen(!openRef.current), [setOpen]);
 
   const sidebarW = open ? SIDEBAR_WIDTH : SIDEBAR_ICON_WIDTH;
 
   return (
     <Ctx.Provider value={{ open, setOpen, toggleSidebar }}>
       <div
-        ref={ref}
-        data-sidebar-animate={mounted.current ? 'true' : 'false'}
+        ref={setRef}
         className={cn(s.provider, className)}
         style={{
           ...style,
           '--sidebar-w': `${sidebarW}px`,
           '--sidebar-text-opacity': open ? '1' : '0',
-          '--sidebar-text-width': open ? 'auto' : '0',
           '--sidebar-logo-size': open ? '28px' : '32px',
         } as React.CSSProperties}
         {...props}
@@ -71,26 +83,12 @@ export const Sidebar = React.forwardRef<
 >(({ collapsible = 'icon', className, children, ...props }, ref) => {
   const { open } = useSidebar();
 
-  const collapsedW = collapsible === 'icon' ? SIDEBAR_ICON_WIDTH : 0;
-  const w = open ? SIDEBAR_WIDTH : collapsedW;
-
   return (
     <div
       ref={ref}
       data-state={open ? 'expanded' : 'collapsed'}
       data-collapsible={!open ? collapsible : ''}
       className={cn(s.sidebar, open ? s.sidebarVisible : s.sidebarCollapsed, className)}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        height: '100vh',
-        width: w,
-        minWidth: w,
-        transition: 'width 280ms cubic-bezier(0.4, 0, 0.2, 1)',
-        willChange: 'width',
-        zIndex: 40,
-      }}
       {...props}
     >
       {children}
@@ -162,87 +160,46 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
 SidebarContent.displayName = 'SidebarContent';
 
 export const SidebarFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    return (
-      <div
-        ref={ref}
-        className={cn(s.footer, open ? s.footerExpanded : s.footerCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn(s.footer, className)} {...props} />
+  ),
 );
 SidebarFooter.displayName = 'SidebarFooter';
 
+// These components read open state from CSS via ancestor [data-state] —
+// no useSidebar() subscription needed, so they never re-render on toggle.
 export const SidebarGroup = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    return (
-      <div
-        ref={ref}
-        className={cn(s.group, !open && s.groupCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn(s.group, className)} {...props} />
+  ),
 );
 SidebarGroup.displayName = 'SidebarGroup';
 
 export const SidebarGroupLabel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    // Fade out instead of unmounting — avoids DOM churn mid-animation
-    return (
-      <div
-        ref={ref}
-        className={cn(s.groupLabel, open ? s.groupLabelExpanded : s.groupLabelCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn(s.groupLabel, className)} {...props} />
+  ),
 );
 SidebarGroupLabel.displayName = 'SidebarGroupLabel';
 
 export const SidebarGroupContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    return (
-      <div
-        ref={ref}
-        className={cn(s.groupContent, !open && s.groupContentCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn(s.groupContent, className)} {...props} />
+  ),
 );
 SidebarGroupContent.displayName = 'SidebarGroupContent';
 
 export const SidebarMenu = React.forwardRef<HTMLUListElement, React.HTMLAttributes<HTMLUListElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    return (
-      <ul
-        ref={ref}
-        className={cn(s.menu, !open && s.menuCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <ul ref={ref} className={cn(s.menu, className)} {...props} />
+  ),
 );
 SidebarMenu.displayName = 'SidebarMenu';
 
 export const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.HTMLAttributes<HTMLLIElement>>(
-  ({ className, ...props }, ref) => {
-    const { open } = useSidebar();
-    return (
-      <li
-        ref={ref}
-        className={cn(s.menuItem, open ? s.menuItemExpanded : s.menuItemCollapsed, className)}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <li ref={ref} className={cn(s.menuItem, className)} {...props} />
+  ),
 );
 SidebarMenuItem.displayName = 'SidebarMenuItem';
 
@@ -253,38 +210,19 @@ export const SidebarMenuButton = React.forwardRef<
     isActive?: boolean;
     tooltip?: string;
   }
->(({ isActive, tooltip, className, children, ...props }, ref) => {
-  const { open } = useSidebar();
-
-  const btn = (
+>(({ isActive, tooltip, className, children, ...props }, ref) => (
+  <div className={s.tooltipWrap}>
     <button
       ref={ref}
       data-active={isActive}
-      className={cn(
-        s.menuBtn,
-        open ? s.menuBtnExpanded : s.menuBtnCollapsed,
-        className,
-      )}
+      className={cn(s.menuBtn, className)}
       {...props}
     >
       {children}
     </button>
-  );
-
-  // Tooltip only when collapsed
-  if (!open && tooltip) {
-    return (
-      <div className={s.tooltipWrap}>
-        {btn}
-        <div className={s.tooltip}>
-          {tooltip}
-        </div>
-      </div>
-    );
-  }
-
-  return btn;
-});
+    {tooltip && <div className={s.tooltip}>{tooltip}</div>}
+  </div>
+));
 SidebarMenuButton.displayName = 'SidebarMenuButton';
 
 // Re-export unused but imported names so App.tsx doesn't break

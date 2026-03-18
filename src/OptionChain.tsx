@@ -4,7 +4,10 @@
  * On open: scrolls to ATM ±10 strikes.
  */
 
-import React, { useState, useEffect, useRef, useMemo, startTransition } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { FixedSizeList } from 'react-window';
+import { useOptionChainStore, useOptionChainStoreMCX, EMPTY_SIDE } from './useOptionChainStore';
+import type { StrikeData, StrikeEntry } from './useOptionChainStore';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { Clock } from 'lucide-react';
@@ -179,6 +182,9 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
   spotRefId?: string;
 }) {
   const [selectedExpiry, setSelectedExpiry] = useState<string | null>(null);
+  // Zustand store — per-strike subscriptions, no full-table re-render on WS ticks
+  const { initStrikes, patchStrikes } = useOptionChainStore();
+  // rows derived from store for table/tanstack (read-only, stable reference built only on initStrikes)
   const [rows, setRows] = useState<OptionRow[]>([]);
   const [spot, setSpot] = useState(0);
   const [qty, setQty] = useState(1);
@@ -292,7 +298,7 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
     setSpot(spotVal); setAtm(atmVal);
 
     if (isRest) {
-      // Initial load — build full sorted array
+      // Initial load — build full sorted array, push into Zustand store
       const map = new Map<number, OptionRow>();
       for (const opt of ceList) {
         const s = (opt[sk] ?? 0) / scale;
@@ -312,9 +318,16 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         sorted.forEach((r, i) => { r.isAtm = i === atmIdx; });
       }
       rowsRef.current = sorted;
+      // Push to Zustand store (per-strike subscriptions)
+      const entries: StrikeEntry[] = sorted.map(r => ({
+        strike: r.strike,
+        ce: r.ce as StrikeData,
+        pe: r.pe as StrikeData,
+        isAtm: r.isAtm,
+      }));
+      initStrikes(entries, spotVal, atmVal);
       setRows([...sorted]);
       setChainLoading(false);
-      // Show ATM±WINDOW strikes on first load — expand as user scrolls
       setVisibleRange({ start: Math.max(0, atmIdx - WINDOW), end: Math.min(sorted.length - 1, atmIdx + WINDOW) });
       if (shouldScrollToAtm.current) {
         shouldScrollToAtm.current = false;
@@ -323,30 +336,36 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         });
       }
     } else {
-      // WS live update — patch values in-place, no reorder
+      // WS live update — patch only changed strikes in Zustand store (no full re-render)
       const existing = rowsRef.current;
-      if (existing.length === 0) return; // wait for REST to initialize
+      if (existing.length === 0) return;
       const ceMap = new Map<number, OptionSide>();
       const peMap = new Map<number, OptionSide>();
       for (const opt of ceList) { const s = (opt[sk] ?? 0) / scale; ceMap.set(s, parseWs(opt)); }
       for (const opt of peList) { const s = (opt[sk] ?? 0) / scale; peMap.set(s, parseWs(opt)); }
+
+      // Build patches array — only strikes that actually changed
+      const patches: { strike: number; ce?: Partial<StrikeData>; pe?: Partial<StrikeData> }[] = [];
+      for (const [strike, ce] of ceMap) patches.push({ strike, ce: ce as Partial<StrikeData> });
+      for (const [strike, pe] of peMap) {
+        const existing = patches.find(p => p.strike === strike);
+        if (existing) existing.pe = pe as Partial<StrikeData>;
+        else patches.push({ strike, pe: pe as Partial<StrikeData> });
+      }
+
+      // Push to Zustand — only subscribed rows re-render
+      patchStrikes(patches, spotVal, atmVal);
+
+      // Also keep rowsRef fresh for onLtpUpdateRef callbacks
       let atmIdx = 0, minD = Infinity;
       existing.forEach((r, i) => { const d = Math.abs(r.strike - atmVal); if (d < minD) { minD = d; atmIdx = i; } });
-      const updated = existing.map((r, i) => ({
+      rowsRef.current = existing.map((r, i) => ({
         ...r,
         isAtm: i === atmIdx,
         ...(ceMap.has(r.strike) ? { ce: ceMap.get(r.strike)! } : {}),
         ...(peMap.has(r.strike) ? { pe: peMap.get(r.strike)! } : {}),
       }));
-      // Always update ref immediately so onLtpUpdateRef reads fresh data
-      rowsRef.current = updated;
-      // Defer React re-render to next animation frame — prevents B/S click lag
-      if (wsRafRef.current === null) {
-        wsRafRef.current = requestAnimationFrame(() => {
-          wsRafRef.current = null;
-          startTransition(() => { setRows(rowsRef.current); });
-        });
-      }
+      // No setRows() on WS — Zustand handles per-row updates
     }
 
     const finalRows = rowsRef.current;
@@ -1046,6 +1065,149 @@ const MW: Record<string, number> = {
   mpe_price: 76, mpe_chg: 72, mpe_oi: 90, mpe_delta: 52, mpe_theta: 56, mpe_vega: 50, mpe_gamma: 56, mpe_iv: 50,
 };
 
+// ── Virtualized MCX table ─────────────────────────────────────────────────────
+const MCX_ROW_HEIGHT = 33;
+
+function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, spot, atmStrike, popup, showOverlay, hideOverlay, setPopup, setQty, overlayDataRef, listRef, table }: {
+  tableRows: any[];
+  visibleCeCols: string[];
+  visiblePeCols: string[];
+  totalWidth: number;
+  spot: number;
+  atmStrike: number | null;
+  popup: any;
+  showOverlay: (...args: any[]) => void;
+  hideOverlay: () => void;
+  setPopup: (p: any) => void;
+  setQty: (q: any) => void;
+  overlayDataRef: React.RefObject<any>;
+  listRef: React.RefObject<FixedSizeList<any> | null>;
+  table: any;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [listHeight, setListHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const h = entries[0]?.contentRect.height ?? 400;
+      setListHeight(h);
+    });
+    ro.observe(el);
+    setListHeight(el.clientHeight || 400);
+    return () => ro.disconnect();
+  }, []);
+
+  const renderRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const row = tableRows[index];
+    if (!row) return null;
+    const data = row.original;
+    const prevData = tableRows[index - 1]?.original;
+    const showAtmLine = data.isAtm && prevData && !prevData.isAtm;
+    const isCeItm = spot > 0 && data.strike < spot;
+    const isPeItm = spot > 0 && data.strike > spot;
+    return (
+      <div style={{ ...style, display: 'flex', flexDirection: 'column' }}>
+        {showAtmLine && (
+          <div style={{ height: 2, background: 'rgba(224,168,0,0.5)', width: totalWidth, marginBottom: 1 }} />
+        )}
+        <div
+          className={`oc-row ${data.isAtm ? 'oc-row-atm' : index % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'}`}
+          style={{ display: 'flex', alignItems: 'center', height: MCX_ROW_HEIGHT, width: totalWidth, boxSizing: 'border-box' }}
+          onMouseMove={e => {
+            if (popup) return;
+            const tr = e.currentTarget;
+            const hoveredDiv = (e.target as HTMLElement).closest('[data-col]') as HTMLElement | null;
+            const hoveredCol = hoveredDiv?.dataset.col ?? '';
+            if (hoveredCol !== 'mce_price' && hoveredCol !== 'mpe_price') { hideOverlay(); return; }
+            const side = hoveredCol === 'mce_price' ? 'CE' : 'PE';
+            const ceLtpEl = tr.querySelector('[data-col="mce_price"]') as HTMLElement | null;
+            const peLtpEl = tr.querySelector('[data-col="mpe_price"]') as HTMLElement | null;
+            const ceR = ceLtpEl?.getBoundingClientRect();
+            const peR = peLtpEl?.getBoundingClientRect();
+            const trR = tr.getBoundingClientRect();
+            if (!ceR || !peR) return;
+            showOverlay(trR.top, ceR.left, ceR.width, peR.left, peR.width, trR.height, {
+              strike: data.strike, ceLtp: data.ce.ltp, peLtp: data.pe.ltp, ceKey: data.ceKey, peKey: data.peKey,
+              ceGreeks: { delta: data.ce.delta, theta: data.ce.theta, vega: data.ce.vega, gamma: data.ce.gamma, iv: data.ce.iv },
+              peGreeks: { delta: data.pe.delta, theta: data.pe.theta, vega: data.pe.vega, gamma: data.pe.gamma, iv: data.pe.iv }
+            }, side);
+          }}
+          onMouseLeave={e => { const rel = e.relatedTarget as HTMLElement | null; if (rel instanceof HTMLElement && (rel.closest('.oc-bs-overlay') || rel.closest('.oc-row'))) return; hideOverlay(); }}
+        >
+          {row.getVisibleCells().map((cell: any) => {
+            const id = cell.column.id;
+            const isStrike = id === 'mstrike';
+            const isCe = MCX_CE_COLS.includes(id);
+            const cellBg = isCe && isCeItm ? 'rgba(0,168,132,0.18)' : !isCe && !isStrike && isPeItm ? 'rgba(210,130,0,0.28)' : undefined;
+            const isOi = id === 'mce_oi' || id === 'mpe_oi';
+            return (
+              <div key={cell.id} data-col={id} style={{ width: MW[id], minWidth: MW[id], flexShrink: 0, padding: isOi ? 0 : '0 10px', fontSize: 13, fontWeight: isStrike ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}) }}>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }, [tableRows, spot, totalWidth, popup, showOverlay, hideOverlay]);
+
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync header scroll with body scroll
+  const onBodyScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = (e.currentTarget as HTMLDivElement).scrollLeft;
+    }
+  }, []);
+
+  const colIds: string[] = table.getHeaderGroups()[0]?.headers.map((h: any) => h.column.id) ?? [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Sticky header — div-based to match virtual row layout exactly */}
+      <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: '#1c1a17' }}>
+        <div style={{ width: totalWidth }}>
+          {/* Super header: Call / Strike / Put */}
+          <div style={{ display: 'flex', height: 28 }}>
+            <div style={{ display: 'flex', flex: `0 0 ${visibleCeCols.reduce((s, id) => s + (MW[id] ?? 72), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#e0a800', letterSpacing: '0.06em', background: 'rgba(224,168,0,0.04)', borderBottom: '1px solid rgba(224,168,0,0.15)' }}>Call</div>
+            <div style={{ flex: `0 0 ${MW['mstrike']}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#9CA3AF', background: '#333333', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Strike</div>
+            <div style={{ display: 'flex', flex: `0 0 ${visiblePeCols.reduce((s, id) => s + (MW[id] ?? 72), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#818cf8', letterSpacing: '0.06em', background: 'rgba(129,140,248,0.04)', borderBottom: '1px solid rgba(129,140,248,0.15)' }}>Put</div>
+          </div>
+          {/* Sub header: column labels */}
+          <div style={{ display: 'flex', height: 30, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            {colIds.map((id: string) => {
+              const isStrike = id === 'mstrike';
+              const isCe = MCX_CE_COLS.includes(id);
+              const h = table.getHeaderGroups()[0]?.headers.find((hh: any) => hh.column.id === id);
+              return (
+                <div key={id} style={{ width: MW[id], minWidth: MW[id], flexShrink: 0, padding: '0 10px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase' as const, textAlign: isStrike ? 'center' : isCe ? 'right' : 'left', background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box' }}>
+                  {h ? flexRender(h.column.columnDef.header, h.getContext()) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {/* Virtualized body */}
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }} onScroll={onBodyScroll}>
+        <FixedSizeList
+          ref={listRef as React.RefObject<FixedSizeList<any>>}
+          height={listHeight}
+          itemCount={tableRows.length}
+          itemSize={MCX_ROW_HEIGHT}
+          width={totalWidth}
+          overscanCount={10}
+          style={{ overflowX: 'visible', overflowY: 'auto' }}
+        >
+          {renderRow}
+        </FixedSizeList>
+      </div>
+    </div>
+  );
+}
+
 function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, ocSpotRef, isHistoricalMode }: {
   symbol: string;
   instruments: Instrument[];
@@ -1112,19 +1274,29 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   const spotRef = useRef(0);
   const baseRowsRef = useRef(baseRows);
   baseRowsRef.current = baseRows;
+  const { initStrikes: mcxInit, patchStrikes: mcxPatch } = useOptionChainStoreMCX();
 
-  // Stable rebuild — reads from refs, never goes stale
+  // Stable rebuild — on initial load or expiry change, push full data to Zustand
   const rebuildRows = useRef((spotVal: number) => {
     const br = baseRowsRef.current;
     const atmStrike = br.length
       ? br.reduce((best, r) => Math.abs(r.strike - spotVal) < Math.abs(best - spotVal) ? r.strike : best, br[0].strike)
       : 0;
-    setRows(br.map(r => ({
+    const built: McxRow[] = br.map(r => ({
       strike: r.strike, ceKey: r.ceKey, peKey: r.peKey,
       ce: r.ceKey ? (mdRef.current.get(r.ceKey) ?? { ...MCX_EMPTY }) : { ...MCX_EMPTY },
       pe: r.peKey ? (mdRef.current.get(r.peKey) ?? { ...MCX_EMPTY }) : { ...MCX_EMPTY },
       isAtm: r.strike === atmStrike,
-    })));
+    }));
+    // Push to Zustand store
+    const entries: StrikeEntry[] = built.map(r => ({
+      strike: r.strike,
+      ce: { ltp: r.ce.ltp, chgPct: r.ce.chgPct, oi: r.ce.oi, oiChgPct: 0, delta: r.ce.delta, theta: r.ce.theta, gamma: r.ce.gamma, vega: r.ce.vega, iv: r.ce.iv },
+      pe: { ltp: r.pe.ltp, chgPct: r.pe.chgPct, oi: r.pe.oi, oiChgPct: 0, delta: r.pe.delta, theta: r.pe.theta, gamma: r.pe.gamma, vega: r.pe.vega, iv: r.pe.iv },
+      isAtm: r.isAtm,
+    }));
+    mcxInit(entries, spotVal, atmStrike);
+    setRows(built);
     setChainLoading(false);
   }).current;
 
@@ -1139,6 +1311,13 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     }
     const allKeys = br.flatMap(r => [r.ceKey, r.peKey]).filter(Boolean) as string[];
 
+    // O(1) reverse lookup: instrument_key → { strike, isCe }
+    const keyIndex = new Map<string, { strike: number; isCe: boolean }>();
+    for (const r of br) {
+      if (r.ceKey) keyIndex.set(r.ceKey, { strike: r.strike, isCe: true });
+      if (r.peKey) keyIndex.set(r.peKey, { strike: r.strike, isCe: false });
+    }
+
     // Seed from wsManager cache immediately (no blank flash)
     for (const k of allKeys) {
       const md = wsManager.get(k);
@@ -1151,23 +1330,24 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     // Defer first build by one frame so skeleton renders before rows paint
     requestAnimationFrame(() => rebuildRows(spotRef.current));
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const schedule = () => { if (timer) return; timer = setTimeout(() => { timer = null; rebuildRows(spotRef.current); }, 200); };
-
     const unsubs = allKeys.map(k => wsManager.subscribe(k, md => {
       const ltp = md.ltp ?? 0; const prev = md.cp ?? 0;
-      mdRef.current.set(k, { ltp, chgPct: prev > 0 ? ((ltp - prev) / prev) * 100 : 0, oi: md.oi ?? 0, delta: md.delta ?? 0, theta: md.theta ?? 0, gamma: md.gamma ?? 0, vega: md.vega ?? 0, iv: md.iv ?? 0 });
-      schedule();
+      const side: McxSide = { ltp, chgPct: prev > 0 ? ((ltp - prev) / prev) * 100 : 0, oi: md.oi ?? 0, delta: md.delta ?? 0, theta: md.theta ?? 0, gamma: md.gamma ?? 0, vega: md.vega ?? 0, iv: md.iv ?? 0 };
+      mdRef.current.set(k, side);
+      // O(1) lookup instead of O(n) find()
+      const info = keyIndex.get(k);
+      if (info) {
+        const { strike, isCe } = info;
+        mcxPatch([{ strike, ...(isCe ? { ce: { ltp: side.ltp, chgPct: side.chgPct, oi: side.oi, oiChgPct: 0, delta: side.delta, theta: side.theta, gamma: side.gamma, vega: side.vega, iv: side.iv } } : { pe: { ltp: side.ltp, chgPct: side.chgPct, oi: side.oi, oiChgPct: 0, delta: side.delta, theta: side.theta, gamma: side.gamma, vega: side.vega, iv: side.iv } }) }], spotRef.current, spotRef.current);
+      }
     }));
 
-    return () => { unsubs.forEach(u => u()); if (timer) clearTimeout(timer); };
+    return () => { unsubs.forEach(u => u()); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseRows]);
 
   const spotKey = useMemo(() => {
     const now = Date.now();
-    // Debug: log all MCX instruments matching this underlying so we can see real field values
-    const mcxAll = instruments.filter(i => i.exchange === 'MCX' && (i.underlying_symbol?.toUpperCase() === underlying || i.trading_symbol?.toUpperCase().startsWith(underlying)));
     // Pick the nearest-expiry MCX FUT for this underlying (front-month = closest to today)
     const futs = instruments.filter(i =>
       i.exchange === 'MCX' &&
@@ -1191,20 +1371,37 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     if (!spotKey) return;
     wsManager.requestKeys([spotKey]);
     const snap = wsManager.get(spotKey);
-    if (snap?.ltp) { spotRef.current = snap.ltp; if (ocSpotRef) ocSpotRef.current = snap.ltp; setSpot(snap.ltp); rebuildRows(snap.ltp); }
+    if (snap?.ltp) {
+      spotRef.current = snap.ltp;
+      if (ocSpotRef) ocSpotRef.current = snap.ltp;
+      setSpot(snap.ltp);
+      rebuildRows(snap.ltp); // initial seed only
+    }
+    // On live spot ticks — only update ref + state, don't rebuild all rows
+    // patchStrikes with empty patches propagates new ATM to Zustand
     return wsManager.subscribe(spotKey, md => {
-      if (md.ltp) { spotRef.current = md.ltp; if (ocSpotRef) ocSpotRef.current = md.ltp; setSpot(md.ltp); rebuildRows(md.ltp); }
+      if (!md.ltp) return;
+      const prev = spotRef.current;
+      spotRef.current = md.ltp;
+      if (ocSpotRef) ocSpotRef.current = md.ltp;
+      setSpot(md.ltp);
+      // Only push ATM recalc to Zustand, no full rebuild
+      if (prev !== md.ltp) {
+        mcxPatch([], md.ltp, md.ltp);
+      }
     });
-  }, [spotKey, rebuildRows]);
+  }, [spotKey, rebuildRows, mcxPatch]);
 
   const atmStrike = rows.find(r => r.isAtm)?.strike ?? null;
-  const atmRowRef = useRef<HTMLTableRowElement>(null);
+  const mcxListRef = useRef<FixedSizeList<any>>(null);
   const shouldScrollToAtm = useRef(true);
   useEffect(() => { shouldScrollToAtm.current = true; }, [selectedExpiry]);
   useEffect(() => {
-    if (!rows.length || !shouldScrollToAtm.current || !atmRowRef.current) return;
+    if (!rows.length || !shouldScrollToAtm.current) return;
+    const atmIdx = rows.findIndex(r => r.isAtm);
+    if (atmIdx < 0) return;
     shouldScrollToAtm.current = false;
-    requestAnimationFrame(() => atmRowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    requestAnimationFrame(() => mcxListRef.current?.scrollToItem(atmIdx, 'center'));
   }, [rows]);
 
   // Columns — same as Nubra
@@ -1260,7 +1457,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     mch.accessor(r => r.ce.delta, { id: 'mce_delta', header: 'Delta',    cell: i => <span className={s.valTeal}>{fmtGreek(i.getValue())}</span> }),
     mch.accessor(r => r.ce.oi,    { id: 'mce_oi',    header: 'Call OI',  cell: i => {
       const pct = Math.min(100, (i.getValue() / maxCeOi) * 100);
-      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', height: '100%', padding: '0 10px', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
     } }),
     mch.accessor(r => r.ce.chgPct, { id: 'mce_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     mch.accessor(r => r.ce.ltp,   { id: 'mce_price', header: 'Call LTP', cell: i => {
@@ -1275,7 +1472,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     mch.accessor(r => r.pe.chgPct, { id: 'mpe_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
     mch.accessor(r => r.pe.oi,    { id: 'mpe_oi',    header: 'Put OI',   cell: i => {
       const pct = Math.min(100, (i.getValue() / maxPeOi) * 100);
-      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, borderRadius: 2, padding: '2px 0' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', width: '100%', height: '100%', padding: '0 10px', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
     } }),
     mch.accessor(r => r.pe.delta, { id: 'mpe_delta', header: 'Delta',    cell: i => <span className={s.valRed}>{fmtGreek(i.getValue())}</span> }),
     mch.accessor(r => r.pe.theta, { id: 'mpe_theta', header: 'Theta',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
@@ -1368,7 +1565,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       </div>
 
       {/* Table */}
-      <div className={`oc-scroll ${s.tableScroll}`}>
+      <div className={`oc-scroll ${s.tableScroll}`} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {rows.length === 0 ? (
           chainLoading ? (
             <div className={s.skeletonWrap}>
@@ -1390,85 +1587,22 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
             </div>
           )
         ) : (
-          <table className={s.table} style={{ width: totalWidth }}>
-            <thead className={s.thead}>
-              <tr className={s.superHeaderRow}>
-                <th colSpan={visibleCeCols.length} className={s.thCall}>Call</th>
-                <th className={s.thStrike}>Strike</th>
-                <th colSpan={visiblePeCols.length} className={s.thPut}>Put</th>
-              </tr>
-              {table.getHeaderGroups().map(hg => (
-                <tr key={hg.id} className={s.subHeaderRow}>
-                  {hg.headers.map(h => {
-                    const id = h.column.id;
-                    const isStrike = id === 'mstrike';
-                    const isCe = MCX_CE_COLS.includes(id);
-                    return (
-                      <th key={h.id} style={{ width: MW[id], minWidth: MW[id], padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase', textAlign: isStrike ? 'center' : isCe ? 'right' : 'left', background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)', whiteSpace: 'nowrap' }}>
-                        {flexRender(h.column.columnDef.header, h.getContext())}
-                      </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="oc-tbody">
-              {table.getRowModel().rows.map((row, ri) => {
-                const data = row.original;
-                const prevData = table.getRowModel().rows[ri - 1]?.original;
-                const showAtmLine = data.isAtm && prevData && !prevData.isAtm;
-                const isCeItm = spot > 0 && data.strike < spot;
-                const isPeItm = spot > 0 && data.strike > spot;
-                return (
-                  <React.Fragment key={row.id}>
-                    {showAtmLine && (
-                      <tr>
-                        <td colSpan={visibleCeCols.length} className={s.atmDividerSide} />
-                        <td className={s.atmDividerCenter}>{atmStrike ?? ''}</td>
-                        <td colSpan={visiblePeCols.length} className={s.atmDividerSide} />
-                      </tr>
-                    )}
-                    <tr className={`oc-row ${data.isAtm ? 'oc-row-atm' : ri % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'} ${s.dataRow}`}
-                      ref={data.isAtm ? atmRowRef : undefined}
-                      onMouseMove={e => {
-                        if (popup) return;
-                        const tr = e.currentTarget;
-                        const hoveredTd = (e.target as HTMLElement).closest('td') as HTMLElement | null;
-                        const hoveredCol = hoveredTd?.dataset.col ?? '';
-                        // Only show overlay when hovering directly over CE or PE LTP cell
-                        if (hoveredCol !== 'mce_price' && hoveredCol !== 'mpe_price') { hideOverlay(); return; }
-                        const side = hoveredCol === 'mce_price' ? 'CE' : 'PE';
-                        const ceLtpTd = tr.querySelector('td[data-col="mce_price"]') as HTMLElement | null;
-                        const peLtpTd = tr.querySelector('td[data-col="mpe_price"]') as HTMLElement | null;
-                        const ceR = ceLtpTd?.getBoundingClientRect();
-                        const peR = peLtpTd?.getBoundingClientRect();
-                        const trR = tr.getBoundingClientRect();
-                        if (!ceR || !peR) return;
-                        showOverlay(trR.top, ceR.left, ceR.width, peR.left, peR.width, trR.height, {
-                          strike: data.strike, ceLtp: data.ce.ltp, peLtp: data.pe.ltp, ceKey: data.ceKey, peKey: data.peKey,
-                          ceGreeks: { delta: data.ce.delta, theta: data.ce.theta, vega: data.ce.vega, gamma: data.ce.gamma, iv: data.ce.iv },
-                          peGreeks: { delta: data.pe.delta, theta: data.pe.theta, vega: data.pe.vega, gamma: data.pe.gamma, iv: data.pe.iv }
-                        }, side);
-                      }}
-                      onMouseLeave={e => { const rel = e.relatedTarget as HTMLElement | null; if (rel instanceof HTMLElement && (rel.closest('.oc-bs-overlay') || rel.closest('.oc-row'))) return; hideOverlay(); }}
-                    >
-                      {row.getVisibleCells().map(cell => {
-                        const id = cell.column.id;
-                        const isStrike = id === 'mstrike';
-                        const isCe = MCX_CE_COLS.includes(id);
-                        const cellBg = isCe && isCeItm ? 'rgba(0,168,132,0.18)' : !isCe && !isStrike && isPeItm ? 'rgba(210,130,0,0.28)' : undefined;
-                        return (
-                          <td key={cell.id} data-col={id} className={isStrike ? 'oc-strike-cell' : ''} style={{ width: MW[id], minWidth: MW[id], padding: '8px 10px', fontSize: 13, fontWeight: id === 'mstrike' ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', textAlign: isStrike ? 'center' : isCe ? 'right' : 'left', whiteSpace: 'nowrap', ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}) }}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          <McxVirtualTable
+            tableRows={table.getRowModel().rows}
+            visibleCeCols={visibleCeCols}
+            visiblePeCols={visiblePeCols}
+            totalWidth={totalWidth}
+            spot={spot}
+            atmStrike={atmStrike}
+            popup={popup}
+            showOverlay={showOverlay}
+            hideOverlay={hideOverlay}
+            setPopup={setPopup}
+            setQty={setQty}
+            overlayDataRef={overlayDataRef}
+            listRef={mcxListRef}
+            table={table}
+          />
         )}
       </div>
 

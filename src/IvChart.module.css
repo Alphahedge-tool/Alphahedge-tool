@@ -1,0 +1,241 @@
+/* IvChart.module.css */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #131110;
+  overflow: hidden;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  gap: 10px;
+  background: #1c1a17;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  overflow: visible;
+  position: relative;
+  z-index: 100;
+}
+.toolbarLeft  { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.toolbarRight { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ── Search ── */
+.searchWrap { position: relative; flex-shrink: 0; }
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  background: #0f0e0c;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  min-width: 220px;
+  max-width: 300px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.searchBox:focus-within {
+  border-color: rgba(79,142,247,0.5);
+  box-shadow: 0 0 0 2px rgba(79,142,247,0.1);
+}
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #E8EAF0;
+  caret-color: #818cf8;
+  letter-spacing: 0.02em;
+  min-width: 0;
+}
+.searchInput::placeholder { color: #4A4E5C; font-weight: 400; }
+.clearBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #787B86;
+  display: flex;
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.clearBtn:hover { color: #D1D4DC; }
+
+/* ── Dropdown ── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 9999;
+  background: #0F1117;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.9);
+  min-width: 280px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+}
+.dropdownList {
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.08s;
+}
+.dropdownItem:hover, .dropdownItemActive { background: rgba(79,142,247,0.09); }
+.dropdownExch {
+  font-size: 9px;
+  font-weight: 700;
+  color: #565A6B;
+  letter-spacing: 0.05em;
+  min-width: 32px;
+}
+.dropdownSym { font-size: 13px; font-weight: 700; color: #E0E3EB; flex: 1; }
+.dropdownType {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+  color: #565A6B;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.dropdownFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.2);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #4A4E5C;
+}
+.dropdownFooter kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 10px;
+  color: #787B86;
+  margin-right: 3px;
+}
+
+/* ── Expiry dropdown ── */
+.expirySelect {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(249,115,22,0.45);
+  background: rgba(249,115,22,0.10);
+  color: #f97316;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  letter-spacing: 0.02em;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23f97316' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.expirySelect:hover { border-color: rgba(249,115,22,0.7); background-color: rgba(249,115,22,0.18); }
+.expirySelect option { background: #1c1a17; color: #D1D4DC; font-weight: 500; }
+
+/* ── Stat chips ── */
+.statChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.statLabel { font-size: 10px; color: #5A5D6A; letter-spacing: 0.04em; font-weight: 500; }
+.statValue { font-size: 12px; color: #D1D4DC; font-weight: 700; }
+.ivChip { background: rgba(249,115,22,0.10); border-color: rgba(249,115,22,0.35); }
+.ivChip .statValue { color: #f97316; }
+.pcrChip { background: rgba(167,139,250,0.10); border-color: rgba(167,139,250,0.35); }
+.pcrChip .statValue { color: #a78bfa; }
+
+/* ── PCR toggle button ── */
+.pcrBtn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(167,139,250,0.35);
+  background: transparent;
+  color: #6B6E7A;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  letter-spacing: 0.04em;
+}
+.pcrBtn:hover { background: rgba(167,139,250,0.1); color: #a78bfa; border-color: rgba(167,139,250,0.5); }
+.pcrBtnActive { background: rgba(167,139,250,0.15); border-color: rgba(167,139,250,0.6); color: #a78bfa; }
+
+/* ── Status ── */
+.loadingDot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 6px #60a5fa;
+  animation: ivPulse 1.2s ease-in-out infinite;
+}
+@keyframes ivPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.errorLabel { font-size: 10px; color: #f23645; font-weight: 700; letter-spacing: 0.06em; }
+
+/* ── Chart area ── */
+.chartWrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+.chart { width: 100%; height: 100%; }
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(255,255,255,0.1);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+}

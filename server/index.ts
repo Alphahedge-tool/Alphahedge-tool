@@ -541,6 +541,55 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Nubra PCR (Put_Call_Ratio) proxy
+// POST /api/nubra-pcr → https://api.nubra.io/charts/timeseries?chart=Put_Call_Ratio
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/api/nubra-pcr', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = (headers['x-session-token'] as string) ?? '';
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
+
+  const body = req.body as { query: unknown[] };
+  if (!Array.isArray(body?.query)) {
+    return reply.status(400).send({ error: 'query[] is required' });
+  }
+
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+  const targetUrl = `https://api.nubra.io/charts/timeseries?chart=Put_Call_Ratio`;
+
+  try {
+    const upstream = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken}`,
+        'Origin': 'https://nubra.io',
+        'Referer': 'https://nubra.io/',
+        'Cookie': rawCookie,
+        'x-device-id': deviceId,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+      },
+      body: JSON.stringify({ query: body.query }),
+      dispatcher: nubraAgent,
+    } as any);
+
+    const contentType = upstream.headers.get('content-type') ?? 'application/json';
+    const data = await upstream.text();
+    reply.status(upstream.status);
+    reply.header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Nubra Multistrike OI proxy
 // POST /api/nubra-multistrike → https://api.nubra.io/charts/multistrike?chart=...
 // ─────────────────────────────────────────────────────────────────────────────
@@ -589,6 +638,105 @@ app.post('/api/nubra-multistrike', async (req, reply) => {
     const contentType = upstream.headers.get('content-type') ?? 'application/json';
     const data = await upstream.text();
 
+    reply.status(upstream.status);
+    reply.header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nubra Open Interest proxy
+// POST /api/nubra-open-interest → https://api.nubra.io/charts/multistrike?chart=Open_Interest
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/api/nubra-open-interest', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = (headers['x-session-token'] as string) ?? '';
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
+
+  const body = req.body as { query: unknown[] };
+  if (!Array.isArray(body?.query)) {
+    return reply.status(400).send({ error: 'query[] is required' });
+  }
+
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  try {
+    const upstream = await fetch('https://api.nubra.io/charts/multistrike?chart=Open_Interest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken}`,
+        'Origin': 'https://nubra.io',
+        'Referer': 'https://nubra.io/',
+        'Cookie': rawCookie,
+        'x-device-id': deviceId,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+      },
+      body: JSON.stringify({ query: body.query }),
+      dispatcher: nubraAgent,
+    } as any);
+
+    const contentType = upstream.headers.get('content-type') ?? 'application/json';
+    const data = await upstream.text();
+    reply.status(upstream.status);
+    reply.header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nubra-refdata → https://api.nubra.io/refdata/:asset?derivativeType=OPT&exchange=NSE|BSE[&expiry=YYYYMMDD]
+// Without expiry: returns { exchange, expiries: [...], message: "expiries" }
+// With expiry:    returns { exchange, refdata: [...], message: "refdata" }
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/nubra-refdata', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = (headers['x-session-token'] as string) ?? '';
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
+
+  const { asset, exchange, expiry } = req.query as Record<string, string>;
+  if (!asset) {
+    return reply.status(400).send({ error: 'asset is required' });
+  }
+
+  const exch = (exchange ?? 'NSE').toUpperCase();
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  let url = `https://api.nubra.io/refdata/${encodeURIComponent(asset)}?derivativeType=OPT&exchange=${exch}`;
+  if (expiry) url += `&expiry=${encodeURIComponent(expiry)}`;
+
+  try {
+    const upstream = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken}`,
+        'Origin': 'https://nubra.io',
+        'Referer': 'https://nubra.io/',
+        'Cookie': rawCookie,
+        'x-device-id': deviceId,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+      },
+      dispatcher: nubraAgent,
+    } as any);
+
+    const contentType = upstream.headers.get('content-type') ?? 'application/json';
+    const data = await upstream.text();
     reply.status(upstream.status);
     reply.header('Content-Type', contentType);
     return reply.send(data);

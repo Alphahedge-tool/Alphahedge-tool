@@ -15,6 +15,7 @@ import { useWorkspaceState } from './workspace/useWorkspaceState';
 import NubraApiTester from './NubraApiTester';
 import Backtest from './Backtest';
 import HistoricalWorkspace from './HistoricalWorkspace';
+import HomeWorkspace from './HomeWorkspace';
 import { wsManager } from './lib/WebSocketManager';
 import { useWsConnected } from './hooks/useMarketData';
 import { cx } from './lib/utils';
@@ -51,7 +52,7 @@ function isMarketOpen(): boolean {
   return istMin >= 9 * 60 + 15 && istMin < 15 * 60 + 30;
 }
 
-type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm';
+type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home';
 type Tab = 'ALL' | 'Cash' | 'F&O' | 'Currency' | 'Commodity';
 
 const TABS: Tab[] = ['ALL', 'Cash', 'F&O', 'Currency', 'Commodity'];
@@ -96,6 +97,15 @@ function IconCookie() {
 }
 
 // ── Page nav items ────────────────────────────────────────────────────────────
+// Home — house icon
+function IconHome() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+      <polyline points="9 21 9 12 15 12 15 21"/>
+    </svg>
+  );
+}
 // Charts — candlestick bars
 function IconBarChart2() {
   return (
@@ -2821,11 +2831,12 @@ export default function App() {
   if (status.phase !== 'ready') return <LoadingScreen status={status} />;
 
   const NAV_ITEMS: { page: Page; label: string; icon: React.ReactNode }[] = [
-    { page: 'chart', label: 'Charts', icon: <IconBarChart2 /> },
-    { page: 'straddle', label: 'Straddle', icon: <IconLayers /> },
+    { page: 'home',      label: 'Home',      icon: <IconHome /> },
+    { page: 'chart',     label: 'Charts',    icon: <IconBarChart2 /> },
+    { page: 'straddle',  label: 'Straddle',  icon: <IconLayers /> },
     { page: 'oiprofile', label: 'OI Profile', icon: <IconActivity /> },
-    { page: 'nubra', label: 'Nubra IV', icon: <IconFlask /> },
-    { page: 'backtest', label: 'Backtest', icon: <IconClock /> },
+    { page: 'nubra',     label: 'Nubra IV',  icon: <IconFlask /> },
+    { page: 'backtest',  label: 'Backtest',  icon: <IconClock /> },
     { page: 'historical', label: 'Historical', icon: <IconHistory /> },
   ];
 
@@ -3147,6 +3158,13 @@ export default function App() {
           {(page === 'backtest' || visited.has('backtest')) && (
             <div className="absolute inset-0" style={{ visibility: page === 'backtest' ? 'visible' : 'hidden', pointerEvents: page === 'backtest' ? 'auto' : 'none', zIndex: page === 'backtest' ? 1 : 0 }}>
               <Backtest />
+            </div>
+          )}
+
+          {/* Home Workspace */}
+          {(page === 'home' || visited.has('home')) && (
+            <div className="absolute inset-0" style={{ visibility: page === 'home' ? 'visible' : 'hidden', pointerEvents: page === 'home' ? 'auto' : 'none', zIndex: page === 'home' ? 1 : 0 }}>
+              <HomeWorkspace />
             </div>
           )}
 
