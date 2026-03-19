@@ -437,7 +437,6 @@ async function fetchUnderlyingForDate(
     return fetchMcxUnderlyingForDate(u.instrumentKey, date);
   }
   const { startDate, endDate, intraDay } = buildDateParams(date, today, entryTimeIst, forceHistorical);
-  console.log('[StrategyChart] fetchUnderlying', { nubraSymbol: u.symbol, nubraType: u.nubraType, exchange: u.exchange, date, intraDay });
   const chart = await nubraPost({
     exchange: u.exchange, type: u.nubraType, values: [u.symbol], fields: ['close'],
     startDate, endDate, interval: '1m', intraDay,
@@ -462,7 +461,6 @@ async function fetchUnderlyingRange(
     return fetchMcxUnderlyingRange(u.instrumentKey, entryDate, today, entryTimeIst);
   }
   const { startDate, endDate, intraDay } = buildRangeParams(entryDate, today, entryTimeIst);
-  console.log('[StrategyChart] fetchUnderlyingRange', { nubraSymbol: u.symbol, nubraType: u.nubraType, exchange: u.exchange, entryDate, today, intraDay });
   const chart = await nubraPost({
     exchange: u.exchange, type: u.nubraType, values: [u.symbol], fields: HIST_FIELDS,
     startDate, endDate, interval: '1m', intraDay,
@@ -754,8 +752,10 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const mcxAutoScrollRef = useRef(false);
   const mcxHasRef = useRef(false);
   const legsRef          = useRef<StrategyLeg[]>(legs);
-  const greeksLoadedRef  = useRef<Set<string>>(new Set()); // dates that have Greeks loaded
-  const greeksRangeSigRef = useRef<string>(''); // signature for historical range greeks load
+  const deltaLoadedRef   = useRef<Set<string>>(new Set()); // dates that have Delta loaded
+  const ivLoadedRef      = useRef<Set<string>>(new Set()); // dates that have IV loaded
+  const deltaRangeSigRef = useRef<string>(''); // signature for historical range delta load
+  const ivRangeSigRef    = useRef<string>(''); // signature for historical range IV load
 
   const accumRef = useRef<AccumData>({
     underlyings: new Map(), mtm: [], mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map(),
@@ -811,8 +811,33 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const atmIvLatestIv         = useRef<Map<string, Map<number, number>>>(new Map()); // sym → (refId → IV)
   const atmIvSubscribeFnRef   = useRef<((sym: string, expiry: string, strike: number) => void) | null>(null);
 
-  // MTM tooltip state
-  const [mtmTooltip, setMtmTooltip] = useState<{ x: number; y: number; time: number; value: number } | null>(null);
+  // ── Vertical split: chart (top) vs MTM panel (bottom) ────────────────────────
+  const [chartHeightPct, setChartHeightPct] = useState(70);
+  const splitDragging = useRef(false);
+  const splitWrapRef  = useRef<HTMLDivElement>(null);
+
+  const onSplitMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragging.current = true;
+    document.body.style.cursor    = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!splitDragging.current || !splitWrapRef.current) return;
+      const rect = splitWrapRef.current.getBoundingClientRect();
+      const pct  = ((ev.clientY - rect.top) / rect.height) * 100;
+      setChartHeightPct(Math.min(90, Math.max(20, pct)));
+    };
+    const onUp = () => {
+      splitDragging.current          = false;
+      document.body.style.cursor    = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',   onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+  }, []);
 
   const uniqueLegs = legs.filter((leg, i, arr) =>
     arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
@@ -895,7 +920,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         }
       }
 
-      console.warn('[StrategyChart] could not resolve underlying for', sym, exch);
       return null;
     };
 
@@ -906,7 +930,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const resolved = resolveOne(sym, legExch || ocExchange);
       if (resolved) results.push(resolved);
     }
-    console.log('[StrategyChart] resolveUnderlyings →', results);
     return results;
   }, [ocSymbol, ocExchange, uniqueLegs, nubraIndexes, nubraInstruments, instruments]);
 
@@ -959,7 +982,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       grid:      { vertLines: { color: '#2c2c2c' }, horzLines: { color: '#2c2c2c' } },
       crosshair: { mode: 0 },
       leftPriceScale:  { visible: true, borderColor: '#3a3a3a', scaleMargins: { top: 0.06, bottom: 0.06 } },
-      rightPriceScale: { borderColor: '#3a3a3a', scaleMargins: { top: 0.06, bottom: 0.06 } },
+      rightPriceScale: { visible: true, borderColor: '#3a3a3a', scaleMargins: { top: 0.58, bottom: 0.04 } },
       localization: {
         timeFormatter: (ts: number) =>
           new Date(ts * 1000).toLocaleString('en-IN', {
@@ -1113,7 +1136,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         bottomFillColor1:'rgba(242,54,69,0.05)',
         bottomFillColor2:'rgba(242,54,69,0.25)',
         lineWidth: 2 as 2,
-        priceScaleId: 'mtm',
+        priceScaleId: 'right',
         priceFormat: {
           type: 'custom',
           minMove: 0.01,
@@ -1125,8 +1148,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           },
         },
       }, 0);
-      // MTM occupies bottom ~42% of pane 0, leaves top 58% for spot/options
-      chart.priceScale('mtm').applyOptions({ scaleMargins: { top: 0.58, bottom: 0.04 }, visible: true, borderColor: '#2a2a2a' });
     }
 
     // Per-underlying MTM lines — only when >1 underlying
@@ -1143,7 +1164,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           const s = chart.addSeries(LineSeries, {
             color, lineWidth: 2 as 2,
             title: `MTM ${sym}`,
-            priceScaleId: 'mtm',
+            priceScaleId: 'right',
             lineStyle: 0, // solid
             priceFormat: {
               type: 'custom',
@@ -1340,8 +1361,10 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
     accumRef.current = { underlyings: new Map(), mtm: [], mtmPerUnderlying: new Map(), options: new Map(), deltas: new Map(), ivs: new Map() };
     loadedDatesRef.current   = new Set();
-    greeksLoadedRef.current  = new Set();
-    greeksRangeSigRef.current = '';
+    deltaLoadedRef.current   = new Set();
+    ivLoadedRef.current      = new Set();
+    deltaRangeSigRef.current = '';
+    ivRangeSigRef.current    = '';
     oldestDateRef.current    = null;
     isLoadingMoreRef.current = false;
     loadLockRef.current      = false;
@@ -1690,7 +1713,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const ce = nubraInstruments.find(i => i.option_type === 'CE' && matchExpiry(i) && Math.abs((i.strike_price ?? 0) - strikePaise) < 2 && matchSym(i));
       const pe = nubraInstruments.find(i => i.option_type === 'PE' && matchExpiry(i) && Math.abs((i.strike_price ?? 0) - strikePaise) < 2 && matchSym(i));
       if (!ce || !pe) {
-        console.warn(`[ATM IV] CE/PE not found — sym=${sym} expiry=${expiry} strike=${atmStrike} (paise=${strikePaise}) ce=${!!ce} pe=${!!pe}`);
         return;
       }
       const ceId = Number(ce.ref_id);
@@ -1703,7 +1725,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       atmIvSubRefIds.current.set(sym, new Set([ceId, peId]));
       atmIvLatestIv.current.set(sym, new Map());
       const atmMsg = { action: 'subscribe', session_token: sessionToken, data_type: 'greeks', symbols: [], ref_ids: [ceId, peId], exchange: ce.exchange || 'NSE' };
-      console.log(`[ATM IV] subscribing greeks — sym=${sym} expiry=${expiry} strike=${atmStrike} CE=${ceId} PE=${peId}`);
       sock.send(JSON.stringify(atmMsg));
     };
 
@@ -1725,7 +1746,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       }
 
       // Seed ATM IV greeks immediately from last known spot (no need to wait for next index tick)
-      console.log('[ATM IV] ws.onopen — seeding ATM greeks, showAtmIv=', showAtmIvRef.current);
       if (showAtmIvRef.current && isMarketOpen()) {
         const now = Date.now();
         for (const u of underlyingInfos) {
@@ -1884,11 +1904,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           .map(exp => ({ exp, ms: expiryToMs(exp) }))
           .filter(x => x.ms > 0)
           .sort((a, b) => Math.abs(a.ms - now) - Math.abs(b.ms - now))[0]?.exp;
-        const sampleOpt = nubraInstruments.find(i => i.option_type === 'CE' && (i.asset?.toUpperCase().includes(legSym.toUpperCase()) || i.nubra_name?.toUpperCase().includes(legSym.toUpperCase())));
-        console.log(`[ATM IV] index tick sym=${legSym} spot=${spot} expiry=${expiry} nubraInstruments=${nubraInstruments.length} sample_expiry=${sampleOpt?.expiry} sample_strike=${sampleOpt?.strike_price} sample_asset=${sampleOpt?.asset}`);
         if (!expiry) return;
         const newStrike = calcATMStrike(spot, nubraInstruments, legSym, expiry);
-        console.log(`[ATM IV] calcATMStrike=${newStrike} prev=${atmIvCurrentStrikeRef.current.get(legSym)}`);
         if (newStrike <= 0) return;
         if (newStrike !== atmIvCurrentStrikeRef.current.get(legSym)) {
           atmIvCurrentStrikeRef.current.set(legSym, newStrike);
@@ -1901,6 +1918,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       try {
         const msg = JSON.parse(e.data);
         if (!msg.data) return;
+        // Keep only the latest 50 ticks — prevents unbounded growth during scroll
+        if (wsTickRef.current.length >= 50) wsTickRef.current = wsTickRef.current.slice(-25);
         wsTickRef.current.push(msg);
         if (wsFlushPendingRef.current) return;
         wsFlushPendingRef.current = true;
@@ -2122,8 +2141,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const startDate = (uniqueLegs.map(l => l.entryDate).filter(Boolean).sort().at(0) ?? today) as string;
       const startTimeIst = uniqueLegs.filter(l => l.entryDate === startDate).map(l => l.entryTime).filter(Boolean).sort().at(0);
       const sig = `range:${startDate}:${today}:${uniqueLegs.map(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}`).join(',')}:${ocSymbol}:${ocExchange}`;
-      if (greeksRangeSigRef.current === sig) return;
-      greeksRangeSigRef.current = sig;
+      if (deltaRangeSigRef.current === sig) return;
+      deltaRangeSigRef.current = sig;
 
       const acc = accumRef.current;
       const legs = legsRef.current.filter((leg, i, arr) =>
@@ -2144,22 +2163,24 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         .then(() => {
           const ss2 = seriesRef.current;
           for (const [key, data] of acc.deltas) ss2.deltas.get(key)?.setData(data);
-          for (const [key, data] of acc.ivs) ss2.ivs.get(key)?.setData(data);
+          if (showIvRef.current) {
+            for (const [key, data] of acc.ivs) ss2.ivs.get(key)?.setData(data);
+          }
         })
         .catch((e: any) => console.warn('[StrategyChart] greeks range load failed', e.message));
 
       return;
     }
 
-    // Lazy-load Greeks for all loaded dates not yet fetched
+    // Lazy-load Delta for all loaded dates not yet fetched
     const acc = accumRef.current;
     const today = lastTradingDay();
     const legs = legsRef.current.filter((leg, i, arr) =>
       arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
     );
     for (const date of loadedDatesRef.current) {
-      if (greeksLoadedRef.current.has(date)) continue;
-      greeksLoadedRef.current.add(date);
+      if (deltaLoadedRef.current.has(date)) continue;
+      deltaLoadedRef.current.add(date);
       for (const leg of legs) {
         const info = resolveOption(leg);
         if (!info || info.source === 'MCX') continue;
@@ -2170,13 +2191,14 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               acc.deltas.set(info.key, mergeData(prev, delta));
               ss.deltas.get(info.key)?.setData(acc.deltas.get(info.key)!);
             }
+            // Also seed IV accumulator so toggling IV later has data immediately
             if (iv.length) {
               const prev = acc.ivs.get(info.key) ?? [];
               acc.ivs.set(info.key, mergeData(prev, iv));
-              ss.ivs.get(info.key)?.setData(acc.ivs.get(info.key)!);
+              if (showIvRef.current) ss.ivs.get(info.key)?.setData(acc.ivs.get(info.key)!);
             }
           })
-          .catch((e: any) => console.warn('[StrategyChart] greeks lazy load failed', e.message));
+          .catch((e: any) => console.warn('[StrategyChart] delta lazy load failed', e.message));
       }
     }
   }, [showDelta, legsKey, ocSymbol, ocExchange, isHistoricalMode, 0]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2187,13 +2209,21 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     if (!showIv) return;
 
     if (isHistoricalMode) {
-      // Delta toggle handles the shared greeks range fetch; ensure it runs for IV-only toggle.
       const today = lastTradingDay();
       const startDate = (uniqueLegs.map(l => l.entryDate).filter(Boolean).sort().at(0) ?? today) as string;
       const startTimeIst = uniqueLegs.filter(l => l.entryDate === startDate).map(l => l.entryTime).filter(Boolean).sort().at(0);
+
+      // If Delta already fetched this range, IV data is already in acc.ivs — just apply it
       const sig = `range:${startDate}:${today}:${uniqueLegs.map(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}`).join(',')}:${ocSymbol}:${ocExchange}`;
-      if (greeksRangeSigRef.current === sig) return;
-      greeksRangeSigRef.current = sig;
+      if (deltaRangeSigRef.current === sig) {
+        const acc2 = accumRef.current;
+        const ss2 = seriesRef.current;
+        for (const [key, data] of acc2.ivs) ss2.ivs.get(key)?.setData(data);
+        return;
+      }
+
+      if (ivRangeSigRef.current === sig) return;
+      ivRangeSigRef.current = sig;
 
       const acc = accumRef.current;
       const legs = legsRef.current.filter((leg, i, arr) =>
@@ -2213,7 +2243,9 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       }))
         .then(() => {
           const ss2 = seriesRef.current;
-          for (const [key, data] of acc.deltas) ss2.deltas.get(key)?.setData(data);
+          if (showDeltaRef.current) {
+            for (const [key, data] of acc.deltas) ss2.deltas.get(key)?.setData(data);
+          }
           for (const [key, data] of acc.ivs) ss2.ivs.get(key)?.setData(data);
         })
         .catch((e: any) => console.warn('[StrategyChart] greeks range load failed', e.message));
@@ -2221,24 +2253,34 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       return;
     }
 
-    // Lazy-load Greeks (same logic — reuse greeksLoadedRef so no double fetch)
+    // Lazy-load IV for all loaded dates not yet fetched
     const acc = accumRef.current;
     const today = lastTradingDay();
     const legs = legsRef.current.filter((leg, i, arr) =>
       arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
     );
     for (const date of loadedDatesRef.current) {
-      if (greeksLoadedRef.current.has(date)) continue;
-      greeksLoadedRef.current.add(date);
+      // If Delta already loaded this date, IV data is already in acc.ivs — just apply it
+      if (deltaLoadedRef.current.has(date)) {
+        for (const leg of legs) {
+          const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+          const data = acc.ivs.get(key);
+          if (data?.length) ss.ivs.get(key)?.setData(data);
+        }
+        continue;
+      }
+      if (ivLoadedRef.current.has(date)) continue;
+      ivLoadedRef.current.add(date);
       for (const leg of legs) {
         const info = resolveOption(leg);
         if (!info || info.source === 'MCX') continue;
         fetchOptionGreeksForDate(info.symbol!, info.exchange, date, today, undefined, isHistoricalMode)
           .then(({ delta, iv }) => {
+            // Seed delta accumulator too in case Delta gets toggled later
             if (delta.length) {
               const prev = acc.deltas.get(info.key) ?? [];
               acc.deltas.set(info.key, mergeData(prev, delta));
-              ss.deltas.get(info.key)?.setData(acc.deltas.get(info.key)!);
+              if (showDeltaRef.current) ss.deltas.get(info.key)?.setData(acc.deltas.get(info.key)!);
             }
             if (iv.length) {
               const prev = acc.ivs.get(info.key) ?? [];
@@ -2246,7 +2288,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               ss.ivs.get(info.key)?.setData(acc.ivs.get(info.key)!);
             }
           })
-          .catch((e: any) => console.warn('[StrategyChart] greeks lazy load failed', e.message));
+          .catch((e: any) => console.warn('[StrategyChart] iv lazy load failed', e.message));
       }
     }
   }, [showIv, legsKey, ocSymbol, ocExchange, isHistoricalMode, 0]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2489,7 +2531,135 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         </div>
       )}
 
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
+      {/* ── Resizable split: chart top / MTM panel bottom ── */}
+      <div ref={splitWrapRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Chart area */}
+        <div ref={containerRef} style={{ height: `${chartHeightPct}%`, minHeight: 0, flexShrink: 0 }} />
+
+        {/* Drag handle — matches App.tsx divider pattern */}
+        <div
+          onMouseDown={onSplitMouseDown}
+          onDoubleClick={() => setChartHeightPct(70)}
+          style={{
+            flexShrink: 0, height: 4, cursor: 'row-resize',
+            background: 'transparent',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            transition: 'background 0.15s',
+            zIndex: 10,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.08)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+        />
+
+        {/* MTM panel */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111110', overflow: 'hidden' }}>
+
+          {/* ── Header bar: total P&L ── */}
+          {(() => {
+            const total = uniqueLegs.reduce((sum, leg) => {
+              const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+              return sum + (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
+            }, 0);
+            const isPos = total >= 0;
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '7px 16px',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+                flexShrink: 0, background: '#151413',
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', letterSpacing: '0.1em', textTransform: 'uppercase' }}>MTM P&amp;L</span>
+                <span style={{ fontSize: 22, fontWeight: 700, color: isPos ? '#26a69a' : '#f23645', fontFamily: 'monospace', letterSpacing: '-0.01em' }}>
+                  {isPos ? '+' : '−'}₹{Math.abs(total).toFixed(2)}
+                </span>
+                <span style={{ fontSize: 12, color: '#4B5563', marginLeft: -4 }}>{uniqueLegs.length} leg{uniqueLegs.length !== 1 ? 's' : ''}</span>
+              </div>
+            );
+          })()}
+
+          {/* ── Column headers ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '46px minmax(0,1fr) 88px 88px 100px',
+            padding: '5px 16px',
+            background: '#181715',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            flexShrink: 0,
+          }}>
+            {['', 'Instrument', 'Entry', 'LTP', 'P&L'].map((h, i) => (
+              <span key={i} style={{
+                fontSize: 11, fontWeight: 700, color: '#6B7280',
+                letterSpacing: '0.07em', textTransform: 'uppercase',
+                textAlign: i >= 2 ? 'right' : 'left',
+              }}>{h}</span>
+            ))}
+          </div>
+
+          {/* ── Rows ── */}
+          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+            {uniqueLegs.map((leg, i) => {
+              const ltp   = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+              const pnl   = (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
+              const isPos = pnl >= 0;
+              const isBuy = leg.action === 'B';
+              return (
+                <div key={i} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '46px minmax(0,1fr) 88px 88px 100px',
+                  alignItems: 'center',
+                  padding: '8px 16px',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                }}>
+
+                  {/* B/S badge */}
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 38, height: 20, borderRadius: 4, flexShrink: 0,
+                    fontSize: 11, fontWeight: 800, letterSpacing: '0.04em',
+                    color: isBuy ? '#26a69a' : '#f23645',
+                    background: isBuy ? 'rgba(38,166,154,0.15)' : 'rgba(242,54,69,0.15)',
+                    border: `1px solid ${isBuy ? 'rgba(38,166,154,0.35)' : 'rgba(242,54,69,0.35)'}`,
+                  }}>{isBuy ? 'BUY' : 'SELL'}</span>
+
+                  {/* Instrument */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {leg.symbol} {leg.strike}
+                    </span>
+                    <span style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: leg.type === 'CE' ? '#34d399' : '#f87171',
+                      flexShrink: 0,
+                    }}>{leg.type}</span>
+                    <span style={{ fontSize: 12, color: '#6B7280', flexShrink: 0 }}>×{leg.lots}</span>
+                  </div>
+
+                  {/* Entry */}
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#9CA3AF', textAlign: 'right', fontFamily: 'monospace' }}>
+                    ₹{leg.price.toFixed(2)}
+                  </span>
+
+                  {/* LTP */}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#F3F4F6', textAlign: 'right', fontFamily: 'monospace' }}>
+                    ₹{ltp.toFixed(2)}
+                  </span>
+
+                  {/* P&L */}
+                  <span style={{
+                    fontSize: 14, fontWeight: 700, textAlign: 'right', fontFamily: 'monospace',
+                    color: isPos ? '#26a69a' : '#f23645',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {isPos ? '+' : '−'}₹{Math.abs(pnl).toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* ── Positions overlay ─────────────────────────────────────────── */}
       {showPositions && legs.length > 0 && (

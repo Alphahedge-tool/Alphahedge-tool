@@ -190,7 +190,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     // Save partial creds to IDB + localStorage so form is pre-filled on next visit
     await saveUserCreds(sub, {
       upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
-      nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: '' },
+      nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
     }).catch(() => {});
     localStorage.setItem('upstox_phone',      upPhone);
     localStorage.setItem('upstox_pin',        upPin);
@@ -199,6 +199,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     localStorage.setItem('upstox_api_secret', upSecret);
     localStorage.setItem('nubra_phone',       nuPhone);
     localStorage.setItem('nubra_mpin',        nuMpin);
+    if (nuTotpKey) localStorage.setItem('nubra_totp_secret', nuTotpKey);
     try {
       const res  = await fetch('/api/nubra-send-otp', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -369,8 +370,9 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
             {/* Nubra */}
             <div style={{ background: '#0f1020', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', marginBottom: 10 }}>NUBRA</div>
-              <Field label="Phone" value={nuPhone} onChange={setNuPhone} placeholder="9XXXXXXXXX" />
-              <Field label="MPIN"  value={nuMpin}  onChange={setNuMpin}  placeholder="6-digit MPIN" type="password" />
+              <Field label="Phone"       value={nuPhone}   onChange={setNuPhone}   placeholder="9XXXXXXXXX" />
+              <Field label="MPIN"        value={nuMpin}    onChange={setNuMpin}    placeholder="6-digit MPIN" type="password" />
+              <Field label="TOTP Secret" value={nuTotpKey} onChange={setNuTotpKey} placeholder="Base32 TOTP secret (optional)" />
             </div>
 
             {err && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 10 }}>{err}</p>}

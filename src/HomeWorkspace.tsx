@@ -350,7 +350,7 @@ const noop = () => {};
 // ── Panel content renderer ────────────────────────────────────────────────────
 const PanelBody = React.memo(function PanelBody({
   content, symbol, exchange, expiries, instrument,
-  nubraSession, workerRef,
+  nubraSession, workerRef, chartWorkerRef,
   onSymbolChange, onSearchOpen,
 }: {
   content: PanelContent;
@@ -360,6 +360,7 @@ const PanelBody = React.memo(function PanelBody({
   instrument: Instrument | null;
   nubraSession: string;
   workerRef: React.RefObject<Worker | null>;
+  chartWorkerRef: React.RefObject<Worker | null>;
   onSymbolChange: (symbol: string, exchange: string, expiries: string[]) => void;
   onSearchOpen?: () => void;
 }) {
@@ -402,7 +403,7 @@ const PanelBody = React.memo(function PanelBody({
       )}
       {content === 'iv-chart' && (
         <div style={{ width: '100%', height: '100%' }}>
-          <IvChart instruments={instruments} nubraInstruments={nubraInstruments} />
+          <IvChart instruments={instruments} nubraInstruments={nubraInstruments} workerRef={chartWorkerRef} />
         </div>
       )}
       {content === 'open-interest' && (
@@ -417,7 +418,7 @@ const PanelBody = React.memo(function PanelBody({
 // ── Panel card ────────────────────────────────────────────────────────────────
 const PanelCard = React.memo(function PanelCard({
   panel, onClose, onToggleMin, onSetContent, onSetSymbol, onSetInstrument,
-  nubraSession, workerRef,
+  nubraSession, workerRef, chartWorkerRef,
 }: {
   panel: Panel;
   onClose: (id: string) => void;
@@ -427,6 +428,7 @@ const PanelCard = React.memo(function PanelCard({
   onSetInstrument: (id: string, ins: Instrument) => void;
   nubraSession: string;
   workerRef: React.RefObject<Worker | null>;
+  chartWorkerRef: React.RefObject<Worker | null>;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [showCandleSearch, setShowCandleSearch] = useState(false);
@@ -558,6 +560,7 @@ const PanelCard = React.memo(function PanelCard({
             instrument={panel.instrument}
             nubraSession={nubraSession}
             workerRef={workerRef}
+            chartWorkerRef={chartWorkerRef}
             onSymbolChange={handleSymbolChange}
             onSearchOpen={handleSearchOpen}
           />
@@ -888,6 +891,7 @@ export default function HomeWorkspace() {
               onSetInstrument={setInstrument}
               nubraSession={nubraSession}
               workerRef={searchWorkerRef}
+              chartWorkerRef={chartWorkerRef}
             />
           </div>
         ))}

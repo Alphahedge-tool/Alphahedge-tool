@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { NubraInstrument } from './useNubraInstruments';
 import s from './OpenInterest.module.css';
 
@@ -11,6 +11,7 @@ interface Props {
 }
 
 type OptionType = 'CE' | 'PE' | 'BOTH';
+type TimeRange  = 'snapshot' | '30m' | '1h' | '3h' | 'custom';
 
 interface RefDataItem {
   StrikePrice: number;     // in paise (divide by 100)
@@ -109,9 +110,9 @@ async function getECharts() {
 export default function OpenInterest({ nubraInstruments }: Props) {
   // Search state
   const [query,        setQuery]        = useState('');
-  const [suggestions,  setSuggestions]  = useState<Suggestion[]>([]);
   const [showDrop,     setShowDrop]     = useState(false);
   const [activeIdx,    setActiveIdx]    = useState(-1);
+  const suggestions = useMemo(() => buildSuggestions(query, nubraInstruments), [query, nubraInstruments]);
 
   // Selected symbol state
   const [symbol,    setSymbol]    = useState('');
@@ -123,7 +124,10 @@ export default function OpenInterest({ nubraInstruments }: Props) {
   const [expiry,      setExpiry]      = useState('');
 
   // View
-  const [optType, setOptType] = useState<OptionType>('BOTH');
+  const [optType,     setOptType]     = useState<OptionType>('BOTH');
+  const [timeRange,   setTimeRange]   = useState<TimeRange>('snapshot');
+  // Custom time: IST HH:MM that the user picks as the "from" time
+  const [customTime,  setCustomTime]  = useState('09:15');
 
   // Chart data
   const [bars,      setBars]      = useState<OIBar[]>([]);
@@ -136,14 +140,39 @@ export default function OpenInterest({ nubraInstruments }: Props) {
   const wrapRef    = useRef<HTMLDivElement>(null);
   const chartInst  = useRef<any>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchOIRef = useRef<((sym: string, exch: string, exp: string, nType: 'INDEX' | 'STOCK') => void) | null>(null);
+  const pollSymRef    = useRef('');
+  const pollExchRef   = useRef('');
+  const pollExpRef    = useRef('');
+  const pollNTypeRef  = useRef<'INDEX' | 'STOCK'>('INDEX');
 
-  // ── Search suggestions ──────────────────────────────────────────────────────
+  const stopPoller = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
 
+  const startPoller = useCallback((sym: string, exch: string, exp: string, nType: 'INDEX' | 'STOCK') => {
+    stopPoller();
+    pollSymRef.current   = sym;
+    pollExchRef.current  = exch;
+    pollExpRef.current   = exp;
+    pollNTypeRef.current = nType;
+
+    const tick = () => {
+      const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
+      const istMins = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+      if (istMins >= 15 * 60 + 30) { stopPoller(); return; }
+      fetchOIRef.current?.(pollSymRef.current, pollExchRef.current, pollExpRef.current, pollNTypeRef.current);
+    };
+
+    pollRef.current = setInterval(tick, 60_000);
+  }, [stopPoller]);
+
+  // showDrop tracks whether dropdown should be visible
   useEffect(() => {
-    setSuggestions(buildSuggestions(query, nubraInstruments));
     setActiveIdx(-1);
     setShowDrop(query.length > 0);
-  }, [query, nubraInstruments]);
+  }, [query]);
 
   // ── Fetch expiries from /api/nubra-refdata ──────────────────────────────────
 
@@ -266,6 +295,130 @@ export default function OpenInterest({ nubraInstruments }: Props) {
       setLoading(false);
     }
   }, []);
+  fetchOIRef.current = fetchOI;
+
+  // ── OI Change fetch ─────────────────────────────────────────────────────────
+  // Converts an IST HH:MM string to UTC ISO for today's market session
+  function istHHMMtoUtcIso(hhMm: string): string {
+    const [hh, mm] = hhMm.split(':').map(Number);
+    const todayDate = new Date().toISOString().slice(0, 10);
+    // IST = UTC+5:30, so subtract 5h30m = 330 min
+    const totalMinUtc = hh * 60 + mm - 330;
+    const utcH = Math.floor(((totalMinUtc % 1440) + 1440) % 1440 / 60);
+    const utcM = ((totalMinUtc % 1440) + 1440) % 1440 % 60;
+    return `${todayDate}T${String(utcH).padStart(2, '0')}:${String(utcM).padStart(2, '0')}:00.000Z`;
+  }
+
+  // Market session range for today (IST 9:15 → 15:30 = UTC 3:45 → 10:00)
+  function marketEndUtc(): string { return istHHMMtoUtcIso('15:30'); }
+
+  // Returns [fromTimeUtc, toTimeUtc] for a given range
+  function rangeToTimes(range: TimeRange, customFrom: string): [string, string] {
+    const toTime = marketEndUtc();
+    if (range === 'snapshot') return [toTime, toTime];
+    if (range === 'custom') return [istHHMMtoUtcIso(customFrom), toTime];
+    const mins = range === '30m' ? 30 : range === '1h' ? 60 : 180;
+    // "to" = current time (or market end if after hours), "from" = to − mins
+    const nowUtcMs = Date.now();
+    const marketEndMs = new Date(marketEndUtc()).getTime();
+    const effectiveToMs = Math.min(nowUtcMs, marketEndMs);
+    const effectiveFromMs = effectiveToMs - mins * 60 * 1000;
+    const toIso  = new Date(effectiveToMs).toISOString().replace(/\.\d{3}Z$/, '.000Z');
+    const fromIso = new Date(effectiveFromMs).toISOString().replace(/\.\d{3}Z$/, '.000Z');
+    return [fromIso, toIso];
+  }
+
+  const fetchOIChange = useCallback(async (
+    sym: string,
+    exch: string,
+    exp: string,
+    _nType: 'INDEX' | 'STOCK',
+    range: TimeRange,
+    customFrom: string,
+  ) => {
+    if (!sym || !exp) return;
+    if (range === 'snapshot') {
+      // Snapshot = plain OI, delegate to existing fetchOI
+      fetchOIRef.current?.(sym, exch, exp, _nType);
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    const headers = nubraHeaders();
+    if (!headers['x-session-token']) {
+      setError('NOT LOGGED IN');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Get strikes from refdata
+      const refRes = await fetch(
+        `/api/nubra-refdata?asset=${encodeURIComponent(sym)}&exchange=${exch}&expiry=${exp}`,
+        { headers }
+      );
+      if (!refRes.ok) throw new Error(`refdata ${refRes.status}`);
+      const refJson = await refRes.json();
+      const refdata: RefDataItem[] = refJson?.refdata ?? [];
+      if (!refdata.length) { setBars([]); setLoading(false); return; }
+
+      const allStrikes = [...new Set(refdata.map(r => r.StrikePrice))].sort((a, b) => a - b);
+      const minStrike  = allStrikes[0];
+      const maxStrike  = allStrikes[allStrikes.length - 1];
+
+      // 2. Compute time range
+      const [fromTime, toTime] = rangeToTimes(range, customFrom);
+
+      // 3. Call the OI change endpoint
+      const oiRes = await fetch('/api/nubra-oi-change', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryTemplate: {
+            exchange: exch,
+            asset:    sym,
+            expiries: [exp],
+            strikes:  allStrikes,
+            minStrike,
+            maxStrike,
+            fields:   ['cumulative_oi'],
+          },
+          fromTime,
+          toTime,
+        }),
+      });
+      if (!oiRes.ok) throw new Error(`oi-change ${oiRes.status}`);
+      const oiJson = await oiRes.json();
+
+      const assetData = oiJson?.result?.[exch]?.[sym];
+      const timeKey   = assetData ? Object.keys(assetData)[0] : null;
+      const expiryMap = timeKey ? assetData[timeKey]?.[exp] : null;
+
+      const barMap = new Map<number, OIBar>();
+      for (const sp of allStrikes) barMap.set(sp, { strike: sp / 100, ce: 0, pe: 0 });
+
+      if (expiryMap) {
+        for (const [spStr, val] of Object.entries(expiryMap as Record<string, any>)) {
+          const sp  = parseInt(spStr, 10);
+          const bar = barMap.get(sp);
+          if (!bar) continue;
+          const oiObj = val?.cumulative_oi ?? {};
+          if (oiObj.CE != null) bar.ce = oiObj.CE;
+          if (oiObj.PE != null) bar.pe = oiObj.PE;
+        }
+      }
+
+      const sorted = [...barMap.values()].sort((a, b) => a.strike - b.strike);
+      setBars(sorted);
+      setTotalCe(sorted.reduce((s, b) => s + b.ce, 0));
+      setTotalPe(sorted.reduce((s, b) => s + b.pe, 0));
+    } catch (e: any) {
+      setError(e.message ?? 'ERROR');
+    } finally {
+      setLoading(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Symbol select ───────────────────────────────────────────────────────────
 
@@ -282,13 +435,23 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     fetchExpiries(resolved.nubraSym, resolved.exchange);
   }, [nubraInstruments, fetchExpiries]);
 
-  // ── Auto-load when expiry changes ───────────────────────────────────────────
+  // ── Auto-load when expiry/range/customTime changes ─────────────────────────
 
   useEffect(() => {
-    if (symbol && expiry) {
+    if (!symbol || !expiry) return;
+    if (timeRange === 'snapshot') {
       fetchOI(symbol, exchange, expiry, nubraType);
+      const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
+      const istMins = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+      if (istMins >= 9 * 60 + 15 && istMins < 15 * 60 + 30) {
+        startPoller(symbol, exchange, expiry, nubraType);
+      }
+      return () => stopPoller();
+    } else {
+      stopPoller();
+      fetchOIChange(symbol, exchange, expiry, nubraType, timeRange, customTime);
     }
-  }, [symbol, expiry, exchange, nubraType, fetchOI]);
+  }, [symbol, expiry, exchange, nubraType, timeRange, customTime, fetchOI, fetchOIChange, startPoller, stopPoller]);
 
   // ── ECharts rendering ───────────────────────────────────────────────────────
 
@@ -308,10 +471,11 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         return;
       }
 
+      const isChange = timeRange !== 'snapshot';
       const filtered = bars.filter(b => {
-        if (optType === 'CE') return b.ce > 0;
-        if (optType === 'PE') return b.pe > 0;
-        return b.ce > 0 || b.pe > 0;
+        if (optType === 'CE') return isChange ? b.ce !== 0 : b.ce > 0;
+        if (optType === 'PE') return isChange ? b.pe !== 0 : b.pe > 0;
+        return isChange ? (b.ce !== 0 || b.pe !== 0) : (b.ce > 0 || b.pe > 0);
       });
 
       const strikes   = filtered.map(b => b.strike.toLocaleString('en-IN'));
@@ -323,34 +487,51 @@ export default function OpenInterest({ nubraInstruments }: Props) {
 
       const barW = optType === 'BOTH' ? 14 : 18;
 
+      const callLabel = isChange ? 'Call OI Chg' : 'Call OI';
+      const putLabel  = isChange ? 'Put OI Chg'  : 'Put OI';
+
       const series: any[] = [];
       if (optType === 'CE' || optType === 'BOTH') {
         series.push({
-          name: 'Call OI',
+          name: callLabel,
           type: 'bar',
           data: ceValues,
           barMaxWidth: barW,
           barGap: '4%',
-          itemStyle: { color: CE_COLOR, borderRadius: [3, 3, 0, 0] },
+          itemStyle: {
+            color: (params: any) => {
+              const v = typeof params === 'object' ? params.value : params;
+              return isChange && v < 0 ? 'rgba(246,70,93,0.45)' : CE_COLOR;
+            },
+            borderRadius: [3, 3, 0, 0],
+          },
           emphasis: { focus: 'series', itemStyle: { shadowBlur: 8, shadowColor: 'rgba(33,150,243,0.5)' } },
         });
       }
       if (optType === 'PE' || optType === 'BOTH') {
         series.push({
-          name: 'Put OI',
+          name: putLabel,
           type: 'bar',
           data: peValues,
           barMaxWidth: barW,
           barGap: '4%',
-          itemStyle: { color: PE_COLOR, borderRadius: [3, 3, 0, 0] },
+          itemStyle: {
+            color: (params: any) => {
+              const v = typeof params === 'object' ? params.value : params;
+              return isChange && v < 0 ? 'rgba(14,203,129,0.35)' : PE_COLOR;
+            },
+            borderRadius: [3, 3, 0, 0],
+          },
           emphasis: { focus: 'series', itemStyle: { shadowBlur: 8, shadowColor: 'rgba(255,87,34,0.5)' } },
         });
       }
 
       const fmtOI = (v: number) => {
-        if (v >= 1e7) return `${(v / 1e7).toFixed(2)} Cr`;
-        if (v >= 1e5) return `${(v / 1e5).toFixed(2)} L`;
-        if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
+        const sign = v < 0 ? '-' : '';
+        const a = Math.abs(v);
+        if (a >= 1e7) return `${sign}${(a / 1e7).toFixed(2)} Cr`;
+        if (a >= 1e5) return `${sign}${(a / 1e5).toFixed(2)} L`;
+        if (a >= 1e3) return `${sign}${(a / 1e3).toFixed(0)}K`;
         return String(v);
       };
 
@@ -372,8 +553,8 @@ export default function OpenInterest({ nubraInstruments }: Props) {
             const strike = params[0]?.axisValue ?? '';
             let html = `<div style="font-size:14px;font-weight:700;margin-bottom:8px;color:#ffffff;letter-spacing:0.02em">${strike}</div>`;
             for (const p of params) {
-              if (!p.value) continue;
-              const color = p.seriesName === 'Call OI' ? '#F6465D' : '#0ECB81';
+              if (p.value == null || (!isChange && !p.value)) continue;
+              const color = p.seriesName.includes('Call') ? '#F6465D' : '#0ECB81';
               const val   = fmtOI(Number(p.value));
               html += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                 <span style="width:10px;height:10px;border-radius:2px;background:${color};display:inline-block;flex-shrink:0"></span>
@@ -393,8 +574,8 @@ export default function OpenInterest({ nubraInstruments }: Props) {
           itemHeight: 10,
           itemStyle: { borderRadius: 2 },
           data: [
-            { name: 'Call OI', itemStyle: { color: CE_COLOR } },
-            { name: 'Put OI',  itemStyle: { color: PE_COLOR } },
+            { name: callLabel, itemStyle: { color: CE_COLOR } },
+            { name: putLabel,  itemStyle: { color: PE_COLOR } },
           ],
         },
         xAxis: {
@@ -456,7 +637,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         series,
       }, true);
     });
-  }, [bars, optType]);
+  }, [bars, optType, timeRange]);
 
   // Resize observer — watch the wrap so resize fires even when bars mount/unmount
   useEffect(() => {
@@ -524,7 +705,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
                 spellCheck={false}
               />
               {query && (
-                <button className={s.clearBtn} onMouseDown={e => { e.preventDefault(); setQuery(''); setShowDrop(false); setSuggestions([]); }}>
+                <button className={s.clearBtn} onMouseDown={e => { e.preventDefault(); setQuery(''); setShowDrop(false); }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
@@ -573,6 +754,34 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         </div>
 
         <div className={s.toolbarRight}>
+          {/* OI Change time range */}
+          <div className={s.typeToggle}>
+            {(['snapshot', '30m', '1h', '3h', 'custom'] as TimeRange[]).map(r => (
+              <button
+                key={r}
+                className={`${s.typeBtn} ${timeRange === r ? s.typeBtnBothActive : ''}`}
+                onClick={() => setTimeRange(r)}
+                title={r === 'snapshot' ? 'Current snapshot OI' : r === 'custom' ? 'Custom from time' : `Last ${r} OI change`}
+              >
+                {r === 'snapshot' ? 'Now' : r === 'custom' ? 'Custom' : r.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom time picker — only shown when custom is selected */}
+          {timeRange === 'custom' && (
+            <input
+              type="time"
+              className={s.expirySelect}
+              value={customTime}
+              min="09:15"
+              max="15:29"
+              step="60"
+              onChange={e => setCustomTime(e.target.value)}
+              style={{ width: 90, fontVariantNumeric: 'tabular-nums' }}
+            />
+          )}
+
           {/* CE / PE / BOTH toggle */}
           <div className={s.typeToggle}>
             <button

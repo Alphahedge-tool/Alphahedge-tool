@@ -22,6 +22,7 @@ import s from './IvChart.module.css';
 interface Props {
   instruments: Instrument[];
   nubraInstruments: NubraInstrument[];
+  workerRef?: React.RefObject<Worker | null>;
 }
 
 // ── Helpers (mirrors StrategyChart) ──────────────────────────────────────────
@@ -172,8 +173,14 @@ async function fetchAtmIvChart(
   });
   if (!res.ok) return [];
   const json = await res.json();
-  const pts: { ts: number; v: number }[] =
-    json?.result?.[0]?.values?.[0]?.[chainValue]?.atm_iv ?? [];
+  // Search all result entries for the chainValue key (order not guaranteed)
+  let pts: { ts: number; v: number }[] = [];
+  for (const entry of json?.result ?? []) {
+    for (const valObj of entry?.values ?? []) {
+      if (valObj?.[chainValue]?.atm_iv?.length) { pts = valObj[chainValue].atm_iv; break; }
+    }
+    if (pts.length) break;
+  }
   return pts.map(p => ({ time: Math.round(p.ts / 1e9) as unknown as Time, value: p.v * 100 }));
 }
 
@@ -219,7 +226,13 @@ async function fetchPcrChart(
   });
   if (!res.ok) return [];
   const json = await res.json();
-  const chainData = json?.result?.[0]?.values?.[0]?.[chainValue];
+  let chainData: any = null;
+  for (const entry of json?.result ?? []) {
+    for (const valObj of entry?.values ?? []) {
+      if (valObj?.[chainValue]) { chainData = valObj[chainValue]; break; }
+    }
+    if (chainData) break;
+  }
   const callOi: { ts: number; v: number }[] = chainData?.cumulative_call_oi ?? [];
   const putOi:  { ts: number; v: number }[] = chainData?.cumulative_put_oi  ?? [];
 
@@ -351,102 +364,9 @@ function getSpotInstrumentKey(sym: string, instruments: Instrument[]): string | 
   return null;
 }
 
-// ── Symbol Search Bar ─────────────────────────────────────────────────────────
-
-function SymbolSearchBar({ onSelect }: { onSelect: (sym: string, exchange: string) => void }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Instrument[]>([]);
-  const [open, setOpen] = useState(false);
-  const [cursor, setCursor] = useState(0);
-  const workerRef = useRef<Worker | null>(null);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const w = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
-    workerRef.current = w;
-    w.onmessage = (e) => {
-      if (e.data.type === 'RESULTS') {
-        setResults(e.data.results ?? []);
-        setCursor(0);
-        setOpen((e.data.results ?? []).length > 0);
-      }
-    };
-    return () => { w.terminate(); workerRef.current = null; };
-  }, []);
-
-  const handleInput = (v: string) => {
-    setQuery(v);
-    if (!v.trim()) { setResults([]); setOpen(false); return; }
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => {
-      workerRef.current?.postMessage({ type: 'SEARCH', query: v });
-    }, 100);
-  };
-
-  const select = (ins: Instrument) => {
-    setQuery(ins.trading_symbol ?? ins.name ?? '');
-    setOpen(false);
-    const exch = (ins.exchange ?? ins.segment ?? 'NSE').replace('_INDEX', '').replace('_FO', '');
-    onSelect(ins.underlying_symbol ?? ins.trading_symbol ?? '', exch);
-  };
-
-  return (
-    <div className={s.searchWrap}>
-      <div className={s.searchBox}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#787B86" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input
-          className={s.searchInput}
-          value={query}
-          placeholder="Search symbol… (NIFTY, BANKNIFTY, RELIANCE)"
-          onChange={e => handleInput(e.target.value)}
-          onFocus={() => { if (query.trim()) workerRef.current?.postMessage({ type: 'SEARCH', query }); }}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={e => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, results.length - 1)); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)); }
-            else if (e.key === 'Enter' && results.length > 0) select(results[cursor]);
-            else if (e.key === 'Escape') setOpen(false);
-          }}
-        />
-        {query && (
-          <button className={s.clearBtn} onMouseDown={() => { setQuery(''); setOpen(false); setResults([]); }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6 6 18M6 6l12 12"/>
-            </svg>
-          </button>
-        )}
-      </div>
-      {open && results.length > 0 && (
-        <div className={s.dropdown}>
-          <div ref={listRef} className={s.dropdownList}>
-            {results.map((ins, i) => (
-              <div
-                key={ins.instrument_key}
-                className={`${s.dropdownItem} ${i === cursor ? s.dropdownItemActive : ''}`}
-                onMouseEnter={() => setCursor(i)}
-                onMouseDown={() => select(ins)}
-              >
-                <span className={s.dropdownExch}>{(ins.exchange ?? '').replace('_INDEX','').replace('_FO','')}</span>
-                <span className={s.dropdownSym}>{ins.trading_symbol}</span>
-                <span className={s.dropdownType}>{ins.instrument_type}</span>
-              </div>
-            ))}
-          </div>
-          <div className={s.dropdownFooter}>
-            <span><kbd>↵</kbd> select</span><span><kbd>Esc</kbd> close</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── IvChart ───────────────────────────────────────────────────────────────────
 
-export default function IvChart({ instruments, nubraInstruments }: Props) {
+export default function IvChart({ instruments, nubraInstruments, workerRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const ivSeriesRef   = useRef<ISeriesApi<'Line'> | null>(null);
@@ -530,17 +450,17 @@ export default function IvChart({ instruments, nubraInstruments }: Props) {
     });
     chartRef.current = chart;
 
-    // IV series — right axis, orange
+    // IV series — LEFT axis, orange
     const ivSeries = chart.addSeries(LineSeries, {
       color: '#f97316',
       lineWidth: 2,
       title: 'ATM IV %',
-      priceScaleId: 'right',
+      priceScaleId: 'left',
       priceFormat: { type: 'custom', minMove: 0.01, formatter: (v: number) => `${v.toFixed(2)}%` },
     });
     ivSeriesRef.current = ivSeries;
 
-    // PCR series — dedicated right scale (separate from IV%)
+    // PCR series — dedicated left scale (separate from IV%)
     const pcrSeries = chart.addSeries(LineSeries, {
       color: '#a78bfa',
       lineWidth: 1,
@@ -556,7 +476,7 @@ export default function IvChart({ instruments, nubraInstruments }: Props) {
     });
     pcrSeriesRef.current = pcrSeries;
 
-    // Spot series — left axis, candlestick
+    // Spot series — RIGHT axis, candlestick
     const spotSeries = chart.addSeries(CandlestickSeries, {
       upColor:   '#26a69a',
       downColor: '#ef5350',
@@ -565,7 +485,7 @@ export default function IvChart({ instruments, nubraInstruments }: Props) {
       wickUpColor:   '#26a69a',
       wickDownColor: '#ef5350',
       title: 'Spot',
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       priceFormat: { type: 'price', precision: 2, minMove: 0.05 },
     });
     spotSeriesRef.current = spotSeries;
@@ -1041,7 +961,7 @@ export default function IvChart({ instruments, nubraInstruments }: Props) {
       {/* ── Toolbar ── */}
       <div className={s.toolbar}>
         <div className={s.toolbarLeft}>
-          <SymbolSearchBarWithFeed instruments={instruments} onSelect={handleSymbolSelect} />
+          <SymbolSearchBarWithFeed instruments={instruments} onSelect={handleSymbolSelect} externalWorkerRef={workerRef} />
 
           {expiries.length > 0 && (
             <select
@@ -1120,15 +1040,21 @@ export default function IvChart({ instruments, nubraInstruments }: Props) {
 }
 
 // ── SymbolSearchBar with instrument feed ──────────────────────────────────────
-// Wrapper that feeds instruments into the worker after BUILD
+// When externalWorkerRef is provided (shared from HomeWorkspace), reuses it — no extra worker spawn.
 function SymbolSearchBarWithFeed({
   instruments,
   onSelect,
+  externalWorkerRef,
 }: {
   instruments: Instrument[];
   onSelect: (ins: Instrument) => void;
+  externalWorkerRef?: React.RefObject<Worker | null>;
 }) {
-  const workerRef = useRef<Worker | null>(null);
+  const ownWorkerRef = useRef<Worker | null>(null);
+  const workerRef = externalWorkerRef ?? ownWorkerRef;
+  // Unique ID for this instance — ensures shared-worker responses only apply to the sender
+  const instanceId = useRef(`ivc-${Math.random().toString(36).slice(2)}`);
+  const lastReqId  = useRef<string>('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Instrument[]>([]);
   const [open, setOpen] = useState(false);
@@ -1136,41 +1062,50 @@ function SymbolSearchBarWithFeed({
   const wrapRef = useRef<HTMLDivElement>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Only create an own worker when no external one is provided
   useEffect(() => {
+    if (externalWorkerRef) return;
     const w = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
-    workerRef.current = w;
-    w.onmessage = (e) => {
-      if (e.data.type === 'RESULTS') {
-        const res = e.data.results ?? [];
-        setResults(res);
-        setCursor(0);
-        if (res.length > 0) {
-          setOpen(true);
-        } else {
-          setOpen(false);
-        }
-      }
-    };
-    // Feed instruments immediately if already loaded
+    ownWorkerRef.current = w;
     if (instruments.length > 0) {
       w.postMessage({ type: 'BUILD', instruments });
     }
-    return () => { w.terminate(); workerRef.current = null; };
+    return () => { w.terminate(); ownWorkerRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Feed own worker when instruments load (external worker is already fed by HomeWorkspace)
   useEffect(() => {
-    if (workerRef.current && instruments.length > 0) {
-      workerRef.current.postMessage({ type: 'BUILD', instruments });
+    if (externalWorkerRef) return;
+    if (ownWorkerRef.current && instruments.length > 0) {
+      ownWorkerRef.current.postMessage({ type: 'BUILD', instruments });
     }
-  }, [instruments]);
+  }, [instruments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for RESULTS — only apply if reqId matches this instance's last request
+  useEffect(() => {
+    const w = workerRef.current;
+    if (!w) return;
+    const handler = (e: MessageEvent) => {
+      if (e.data.type === 'RESULTS' && e.data.reqId === lastReqId.current) {
+        const res = e.data.results ?? [];
+        setResults(res);
+        setCursor(0);
+        setOpen(res.length > 0);
+      }
+    };
+    w.addEventListener('message', handler);
+    return () => w.removeEventListener('message', handler);
+  }, [workerRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInput = (v: string) => {
     setQuery(v);
     if (!v.trim()) { setResults([]); setOpen(false); return; }
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => {
-      workerRef.current?.postMessage({ type: 'SEARCH', query: v });
+      const reqId = `${instanceId.current}-${Date.now()}`;
+      lastReqId.current = reqId;
+      workerRef.current?.postMessage({ type: 'SEARCH', query: v, reqId });
     }, 100);
   };
 
@@ -1192,7 +1127,7 @@ function SymbolSearchBarWithFeed({
           value={query}
           placeholder="Search symbol… (NIFTY, BANKNIFTY, RELIANCE)"
           onChange={e => handleInput(e.target.value)}
-          onFocus={() => { if (query.trim()) { workerRef.current?.postMessage({ type: 'SEARCH', query }); } }}
+          onFocus={() => { if (query.trim()) { const reqId = `${instanceId.current}-${Date.now()}`; lastReqId.current = reqId; workerRef.current?.postMessage({ type: 'SEARCH', query, reqId }); } }}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={e => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, results.length - 1)); }

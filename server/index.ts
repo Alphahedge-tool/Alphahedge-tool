@@ -695,6 +695,113 @@ app.post('/api/nubra-open-interest', async (req, reply) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OI Change endpoint
+// POST /api/nubra-oi-change
+// Body: { queryTemplate: <base query item without time>, fromTime: ISO, toTime: ISO }
+// Returns: same shape as nubra-open-interest but values are (toTime − fromTime) per strike
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/api/nubra-oi-change', async (req, reply) => {
+  const hdrs = req.headers;
+  const sessionToken = (hdrs['x-session-token'] as string) ?? '';
+  const deviceId     = (hdrs['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (hdrs['x-raw-cookie'] as string) ?? '';
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  const body = req.body as { queryTemplate: Record<string, unknown>; fromTime: string; toTime: string };
+  const { queryTemplate, fromTime, toTime } = body ?? {};
+
+  if (!queryTemplate || !fromTime || !toTime) {
+    return reply.status(400).send({ error: 'queryTemplate, fromTime, toTime are required' });
+  }
+
+  const nubraHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'Authorization': `Bearer ${sessionToken}`,
+    'Origin': 'https://nubra.io',
+    'Referer': 'https://nubra.io/',
+    'Cookie': rawCookie,
+    'x-device-id': deviceId,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-site',
+  };
+
+  const fetchOiAt = async (time: string) => {
+    const res = await fetch('https://api.nubra.io/charts/multistrike?chart=Open_Interest_Change', {
+      method: 'POST',
+      headers: nubraHeaders,
+      body: JSON.stringify({ query: [{ ...queryTemplate, time }] }),
+      dispatcher: nubraAgent,
+    } as any);
+    if (!res.ok) throw new Error(`upstream ${res.status} for time=${time}`);
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    // Fetch both timestamps in parallel
+    const [fromJson, toJson] = await Promise.all([fetchOiAt(fromTime), fetchOiAt(toTime)]);
+
+    // Both responses have shape: result[exchange][asset][time][expiry][strikeInPaise].cumulative_oi.{CE,PE}
+    const exchange = (queryTemplate.exchange as string) ?? '';
+    const asset    = (queryTemplate.asset as string) ?? '';
+
+    const fromAsset = fromJson?.result?.[exchange]?.[asset] ?? {};
+    const toAsset   = toJson?.result?.[exchange]?.[asset] ?? {};
+
+    // Extract expiry→strike maps from each snapshot
+    const getExpiryMap = (assetData: Record<string, any>): Record<string, Record<string, any>> => {
+      // There's one time key, get the inner expiry→strike map
+      const timeKey = Object.keys(assetData)[0];
+      return timeKey ? (assetData[timeKey] as Record<string, any>) : {};
+    };
+
+    const fromExpiries = getExpiryMap(fromAsset);
+    const toExpiries   = getExpiryMap(toAsset);
+
+    // Merge all expiry keys
+    const allExpiries = new Set([...Object.keys(fromExpiries), ...Object.keys(toExpiries)]);
+
+    const resultExpiries: Record<string, Record<string, any>> = {};
+
+    for (const expiry of allExpiries) {
+      const fromStrikes = fromExpiries[expiry] ?? {};
+      const toStrikes   = toExpiries[expiry] ?? {};
+      const allStrikes  = new Set([...Object.keys(fromStrikes), ...Object.keys(toStrikes)]);
+
+      const strikeResult: Record<string, any> = {};
+      for (const sp of allStrikes) {
+        const fromCe = fromStrikes[sp]?.cumulative_oi?.CE ?? 0;
+        const fromPe = fromStrikes[sp]?.cumulative_oi?.PE ?? 0;
+        const toCe   = toStrikes[sp]?.cumulative_oi?.CE ?? 0;
+        const toPe   = toStrikes[sp]?.cumulative_oi?.PE ?? 0;
+        strikeResult[sp] = {
+          cumulative_oi: {
+            CE: toCe - fromCe,
+            PE: toPe - fromPe,
+          },
+        };
+      }
+      resultExpiries[expiry] = strikeResult;
+    }
+
+    return reply.send({
+      result: {
+        [exchange]: {
+          [asset]: {
+            [toTime]: resultExpiries,
+          },
+        },
+      },
+    });
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nubra-refdata → https://api.nubra.io/refdata/:asset?derivativeType=OPT&exchange=NSE|BSE[&expiry=YYYYMMDD]
 // Without expiry: returns { exchange, expiries: [...], message: "expiries" }
 // With expiry:    returns { exchange, refdata: [...], message: "refdata" }

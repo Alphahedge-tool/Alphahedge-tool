@@ -353,10 +353,7 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         else patches.push({ strike, pe: pe as Partial<StrikeData> });
       }
 
-      // Push to Zustand — only subscribed rows re-render
-      patchStrikes(patches, spotVal, atmVal);
-
-      // Also keep rowsRef fresh for onLtpUpdateRef callbacks
+      // Keep rowsRef fresh and update React state so table re-renders
       let atmIdx = 0, minD = Infinity;
       existing.forEach((r, i) => { const d = Math.abs(r.strike - atmVal); if (d < minD) { minD = d; atmIdx = i; } });
       rowsRef.current = existing.map((r, i) => ({
@@ -365,7 +362,10 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         ...(ceMap.has(r.strike) ? { ce: ceMap.get(r.strike)! } : {}),
         ...(peMap.has(r.strike) ? { pe: peMap.get(r.strike)! } : {}),
       }));
-      // No setRows() on WS — Zustand handles per-row updates
+      setRows([...rowsRef.current]);
+
+      // Also push to Zustand for per-strike subscriptions
+      patchStrikes(patches, spotVal, atmVal);
     }
 
     const finalRows = rowsRef.current;
@@ -1334,10 +1334,14 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       const ltp = md.ltp ?? 0; const prev = md.cp ?? 0;
       const side: McxSide = { ltp, chgPct: prev > 0 ? ((ltp - prev) / prev) * 100 : 0, oi: md.oi ?? 0, delta: md.delta ?? 0, theta: md.theta ?? 0, gamma: md.gamma ?? 0, vega: md.vega ?? 0, iv: md.iv ?? 0 };
       mdRef.current.set(k, side);
-      // O(1) lookup instead of O(n) find()
       const info = keyIndex.get(k);
       if (info) {
         const { strike, isCe } = info;
+        // Update local rows state so the virtualized table re-renders
+        setRows(prev => prev.map(r => {
+          if (r.strike !== strike) return r;
+          return isCe ? { ...r, ce: side } : { ...r, pe: side };
+        }));
         mcxPatch([{ strike, ...(isCe ? { ce: { ltp: side.ltp, chgPct: side.chgPct, oi: side.oi, oiChgPct: 0, delta: side.delta, theta: side.theta, gamma: side.gamma, vega: side.vega, iv: side.iv } } : { pe: { ltp: side.ltp, chgPct: side.chgPct, oi: side.oi, oiChgPct: 0, delta: side.delta, theta: side.theta, gamma: side.gamma, vega: side.vega, iv: side.iv } }) }], spotRef.current, spotRef.current);
       }
     }));
@@ -1377,16 +1381,23 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       setSpot(snap.ltp);
       rebuildRows(snap.ltp); // initial seed only
     }
-    // On live spot ticks — only update ref + state, don't rebuild all rows
-    // patchStrikes with empty patches propagates new ATM to Zustand
+    // On live spot ticks — update ref + ATM flag in rows, no full rebuild
     return wsManager.subscribe(spotKey, md => {
       if (!md.ltp) return;
       const prev = spotRef.current;
       spotRef.current = md.ltp;
       if (ocSpotRef) ocSpotRef.current = md.ltp;
       setSpot(md.ltp);
-      // Only push ATM recalc to Zustand, no full rebuild
       if (prev !== md.ltp) {
+        // Recompute ATM and update isAtm flags in local rows
+        setRows(prevRows => {
+          if (!prevRows.length) return prevRows;
+          const newAtm = prevRows.reduce((best, r) =>
+            Math.abs(r.strike - md.ltp) < Math.abs(best - md.ltp) ? r.strike : best,
+            prevRows[0].strike
+          );
+          return prevRows.map(r => r.isAtm === (r.strike === newAtm) ? r : { ...r, isAtm: r.strike === newAtm });
+        });
         mcxPatch([], md.ltp, md.ltp);
       }
     });

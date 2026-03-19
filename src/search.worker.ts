@@ -122,6 +122,6 @@ self.onmessage = (e: MessageEvent) => {
   if (type === 'SEARCH') {
     const query = e.data.query ?? e.data.payload;
     const results = search(query as string);
-    self.postMessage({ type: 'RESULTS', results });
+    self.postMessage({ type: 'RESULTS', results, reqId: e.data.reqId });
   }
 };
