@@ -1086,18 +1086,30 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(400);
+  const [containerW, setContainerW] = useState(0);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
-      const h = entries[0]?.contentRect.height ?? 400;
-      setListHeight(h);
+      const r = entries[0]?.contentRect;
+      if (r) { setListHeight(r.height); setContainerW(r.width); }
     });
     ro.observe(el);
     setListHeight(el.clientHeight || 400);
+    setContainerW(el.clientWidth || 0);
     return () => ro.disconnect();
   }, []);
+
+  // Stretch table to fill the panel; only scroll horizontally when cols exceed container
+  const effectiveWidth = containerW > 0 ? Math.max(containerW, totalWidth) : totalWidth;
+
+  const colIds: string[] = table.getHeaderGroups()[0]?.headers.map((h: any) => h.column.id) ?? [];
+  const needsHScroll = totalWidth > containerW && containerW > 0;
+  const extraPerCol = !needsHScroll && colIds.length > 0
+    ? Math.max(0, (containerW - totalWidth) / colIds.length)
+    : 0;
+  const colW = (id: string) => (MW[id] ?? 72) + extraPerCol;
 
   const renderRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const row = tableRows[index];
@@ -1110,11 +1122,11 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
     return (
       <div style={{ ...style, display: 'flex', flexDirection: 'column' }}>
         {showAtmLine && (
-          <div style={{ height: 2, background: 'rgba(224,168,0,0.5)', width: totalWidth, marginBottom: 1 }} />
+          <div style={{ height: 2, background: 'rgba(224,168,0,0.5)', width: effectiveWidth, marginBottom: 1 }} />
         )}
         <div
           className={`oc-row ${data.isAtm ? 'oc-row-atm' : index % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'}`}
-          style={{ display: 'flex', alignItems: 'center', height: MCX_ROW_HEIGHT, width: totalWidth, boxSizing: 'border-box' }}
+          style={{ display: 'flex', alignItems: 'center', height: MCX_ROW_HEIGHT, width: effectiveWidth, boxSizing: 'border-box' }}
           onMouseMove={e => {
             if (popup) return;
             const tr = e.currentTarget;
@@ -1142,8 +1154,9 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
             const isCe = MCX_CE_COLS.includes(id);
             const cellBg = isCe && isCeItm ? 'rgba(0,168,132,0.18)' : !isCe && !isStrike && isPeItm ? 'rgba(210,130,0,0.28)' : undefined;
             const isOi = id === 'mce_oi' || id === 'mpe_oi';
+            const cw = (MW[id] ?? 72) + extraPerCol;
             return (
-              <div key={cell.id} data-col={id} style={{ width: MW[id], minWidth: MW[id], flexShrink: 0, padding: isOi ? 0 : '0 10px', fontSize: 13, fontWeight: isStrike ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}) }}>
+              <div key={cell.id} data-col={id} style={{ width: cw, minWidth: cw, flexShrink: 0, padding: isOi ? 0 : '0 10px', fontSize: 13, fontWeight: isStrike ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}) }}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </div>
             );
@@ -1151,29 +1164,22 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
         </div>
       </div>
     );
-  }, [tableRows, spot, totalWidth, popup, showOverlay, hideOverlay]);
+  }, [tableRows, spot, effectiveWidth, extraPerCol, popup, showOverlay, hideOverlay]);
 
   const headerScrollRef = useRef<HTMLDivElement>(null);
 
-  // Sync header scroll with body scroll
-  const onBodyScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (headerScrollRef.current) {
-      headerScrollRef.current.scrollLeft = (e.currentTarget as HTMLDivElement).scrollLeft;
-    }
-  }, []);
 
-  const colIds: string[] = table.getHeaderGroups()[0]?.headers.map((h: any) => h.column.id) ?? [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Sticky header — div-based to match virtual row layout exactly */}
+      {/* Sticky header */}
       <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: '#1c1a17' }}>
-        <div style={{ width: totalWidth }}>
+        <div style={{ width: effectiveWidth }}>
           {/* Super header: Call / Strike / Put */}
           <div style={{ display: 'flex', height: 28 }}>
-            <div style={{ display: 'flex', flex: `0 0 ${visibleCeCols.reduce((s, id) => s + (MW[id] ?? 72), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#e0a800', letterSpacing: '0.06em', background: 'rgba(224,168,0,0.04)', borderBottom: '1px solid rgba(224,168,0,0.15)' }}>Call</div>
-            <div style={{ flex: `0 0 ${MW['mstrike']}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#9CA3AF', background: '#333333', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Strike</div>
-            <div style={{ display: 'flex', flex: `0 0 ${visiblePeCols.reduce((s, id) => s + (MW[id] ?? 72), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#818cf8', letterSpacing: '0.06em', background: 'rgba(129,140,248,0.04)', borderBottom: '1px solid rgba(129,140,248,0.15)' }}>Put</div>
+            <div style={{ display: 'flex', flex: `0 0 ${visibleCeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#e0a800', letterSpacing: '0.06em', background: 'rgba(224,168,0,0.04)', borderBottom: '1px solid rgba(224,168,0,0.15)' }}>Call</div>
+            <div style={{ flex: `0 0 ${colW('mstrike')}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#9CA3AF', background: '#333333', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Strike</div>
+            <div style={{ display: 'flex', flex: `0 0 ${visiblePeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#818cf8', letterSpacing: '0.06em', background: 'rgba(129,140,248,0.04)', borderBottom: '1px solid rgba(129,140,248,0.15)' }}>Put</div>
           </div>
           {/* Sub header: column labels */}
           <div style={{ display: 'flex', height: 30, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1182,7 +1188,7 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
               const isCe = MCX_CE_COLS.includes(id);
               const h = table.getHeaderGroups()[0]?.headers.find((hh: any) => hh.column.id === id);
               return (
-                <div key={id} style={{ width: MW[id], minWidth: MW[id], flexShrink: 0, padding: '0 10px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase' as const, textAlign: isStrike ? 'center' : isCe ? 'right' : 'left', background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box' }}>
+                <div key={id} style={{ width: colW(id), minWidth: colW(id), flexShrink: 0, padding: '0 10px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase' as const, background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box' }}>
                   {h ? flexRender(h.column.columnDef.header, h.getContext()) : null}
                 </div>
               );
@@ -1190,16 +1196,19 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
           </div>
         </div>
       </div>
-      {/* Virtualized body */}
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }} onScroll={onBodyScroll}>
+      {/* Virtualized body — FixedSizeList owns all scrolling, wrapper never scrolls */}
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <FixedSizeList
           ref={listRef as React.RefObject<FixedSizeList<any>>}
           height={listHeight}
           itemCount={tableRows.length}
           itemSize={MCX_ROW_HEIGHT}
-          width={totalWidth}
+          width={containerW || effectiveWidth}
           overscanCount={10}
-          style={{ overflowX: 'visible', overflowY: 'auto' }}
+          style={{ overflowX: needsHScroll ? 'auto' : 'hidden', overflowY: 'auto' }}
+          onScroll={({ scrollOffset: _so, scrollUpdateWasRequested: _r, ...rest }) => {
+            if (headerScrollRef.current) headerScrollRef.current.scrollLeft = (rest as any).scrollLeft ?? 0;
+          }}
         >
           {renderRow}
         </FixedSizeList>
@@ -1449,7 +1458,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   }, [instruments, underlying, lotSize]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [colVis, setColVis] = useState<Record<string, boolean>>({ ltp: true, chg: true, oi: true, delta: true, theta: true, gamma: false, vega: false, iv: true });
+  const [colVis, setColVis] = useState<Record<string, boolean>>({ ltp: true, chg: true, oi: false, delta: false, theta: false, gamma: false, vega: false, iv: false });
   const [colOrder, setColOrder] = useState(['ltp', 'chg', 'oi', 'delta', 'theta', 'gamma', 'vega', 'iv']);
   const dragIdx = useRef<number | null>(null);
   const dragKey = useRef<string | null>(null);
@@ -1576,7 +1585,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       </div>
 
       {/* Table */}
-      <div className={`oc-scroll ${s.tableScroll}`} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className={`oc-scroll ${s.tableScrollMcx}`}>
         {rows.length === 0 ? (
           chainLoading ? (
             <div className={s.skeletonWrap}>

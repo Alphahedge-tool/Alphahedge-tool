@@ -802,6 +802,54 @@ app.post('/api/nubra-oi-change', async (req, reply) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/nubra-iv → https://api.nubra.io/charts/multistrike?chart=Implied_Volatility
+// Body: { query: [{ exchange, asset, expiries, strikes, minStrike, maxStrike, fields, time }] }
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/api/nubra-iv', async (req, reply) => {
+  const hdrs         = req.headers;
+  const sessionToken = (hdrs['x-session-token'] as string) ?? '';
+  const deviceId     = (hdrs['x-device-id']     as string) ?? 'web';
+  const rawCookieHdr = (hdrs['x-raw-cookie']    as string) ?? '';
+
+  const body = req.body as { query: unknown[] };
+  if (!Array.isArray(body?.query)) {
+    return reply.status(400).send({ error: 'query[] is required' });
+  }
+
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  try {
+    const upstream = await fetch('https://api.nubra.io/charts/multistrike?chart=Implied_Volatility', {
+      method: 'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Accept':         'application/json, text/plain, */*',
+        'Authorization':  `Bearer ${sessionToken}`,
+        'Origin':         'https://nubra.io',
+        'Referer':        'https://nubra.io/',
+        'Cookie':         rawCookie,
+        'x-device-id':   deviceId,
+        'User-Agent':     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+      },
+      body: JSON.stringify({ query: body.query }),
+      dispatcher: nubraAgent,
+    } as any);
+
+    const contentType = upstream.headers.get('content-type') ?? 'application/json';
+    const data = await upstream.text();
+    reply.status(upstream.status);
+    reply.header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nubra-refdata → https://api.nubra.io/refdata/:asset?derivativeType=OPT&exchange=NSE|BSE[&expiry=YYYYMMDD]
 // Without expiry: returns { exchange, expiries: [...], message: "expiries" }
 // With expiry:    returns { exchange, refdata: [...], message: "refdata" }

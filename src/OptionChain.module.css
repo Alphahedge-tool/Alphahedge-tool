@@ -232,6 +232,13 @@
   scrollbar-width: thin;
   scrollbar-color: #2a2a2a transparent;
 }
+/* MCX uses its own virtualized scroll — container must not scroll */
+.tableScrollMcx {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .tableEmpty {
   padding: 60px;
   text-align: center;

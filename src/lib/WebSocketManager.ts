@@ -180,7 +180,7 @@ class WebSocketManager {
   private wildcardListeners: Set<(key: string, data: InstrumentMarketData) => void> = new Set();
   private connectionListeners: Set<ConnectionListener> = new Set();
 
-  private requestedKeys: Set<string> = new Set();
+  private requestedKeys: Map<string, number> = new Map(); // key → ref count
   private subscribedKeys: Set<string> = new Set();
 
   // Batch listener dispatch — accumulate per-tick, flush via setTimeout(0)
@@ -206,15 +206,21 @@ class WebSocketManager {
   }
 
   requestKeys(keys: string[]): () => void {
-    for (const k of keys) this.requestedKeys.add(k);
+    for (const k of keys) this.requestedKeys.set(k, (this.requestedKeys.get(k) ?? 0) + 1);
     this._syncSubscription();
     return () => {};
   }
 
   releaseKeys(keys: string[]): void {
     for (const k of keys) {
-      this.requestedKeys.delete(k);
-      this.subscribedKeys.delete(k);
+      const count = (this.requestedKeys.get(k) ?? 0) - 1;
+      if (count <= 0) {
+        // Last reference released — actually remove from subscription
+        this.requestedKeys.delete(k);
+        this.subscribedKeys.delete(k);
+      } else {
+        this.requestedKeys.set(k, count);
+      }
     }
   }
 
@@ -320,8 +326,8 @@ class WebSocketManager {
         if (this.destroyed) return;
         this.retryCount = 0;
         this._notifyConnection(true);
-        this._sendSubscribe([...this.requestedKeys]);
-        this.requestedKeys.forEach(k => this.subscribedKeys.add(k));
+        this._sendSubscribe([...this.requestedKeys.keys()]);
+        this.requestedKeys.forEach((_, k) => this.subscribedKeys.add(k));
       };
 
       ws.onclose = (event) => {
@@ -364,7 +370,7 @@ class WebSocketManager {
 
   private _syncSubscription(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    const toAdd = [...this.requestedKeys].filter(k => !this.subscribedKeys.has(k));
+    const toAdd = [...this.requestedKeys.keys()].filter(k => !this.subscribedKeys.has(k));
     if (toAdd.length === 0) return;
     this._sendSubscribe(toAdd);
     toAdd.forEach(k => this.subscribedKeys.add(k));

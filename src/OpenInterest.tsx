@@ -11,7 +11,48 @@ interface Props {
 }
 
 type OptionType = 'CE' | 'PE' | 'BOTH';
-type TimeRange  = 'snapshot' | '30m' | '1h' | '3h' | 'custom';
+type TimeRange  = '10m' | '15m' | '30m' | '1h' | '2h' | '4h' | 'sod' | 'custom';
+
+// Market session: 9:15 → 15:30 IST = 375 minutes total
+const MARKET_START_MIN = 9 * 60 + 15;   // 555
+const MARKET_END_MIN   = 15 * 60 + 30;  // 930
+const MARKET_DURATION  = MARKET_END_MIN - MARKET_START_MIN; // 375
+
+function minToLabel(m: number): string {
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${hh}:${String(mm).padStart(2, '0')} ${ampm}`;
+}
+
+// Returns [fromMin, toMin] for a preset (minutes since midnight IST)
+// Uses MARKET_END_MIN if market is not currently open (before open or weekend)
+function presetToRange(preset: TimeRange): [number, number] {
+  const istMs  = Date.now() + 5.5 * 3600 * 1000;
+  const istNow = new Date(istMs);
+  const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+  const dow    = istNow.getUTCDay();
+  const marketOpen = dow >= 1 && dow <= 5 && istMin >= MARKET_START_MIN && istMin <= MARKET_END_MIN;
+  // If market is open, use current time; otherwise use last close (15:30)
+  const nowMin = marketOpen ? istMin : MARKET_END_MIN;
+  if (preset === 'sod') return [MARKET_START_MIN, nowMin];
+  const mins = preset === '10m' ? 10 : preset === '15m' ? 15 : preset === '30m' ? 30
+             : preset === '1h' ? 60 : preset === '2h' ? 120 : preset === '4h' ? 240 : 0;
+  const to   = nowMin;
+  const from = Math.max(to - mins, MARKET_START_MIN);
+  return [from, to];
+}
+
+const RANGE_OPTIONS: { label: string; value: TimeRange }[] = [
+  { label: 'Last 10 min',  value: '10m' },
+  { label: 'Last 15 min',  value: '15m' },
+  { label: 'Last 30 min',  value: '30m' },
+  { label: 'Last 1 hr',    value: '1h'  },
+  { label: 'Last 2 hr',    value: '2h'  },
+  { label: 'Last 4 hr',    value: '4h'  },
+  { label: 'Start of day', value: 'sod' },
+];
 
 interface RefDataItem {
   StrikePrice: number;     // in paise (divide by 100)
@@ -108,6 +149,17 @@ async function getECharts() {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function OpenInterest({ nubraInstruments }: Props) {
+  // Close range dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (rangeDDRef.current && !rangeDDRef.current.contains(e.target as Node)) {
+        setShowRangeDrop(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Search state
   const [query,        setQuery]        = useState('');
   const [showDrop,     setShowDrop]     = useState(false);
@@ -124,10 +176,16 @@ export default function OpenInterest({ nubraInstruments }: Props) {
   const [expiry,      setExpiry]      = useState('');
 
   // View
-  const [optType,     setOptType]     = useState<OptionType>('BOTH');
-  const [timeRange,   setTimeRange]   = useState<TimeRange>('snapshot');
-  // Custom time: IST HH:MM that the user picks as the "from" time
-  const [customTime,  setCustomTime]  = useState('09:15');
+  const [optType,       setOptType]      = useState<OptionType>('BOTH');
+  const [showOIChange,  setShowOIChange] = useState(false);  // false = plain OI, true = OI change
+  const [timeRange,     setTimeRange]    = useState<TimeRange>('sod');
+  const [showRangeDrop, setShowRangeDrop] = useState(false);
+  const rangeDDRef = useRef<HTMLDivElement>(null);
+  // Slider state: minutes since midnight IST (9:15=555 … 15:30=930)
+  const [sliderFrom, setSliderFrom] = useState(MARKET_START_MIN);
+  const [sliderTo,   setSliderTo]   = useState(MARKET_END_MIN);
+  const sliderTrackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<'from' | 'to' | null>(null);
 
   // Chart data
   const [bars,      setBars]      = useState<OIBar[]>([]);
@@ -136,37 +194,60 @@ export default function OpenInterest({ nubraInstruments }: Props) {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
 
-  const chartRef   = useRef<HTMLDivElement>(null);
-  const wrapRef    = useRef<HTMLDivElement>(null);
-  const chartInst  = useRef<any>(null);
-  const inputRef   = useRef<HTMLInputElement>(null);
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const fetchOIRef = useRef<((sym: string, exch: string, exp: string, nType: 'INDEX' | 'STOCK') => void) | null>(null);
-  const pollSymRef    = useRef('');
-  const pollExchRef   = useRef('');
-  const pollExpRef    = useRef('');
-  const pollNTypeRef  = useRef<'INDEX' | 'STOCK'>('INDEX');
+  const chartRef  = useRef<HTMLDivElement>(null);
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const chartInst = useRef<any>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
 
-  const stopPoller = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
+  // ── Slider drag handlers ────────────────────────────────────────────────────
+  // sliderFrom/sliderTo = visual position (updates every mousemove)
+  // committedFrom/committedTo = triggers API (updates only on mouseup)
+  const [committedFrom, setCommittedFrom] = useState(MARKET_START_MIN);
+  const [committedTo,   setCommittedTo]   = useState(MARKET_END_MIN);
 
-  const startPoller = useCallback((sym: string, exch: string, exp: string, nType: 'INDEX' | 'STOCK') => {
-    stopPoller();
-    pollSymRef.current   = sym;
-    pollExchRef.current  = exch;
-    pollExpRef.current   = exp;
-    pollNTypeRef.current = nType;
+  const sliderMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragging.current || !sliderTrackRef.current) return;
+    const rect = sliderTrackRef.current.getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const min  = Math.round(MARKET_START_MIN + pct * MARKET_DURATION);
+    setTimeRange('custom');
+    if (dragging.current === 'from') {
+      setSliderFrom(Math.min(min, sliderTo - 5));
+    } else {
+      setSliderTo(Math.max(min, sliderFrom + 5));
+    }
+  }, [sliderFrom, sliderTo]);
 
-    const tick = () => {
-      const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
-      const istMins = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
-      if (istMins >= 15 * 60 + 30) { stopPoller(); return; }
-      fetchOIRef.current?.(pollSymRef.current, pollExchRef.current, pollExpRef.current, pollNTypeRef.current);
+  const sliderMouseUp = useCallback(() => {
+    if (dragging.current) {
+      // Commit the final position → triggers API call
+      setCommittedFrom(sliderFrom);
+      setCommittedTo(sliderTo);
+    }
+    dragging.current = null;
+  }, [sliderFrom, sliderTo]);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', sliderMouseMove);
+    window.addEventListener('mouseup',  sliderMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', sliderMouseMove);
+      window.removeEventListener('mouseup',  sliderMouseUp);
     };
+  }, [sliderMouseMove, sliderMouseUp]);
 
-    pollRef.current = setInterval(tick, 60_000);
-  }, [stopPoller]);
+  // ── Preset select ───────────────────────────────────────────────────────────
+  const applyPreset = useCallback((preset: TimeRange) => {
+    setTimeRange(preset);
+    setShowRangeDrop(false);
+    if (preset !== 'custom') {
+      const [f, t] = presetToRange(preset);
+      setSliderFrom(f);
+      setSliderTo(t);
+      setCommittedFrom(f);
+      setCommittedTo(t);
+    }
+  }, []);
 
   // showDrop tracks whether dropdown should be visible
   useEffect(() => {
@@ -194,138 +275,32 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     } catch { /* ignore */ }
   }, []);
 
-  // ── Fetch OI data for a specific expiry ────────────────────────────────────
-
-  const fetchOI = useCallback(async (
-    sym: string,
-    exch: string,
-    exp: string,
-    _nType: 'INDEX' | 'STOCK',
-  ) => {
-    if (!sym || !exp) return;
-    setLoading(true);
-    setError('');
-
-    const headers = nubraHeaders();
-    if (!headers['x-session-token']) {
-      setError('NOT LOGGED IN');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // 1. Fetch refdata to get all strikes for this expiry
-      const refRes = await fetch(
-        `/api/nubra-refdata?asset=${encodeURIComponent(sym)}&exchange=${exch}&expiry=${exp}`,
-        { headers }
-      );
-      if (!refRes.ok) throw new Error(`refdata ${refRes.status}`);
-      const refJson = await refRes.json();
-      const refdata: RefDataItem[] = refJson?.refdata ?? [];
-
-      if (!refdata.length) {
-        setBars([]);
-        setLoading(false);
-        return;
-      }
-
-      // Collect all unique strike values (in paise, as returned by Nubra)
-      const allStrikes = [...new Set(refdata.map(r => r.StrikePrice))].sort((a, b) => a - b);
-      const minStrike = allStrikes[0];
-      const maxStrike = allStrikes[allStrikes.length - 1];
-
-      // Build time: today at 10:00:00 UTC (= 15:30 IST, market close)
-      const todayUtc = new Date();
-      const time = `${todayUtc.toISOString().slice(0, 10)}T10:00:00.000Z`;
-
-      // 2. Fetch OI using correct multistrike payload
-      const oiRes = await fetch('/api/nubra-open-interest', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: [
-            {
-              exchange:  exch,
-              asset:     sym,
-              expiries:  [exp],
-              strikes:   allStrikes,
-              minStrike,
-              maxStrike,
-              fields:    ['cumulative_oi'],
-              time,
-            },
-          ],
-        }),
-      });
-
-      if (!oiRes.ok) throw new Error(`oi ${oiRes.status}`);
-      const oiJson = await oiRes.json();
-
-      // Response: result[exchange][asset][time][expiry][strikeInPaise][cumulative_oi][CE|PE]
-      // e.g. result.NSE.NIFTY["2026-03-18T10:00:00.000Z"]["20260330"]["2125000"].cumulative_oi.PE
-      const assetData = oiJson?.result?.[exch]?.[sym];
-      // find the first time key
-      const timeKey   = assetData ? Object.keys(assetData)[0] : null;
-      const expiryMap = timeKey ? assetData[timeKey]?.[exp] : null;
-
-      // Build bar map keyed by strike (in paise)
-      const barMap = new Map<number, OIBar>();
-      for (const sp of allStrikes) {
-        barMap.set(sp, { strike: sp / 100, ce: 0, pe: 0 });
-      }
-
-      if (expiryMap) {
-        for (const [spStr, val] of Object.entries(expiryMap as Record<string, any>)) {
-          const sp  = parseInt(spStr, 10);
-          const bar = barMap.get(sp);
-          if (!bar) continue;
-          const oiObj = val?.cumulative_oi ?? {};
-          if (oiObj.CE != null) bar.ce = oiObj.CE;
-          if (oiObj.PE != null) bar.pe = oiObj.PE;
-        }
-      }
-
-      const sorted = [...barMap.values()].sort((a, b) => a.strike - b.strike);
-      setBars(sorted);
-      setTotalCe(sorted.reduce((s, b) => s + b.ce, 0));
-      setTotalPe(sorted.reduce((s, b) => s + b.pe, 0));
-    } catch (e: any) {
-      setError(e.message ?? 'ERROR');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  fetchOIRef.current = fetchOI;
-
   // ── OI Change fetch ─────────────────────────────────────────────────────────
-  // Converts an IST HH:MM string to UTC ISO for today's market session
-  function istHHMMtoUtcIso(hhMm: string): string {
-    const [hh, mm] = hhMm.split(':').map(Number);
-    const todayDate = new Date().toISOString().slice(0, 10);
-    // IST = UTC+5:30, so subtract 5h30m = 330 min
-    const totalMinUtc = hh * 60 + mm - 330;
-    const utcH = Math.floor(((totalMinUtc % 1440) + 1440) % 1440 / 60);
-    const utcM = ((totalMinUtc % 1440) + 1440) % 1440 % 60;
-    return `${todayDate}T${String(utcH).padStart(2, '0')}:${String(utcM).padStart(2, '0')}:00.000Z`;
+
+  // Returns the last trading day date string YYYY-MM-DD (IST perspective)
+  // If market is open today, returns today. If before 9:15 or weekend, returns prev trading day.
+  function lastTradingDate(): string {
+    const istMs  = Date.now() + 5.5 * 3600 * 1000;
+    const d      = new Date(istMs);
+    const istMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+    // If today is weekday but before market open, treat as previous day
+    if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && istMin < MARKET_START_MIN) {
+      d.setUTCDate(d.getUTCDate() - 1);
+    }
+    // Walk back over weekends
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+      d.setUTCDate(d.getUTCDate() - 1);
+    }
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   }
 
-  // Market session range for today (IST 9:15 → 15:30 = UTC 3:45 → 10:00)
-  function marketEndUtc(): string { return istHHMMtoUtcIso('15:30'); }
-
-  // Returns [fromTimeUtc, toTimeUtc] for a given range
-  function rangeToTimes(range: TimeRange, customFrom: string): [string, string] {
-    const toTime = marketEndUtc();
-    if (range === 'snapshot') return [toTime, toTime];
-    if (range === 'custom') return [istHHMMtoUtcIso(customFrom), toTime];
-    const mins = range === '30m' ? 30 : range === '1h' ? 60 : 180;
-    // "to" = current time (or market end if after hours), "from" = to − mins
-    const nowUtcMs = Date.now();
-    const marketEndMs = new Date(marketEndUtc()).getTime();
-    const effectiveToMs = Math.min(nowUtcMs, marketEndMs);
-    const effectiveFromMs = effectiveToMs - mins * 60 * 1000;
-    const toIso  = new Date(effectiveToMs).toISOString().replace(/\.\d{3}Z$/, '.000Z');
-    const fromIso = new Date(effectiveFromMs).toISOString().replace(/\.\d{3}Z$/, '.000Z');
-    return [fromIso, toIso];
+  // Convert IST minutes-since-midnight to UTC ISO string on the last trading date
+  function istMinToUtcIso(istMin: number): string {
+    const date   = lastTradingDate();
+    const utcMin = istMin - 330; // IST = UTC+5:30
+    const h = Math.floor(((utcMin % 1440) + 1440) % 1440 / 60);
+    const m = ((utcMin % 1440) + 1440) % 1440 % 60;
+    return `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`;
   }
 
   const fetchOIChange = useCallback(async (
@@ -333,15 +308,10 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     exch: string,
     exp: string,
     _nType: 'INDEX' | 'STOCK',
-    range: TimeRange,
-    customFrom: string,
+    fromMin: number,
+    toMin: number,
   ) => {
     if (!sym || !exp) return;
-    if (range === 'snapshot') {
-      // Snapshot = plain OI, delegate to existing fetchOI
-      fetchOIRef.current?.(sym, exch, exp, _nType);
-      return;
-    }
     setLoading(true);
     setError('');
 
@@ -353,7 +323,6 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     }
 
     try {
-      // 1. Get strikes from refdata
       const refRes = await fetch(
         `/api/nubra-refdata?asset=${encodeURIComponent(sym)}&exchange=${exch}&expiry=${exp}`,
         { headers }
@@ -367,10 +336,9 @@ export default function OpenInterest({ nubraInstruments }: Props) {
       const minStrike  = allStrikes[0];
       const maxStrike  = allStrikes[allStrikes.length - 1];
 
-      // 2. Compute time range
-      const [fromTime, toTime] = rangeToTimes(range, customFrom);
+      const fromTime = istMinToUtcIso(fromMin);
+      const toTime   = istMinToUtcIso(toMin);
 
-      // 3. Call the OI change endpoint
       const oiRes = await fetch('/api/nubra-oi-change', {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -420,6 +388,78 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Plain OI fetch (snapshot at current time) ────────────────────────────────
+  const fetchOI = useCallback(async (sym: string, exch: string, exp: string) => {
+    if (!sym || !exp) return;
+    setLoading(true); setError('');
+    const headers = nubraHeaders();
+    if (!headers['x-session-token']) { setError('NOT LOGGED IN'); setLoading(false); return; }
+    try {
+      const refRes = await fetch(`/api/nubra-refdata?asset=${encodeURIComponent(sym)}&exchange=${exch}&expiry=${exp}`, { headers });
+      if (!refRes.ok) throw new Error(`refdata ${refRes.status}`);
+      const refdata: RefDataItem[] = (await refRes.json())?.refdata ?? [];
+      if (!refdata.length) { setBars([]); setLoading(false); return; }
+      const allStrikes = [...new Set(refdata.map(r => r.StrikePrice))].sort((a, b) => a - b);
+      const minStrike = allStrikes[0], maxStrike = allStrikes[allStrikes.length - 1];
+      // Compute best available market time:
+      // - If IST now is within market hours → use current IST time
+      // - If before 9:15 today or weekend → use last trading day 15:30
+      const istMs  = Date.now() + 5.5 * 3600 * 1000;
+      const istNow = new Date(istMs);
+      const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+      const dayOfWeek = istNow.getUTCDay(); // 0=Sun,6=Sat
+
+      let time: string;
+      if (istMin >= MARKET_START_MIN && istMin <= MARKET_END_MIN && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Market is open right now — use current IST time
+        time = istMinToUtcIso(istMin);
+      } else {
+        // Before market open, after close, or weekend — walk back to last trading day 15:30
+        const d = new Date(istMs);
+        // If before 9:15 today (weekday), go to previous day
+        if (dayOfWeek >= 1 && dayOfWeek <= 5 && istMin < MARKET_START_MIN) {
+          d.setUTCDate(d.getUTCDate() - 1);
+        }
+        // Skip weekends
+        let dow = d.getUTCDay();
+        while (dow === 0 || dow === 6) {
+          d.setUTCDate(d.getUTCDate() - 1);
+          dow = d.getUTCDay();
+        }
+        const yyyy = d.getUTCFullYear();
+        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd   = String(d.getUTCDate()).padStart(2, '0');
+        // 15:30 IST = 10:00 UTC
+        time = `${yyyy}-${mm}-${dd}T10:00:00.000Z`;
+      }
+      const oiRes = await fetch('/api/nubra-open-interest', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: [{ exchange: exch, asset: sym, expiries: [exp], strikes: allStrikes, minStrike, maxStrike, fields: ['cumulative_oi'], time }] }),
+      });
+      if (!oiRes.ok) throw new Error(`oi ${oiRes.status}`);
+      const oiJson = await oiRes.json();
+      const assetData = oiJson?.result?.[exch]?.[sym];
+      const timeKey   = assetData ? Object.keys(assetData)[0] : null;
+      const expiryMap = timeKey ? assetData[timeKey]?.[exp] : null;
+      const barMap = new Map<number, OIBar>();
+      for (const sp of allStrikes) barMap.set(sp, { strike: sp / 100, ce: 0, pe: 0 });
+      if (expiryMap) {
+        for (const [spStr, val] of Object.entries(expiryMap as Record<string, any>)) {
+          const sp = parseInt(spStr, 10); const bar = barMap.get(sp); if (!bar) continue;
+          const o = val?.cumulative_oi ?? {};
+          if (o.CE != null) bar.ce = o.CE;
+          if (o.PE != null) bar.pe = o.PE;
+        }
+      }
+      const sorted = [...barMap.values()].sort((a, b) => a.strike - b.strike);
+      setBars(sorted);
+      setTotalCe(sorted.reduce((s, b) => s + b.ce, 0));
+      setTotalPe(sorted.reduce((s, b) => s + b.pe, 0));
+    } catch (e: any) { setError(e.message ?? 'ERROR'); }
+    finally { setLoading(false); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Symbol select ───────────────────────────────────────────────────────────
 
   const handleSymbolSelect = useCallback((sym: string, _exch: string) => {
@@ -439,19 +479,32 @@ export default function OpenInterest({ nubraInstruments }: Props) {
 
   useEffect(() => {
     if (!symbol || !expiry) return;
-    if (timeRange === 'snapshot') {
-      fetchOI(symbol, exchange, expiry, nubraType);
-      const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
-      const istMins = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
-      if (istMins >= 9 * 60 + 15 && istMins < 15 * 60 + 30) {
-        startPoller(symbol, exchange, expiry, nubraType);
-      }
-      return () => stopPoller();
+    if (showOIChange) {
+      fetchOIChange(symbol, exchange, expiry, nubraType, committedFrom, committedTo);
     } else {
-      stopPoller();
-      fetchOIChange(symbol, exchange, expiry, nubraType, timeRange, customTime);
+      fetchOI(symbol, exchange, expiry);
     }
-  }, [symbol, expiry, exchange, nubraType, timeRange, customTime, fetchOI, fetchOIChange, startPoller, stopPoller]);
+  }, [symbol, expiry, exchange, nubraType, showOIChange, committedFrom, committedTo, fetchOI, fetchOIChange]);
+
+  // ── 1-minute auto-refresh (market hours only) ───────────────────────────────
+
+  useEffect(() => {
+    if (!symbol || !expiry) return;
+    const id = setInterval(() => {
+      const istMs  = Date.now() + 5.5 * 3600 * 1000;
+      const istNow = new Date(istMs);
+      const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+      const dow    = istNow.getUTCDay();
+      const isMarket = dow >= 1 && dow <= 5 && istMin >= MARKET_START_MIN && istMin <= MARKET_END_MIN;
+      if (!isMarket) return;
+      if (showOIChange) {
+        fetchOIChange(symbol, exchange, expiry, nubraType, committedFrom, committedTo);
+      } else {
+        fetchOI(symbol, exchange, expiry);
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [symbol, expiry, exchange, nubraType, showOIChange, committedFrom, committedTo, fetchOI, fetchOIChange]);
 
   // ── ECharts rendering ───────────────────────────────────────────────────────
 
@@ -471,7 +524,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         return;
       }
 
-      const isChange = timeRange !== 'snapshot';
+      const isChange = showOIChange;
       const filtered = bars.filter(b => {
         if (optType === 'CE') return isChange ? b.ce !== 0 : b.ce > 0;
         if (optType === 'PE') return isChange ? b.pe !== 0 : b.pe > 0;
@@ -487,8 +540,8 @@ export default function OpenInterest({ nubraInstruments }: Props) {
 
       const barW = optType === 'BOTH' ? 14 : 18;
 
-      const callLabel = isChange ? 'Call OI Chg' : 'Call OI';
-      const putLabel  = isChange ? 'Put OI Chg'  : 'Put OI';
+      const callLabel = showOIChange ? 'Call OI Chg' : 'Call OI';
+      const putLabel  = showOIChange ? 'Put OI Chg'  : 'Put OI';
 
       const series: any[] = [];
       if (optType === 'CE' || optType === 'BOTH') {
@@ -637,7 +690,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         series,
       }, true);
     });
-  }, [bars, optType, timeRange]);
+  }, [bars, optType, showOIChange]);
 
   // Resize observer — watch the wrap so resize fires even when bars mount/unmount
   useEffect(() => {
@@ -754,54 +807,73 @@ export default function OpenInterest({ nubraInstruments }: Props) {
         </div>
 
         <div className={s.toolbarRight}>
-          {/* OI Change time range */}
-          <div className={s.typeToggle}>
-            {(['snapshot', '30m', '1h', '3h', 'custom'] as TimeRange[]).map(r => (
-              <button
-                key={r}
-                className={`${s.typeBtn} ${timeRange === r ? s.typeBtnBothActive : ''}`}
-                onClick={() => setTimeRange(r)}
-                title={r === 'snapshot' ? 'Current snapshot OI' : r === 'custom' ? 'Custom from time' : `Last ${r} OI change`}
-              >
-                {r === 'snapshot' ? 'Now' : r === 'custom' ? 'Custom' : r.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* Custom time picker — only shown when custom is selected */}
-          {timeRange === 'custom' && (
-            <input
-              type="time"
-              className={s.expirySelect}
-              value={customTime}
-              min="09:15"
-              max="15:29"
-              step="60"
-              onChange={e => setCustomTime(e.target.value)}
-              style={{ width: 90, fontVariantNumeric: 'tabular-nums' }}
-            />
-          )}
-
           {/* CE / PE / BOTH toggle */}
           <div className={s.typeToggle}>
-            <button
-              className={`${s.typeBtn} ${optType === 'CE' ? s.typeBtnCeActive : ''}`}
-              onClick={() => setOptType('CE')}
-            >CE</button>
-            <button
-              className={`${s.typeBtn} ${optType === 'BOTH' ? s.typeBtnBothActive : ''}`}
-              onClick={() => setOptType('BOTH')}
-            >BOTH</button>
-            <button
-              className={`${s.typeBtn} ${optType === 'PE' ? s.typeBtnPeActive : ''}`}
-              onClick={() => setOptType('PE')}
-            >PE</button>
+            <button className={`${s.typeBtn} ${optType === 'CE'   ? s.typeBtnBothActive : ''}`} onClick={() => setOptType('CE')}>CE</button>
+            <button className={`${s.typeBtn} ${optType === 'BOTH' ? s.typeBtnBothActive : ''}`} onClick={() => setOptType('BOTH')}>BOTH</button>
+            <button className={`${s.typeBtn} ${optType === 'PE'   ? s.typeBtnBothActive : ''}`} onClick={() => setOptType('PE')}>PE</button>
           </div>
+
+          {/* OI Change toggle */}
+          <button
+            className={`${s.oiChgToggle} ${showOIChange ? s.oiChgToggleActive : ''}`}
+            onClick={() => setShowOIChange(p => !p)}
+            title="Show OI Change"
+          >OI Chg</button>
+
+          {/* Range preset dropdown — only when OI Change is on */}
+          {showOIChange && (
+            <div className={s.rangeDDWrap} ref={rangeDDRef}>
+              <button className={s.rangeDDBtn} onClick={() => setShowRangeDrop(p => !p)}>
+                <span>{RANGE_OPTIONS.find(o => o.value === timeRange)?.label ?? 'Custom'}</span>
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+              {showRangeDrop && (
+                <div className={s.rangeDDList}>
+                  {RANGE_OPTIONS.map(o => (
+                    <button
+                      key={o.value}
+                      className={`${s.rangeDDItem} ${timeRange === o.value ? s.rangeDDItemActive : ''}`}
+                      onClick={() => applyPreset(o.value)}
+                    >{o.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {loading && <div className={s.loadingDot} />}
           {error   && <span className={s.errorLabel}>{error}</span>}
         </div>
       </div>
+
+      {/* ── Time slider — only when OI Change is on ── */}
+      {showOIChange && <div className={s.sliderPanel}>
+        <span className={s.sliderTime}>{minToLabel(sliderFrom)}</span>
+        <div className={s.sliderTrack} ref={sliderTrackRef}>
+          {/* filled range */}
+          <div
+            className={s.sliderFill}
+            style={{
+              left:  `${((sliderFrom - MARKET_START_MIN) / MARKET_DURATION) * 100}%`,
+              width: `${((sliderTo - sliderFrom) / MARKET_DURATION) * 100}%`,
+            }}
+          />
+          {/* from handle */}
+          <div
+            className={s.sliderHandle}
+            style={{ left: `${((sliderFrom - MARKET_START_MIN) / MARKET_DURATION) * 100}%` }}
+            onMouseDown={() => { dragging.current = 'from'; }}
+          />
+          {/* to handle */}
+          <div
+            className={s.sliderHandle}
+            style={{ left: `${((sliderTo - MARKET_START_MIN) / MARKET_DURATION) * 100}%` }}
+            onMouseDown={() => { dragging.current = 'to'; }}
+          />
+        </div>
+        <span className={s.sliderTime}>{minToLabel(sliderTo)}</span>
+      </div>}
 
       {/* ── Chart ── */}
       <div ref={wrapRef} className={s.chartWrap}>

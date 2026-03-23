@@ -45,6 +45,8 @@ interface StrategyChartProps {
   nubraInstruments: NubraInstrument[];
   nubraIndexes: Record<string, string>[];
   isHistoricalMode?: boolean;
+  /** Called after historical fetch with latest close price per leg symbol key */
+  onLtpSnapshot?: (snapshot: Map<string, number>) => void;
 }
 
 type UnderlyingInfo = {
@@ -735,7 +737,7 @@ function optionColor(type: 'CE' | 'PE', idx: number) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments, nubraInstruments, nubraIndexes, isHistoricalMode }: StrategyChartProps) {
+export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments, nubraInstruments, nubraIndexes, isHistoricalMode, onLtpSnapshot }: StrategyChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRef    = useRef<SeriesSet>({
@@ -1435,6 +1437,15 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           setFromDate(startDate);
           setToDate(today);
           flushAccum(false);
+          // Fire LTP snapshot from last historical close per leg
+          if (onLtpSnapshot) {
+            const snap = new Map<string, number>();
+            for (const [key, pts] of accumRef.current.options) {
+              const last = pts[pts.length - 1];
+              if (last) snap.set(key, last.value as number);
+            }
+            if (snap.size) onLtpSnapshot(snap);
+          }
         } else {
           errors.push(`No data for ${startDate} → ${today}`);
         }
@@ -1445,6 +1456,15 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           setFromDate(startDate);
           setToDate(startDate);
           flushAccum(false);
+          // Fire LTP snapshot from last historical close per leg
+          if (onLtpSnapshot) {
+            const snap = new Map<string, number>();
+            for (const [key, pts] of accumRef.current.options) {
+              const last = pts[pts.length - 1];
+              if (last) snap.set(key, last.value as number);
+            }
+            if (snap.size) onLtpSnapshot(snap);
+          }
         } else {
           // No candle data yet — market may not have opened. But if currLtp is
           // already live (pushed by the currLtp sync effect), don't show an error.

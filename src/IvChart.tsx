@@ -35,11 +35,32 @@ function snapToMinBar(tsMs: number): number {
 }
 
 function lastTradingDay(): string {
-  const now = new Date(Date.now() + 5.5 * 3600 * 1000);
-  const day = now.getUTCDay();
-  if (day === 0) now.setUTCDate(now.getUTCDate() - 2);
-  else if (day === 6) now.setUTCDate(now.getUTCDate() - 1);
-  return now.toISOString().slice(0, 10);
+  const istMs  = Date.now() + 5.5 * 3600 * 1000;
+  const d      = new Date(istMs);
+  const istMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const OPEN   = 9 * 60 + 15;
+  // If today is a weekday but before market open, treat as previous day
+  if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && istMin < OPEN) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  // Walk back over weekends
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+
+// Returns best endDate: current time if market open, else last trading day 15:30 IST (10:00 UTC)
+function bestEndDateUtc(): string {
+  const istMs  = Date.now() + 5.5 * 3600 * 1000;
+  const istNow = new Date(istMs);
+  const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+  const OPEN = 9 * 60 + 15, CLOSE = 15 * 60 + 30;
+  const isWeekday = istNow.getUTCDay() >= 1 && istNow.getUTCDay() <= 5;
+  if (isWeekday && istMin >= OPEN && istMin <= CLOSE) {
+    return new Date().toISOString(); // live during market hours
+  }
+  return `${lastTradingDay()}T10:00:00.000Z`; // last close
 }
 
 function expiryToMs(exp: string | number | null | undefined): number {
@@ -146,12 +167,7 @@ async function fetchAtmIvChart(
   const chainValue = toNubraChainValue(underlying, expiryMs);
   const spotType   = nubraType === 'STOCK' ? 'STOCK' : 'INDEX';
   const startDate  = `${startDateStr}T03:45:00.000Z`; // 09:15 IST
-  const nowUtc = new Date();
-  const nowIst = new Date(nowUtc.getTime() + 5.5 * 60 * 60 * 1000);
-  const istHHMM = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
-  const endDate = istHHMM > 15 * 60 + 30
-    ? `${nowIst.toISOString().slice(0, 10)}T10:00:00.000Z`
-    : nowUtc.toISOString();
+  const endDate    = bestEndDateUtc();
 
   const commonDates = { interval: '1m', intraDay: false, realTime: false, startDate, endDate };
 
@@ -199,12 +215,7 @@ async function fetchPcrChart(
   const chainValue = toNubraChainValue(underlying, expiryMs);
   const spotType   = nubraType === 'STOCK' ? 'STOCK' : 'INDEX';
   const startDate  = `${startDateStr}T03:45:00.000Z`;
-  const nowUtc = new Date();
-  const nowIst = new Date(nowUtc.getTime() + 5.5 * 60 * 60 * 1000);
-  const istHHMM = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
-  const endDate = istHHMM > 15 * 60 + 30
-    ? `${nowIst.toISOString().slice(0, 10)}T10:00:00.000Z`
-    : nowUtc.toISOString();
+  const endDate    = bestEndDateUtc();
 
   const commonDates = { interval: '1m', intraDay: false, realTime: false, startDate, endDate };
 

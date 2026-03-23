@@ -21,81 +21,99 @@
   position: relative;
   overflow: hidden;
   min-height: 0;
-  background: #171717;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111318;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 0;
 }
 .leftPanelHistorical {
-  background: rgba(255, 152, 0, 0.06);
-  border-radius: 16px;
-  border: 1.5px solid rgba(255, 152, 0, 0.45);
-  box-shadow: 0 0 25px rgba(255, 152, 0, 0.1) inset;
+  background: rgba(255, 152, 0, 0.04);
+  border-color: rgba(255, 152, 0, 0.35);
+  box-shadow: 0 0 30px rgba(255, 152, 0, 0.07) inset;
 }
 
-/* ── Toolbar row (search + controls) ────────────────────────────────────── */
-.toolbar {
-  padding: 7px 10px;
-  position: relative;
+/* ── Top header container (search + toggles + actions) ───────────────────── */
+.headerBar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 8px 10px;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px 12px 0 0;
 }
 
 /* ── Search box ──────────────────────────────────────────────────────────── */
 .searchWrap {
-  width: 35%;
   position: relative;
-  min-width: 220px;
+  width: 200px;
+  flex-shrink: 0;
 }
 .searchBox {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   height: 30px;
   padding: 0 10px;
-  background: #1A1E2B;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 6px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  min-width: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
   width: 100%;
   box-sizing: border-box;
+  transition: border-color 0.15s;
 }
 .searchBox:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 .searchInput {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  font-size: 13px;
+  font-size: 12px;
   color: #D1D4DC;
   caret-color: #818cf8;
   font-weight: 600;
-  letter-spacing: 0.02em;
   min-width: 0;
 }
 .searchClearBtn {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #787B86;
+  color: #555B6A;
   display: flex;
-  padding: 3px;
-  border-radius: 4px;
+  padding: 2px;
+  border-radius: 3px;
 }
-.searchClearBtn:hover {
-  color: #D1D4DC;
+.searchClearBtn:hover { color: #9CA3AF; }
+
+/* ── Divider between sections ────────────────────────────────────────────── */
+.headerDivider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+/* ── Toggle group (Live/History/Greeks) ──────────────────────────────────── */
+.toggleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.toggleLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  user-select: none;
 }
 
 /* ── Search dropdown ─────────────────────────────────────────────────────── */
 .dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 999;
@@ -106,7 +124,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 340px;
+  max-height: 320px;
 }
 .dropdownList {
   overflow-y: auto;
@@ -115,7 +133,7 @@
   scrollbar-color: #2a2a2a transparent;
 }
 .dropdownEmpty {
-  padding: 24px 16px;
+  padding: 20px 16px;
   text-align: center;
   font-size: 12px;
   color: #3D4150;
@@ -123,149 +141,255 @@
 .dropdownItem {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   cursor: pointer;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   transition: background 0.08s;
 }
-.dropdownItem:hover {
-  background: rgba(79, 142, 247, 0.10);
-}
-.dropdownItemActive {
-  background: rgba(79, 142, 247, 0.10);
-}
+.dropdownItem:hover { background: rgba(79, 142, 247, 0.08); }
+.dropdownItemActive { background: rgba(79, 142, 247, 0.08); }
 .dropdownItemIcon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.dropdownItemBody {
-  flex: 1;
-  min-width: 0;
-}
-.dropdownItemName {
-  font-size: 13px;
-  font-weight: 700;
-  color: #E0E3EB;
-}
-.dropdownItemExch {
-  font-size: 11px;
-  color: #565A6B;
-  margin-top: 1px;
-}
+.dropdownItemBody { flex: 1; min-width: 0; }
+.dropdownItemName { font-size: 12px; font-weight: 700; color: #E0E3EB; }
+.dropdownItemExch { font-size: 10px; color: #565A6B; margin-top: 1px; }
 .dropdownFooter {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 5px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: #4A4E5C;
+}
+
+/* ── Strategy tabs container ─────────────────────────────────────────────── */
+.tabsBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Individual tab card */
+.tabCard {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 160px;
+  height: 56px;
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.12s;
+  padding: 0 26px 0 10px;
+}
+.tabCardActive {
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.tabCardInactive {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.tabCardInactive:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+.tabAccentBar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #FF9800, rgba(255,152,0,0.3));
+  border-radius: 8px 8px 0 0;
+}
+.tabContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tabName {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabPnlRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tabPnl {
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.tabLegCount {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9CA3AF;
+}
+.tabCloseBtn {
+  position: absolute;
+  top: 5px; right: 5px;
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4B5563;
+  padding: 0;
+  transition: all 0.1s;
+}
+.tabCloseBtn:hover {
+  color: #f23645;
+  background: rgba(242,54,69,0.12);
+  border-color: rgba(242,54,69,0.25);
+}
+.tabAddBtn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 56px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  color: #4B5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.tabAddBtn:hover {
+  color: #D1D4DC;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 /* ── Legs scroll area ────────────────────────────────────────────────────── */
 .legsScroll {
   flex: 1;
-  padding: 0 10px 14px 10px;
+  padding: 8px 8px 12px 8px;
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #2a2a2a transparent;
+  scrollbar-color: #252830 transparent;
 }
 .legsInner {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .legsEmpty {
-  padding: 24px;
+  padding: 32px;
   text-align: center;
   color: #3D4150;
-  font-size: 13px;
-}
-.legsLoading {
-  padding: 24px;
-  text-align: center;
-  color: #3D4150;
-  font-size: 13px;
-}
-
-/* ── Column header row ───────────────────────────────────────────────────── */
-.colHeader {
-  background: #0d1220;
-  border-radius: 6px;
-  border: 1px solid rgba(79, 84, 200, 0.2);
-}
-.colHeaderTh {
-  padding: 7px 6px;
-  text-align: left;
-  font-weight: 700;
-  font-size: 11px;
-  color: #6366c8;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 /* ── Group block ─────────────────────────────────────────────────────────── */
 .groupBlock {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
 /* ── Group header ────────────────────────────────────────────────────────── */
 .groupHeader {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 7px 12px;
-  border-radius: 8px;
-  margin: 2px 0;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
 }
 .groupAccentBar {
   width: 3px;
-  height: 18px;
+  height: 16px;
   border-radius: 2px;
   flex-shrink: 0;
 }
 .groupSymbol {
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 .groupLegCount {
   font-size: 11px;
-  color: #6B7280;
+  color: #555B6A;
   font-weight: 500;
-  padding-left: 4px;
 }
 .groupNetLabel {
   font-size: 10px;
-  color: #6B7280;
+  color: #555B6A;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 .groupNetMtm {
   font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Column headers inside group ─────────────────────────────────────────── */
+.groupColHeader {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.01);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.groupColHeaderCell {
+  font-size: 10px;
   font-weight: 700;
+  color: #3D4455;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Leg rows body ───────────────────────────────────────────────────────── */
+.groupBody {
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Legs table ──────────────────────────────────────────────────────────── */
 .legsTable {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 3px;
+  border-spacing: 0;
   table-layout: fixed;
 }
 
@@ -273,82 +397,50 @@
 .legRow {
   transition: opacity 0.2s;
 }
-.legRowUnchecked {
-  opacity: 0.38;
+.legRow:not(:last-child) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
-.legRowBuy {
-  background: rgba(38, 166, 154, 0.05);
-}
-.legRowSell {
-  background: rgba(242, 54, 69, 0.05);
-}
+.legRowUnchecked { opacity: 0.38; }
+.legRowBuy { background: rgba(38, 166, 154, 0.03); }
+.legRowSell { background: rgba(242, 54, 69, 0.03); }
 .legCell {
-  padding: 3px 3px;
+  padding: 5px 4px;
   vertical-align: middle;
 }
-.legCellFirst {
-  border-top-left-radius: 7px;
-  border-bottom-left-radius: 7px;
-}
-.legCellLast {
-  border-top-right-radius: 7px;
-  border-bottom-right-radius: 7px;
-}
-.legCellBorderBuy {
-  border-top: 1px solid rgba(38, 166, 154, 0.15);
-  border-bottom: 1px solid rgba(38, 166, 154, 0.15);
-}
-.legCellBorderBuyFirst {
-  border-left: 1px solid rgba(38, 166, 154, 0.15);
-}
-.legCellBorderBuyLast {
-  border-right: 1px solid rgba(38, 166, 154, 0.15);
-}
-.legCellBorderSell {
-  border-top: 1px solid rgba(242, 54, 69, 0.15);
-  border-bottom: 1px solid rgba(242, 54, 69, 0.15);
-}
-.legCellBorderSellFirst {
-  border-left: 1px solid rgba(242, 54, 69, 0.15);
-}
-.legCellBorderSellLast {
-  border-right: 1px solid rgba(242, 54, 69, 0.15);
-}
+.legCellFirst { padding-left: 10px; }
+.legCellLast { padding-right: 10px; }
 
 /* ── Cell widgets ────────────────────────────────────────────────────────── */
 .cellBox {
   height: 26px;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.cellBoxCenter {
-  padding: 0 6px;
-}
 .cellVal {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #D1D4DC;
+  color: #C4C8D4;
   white-space: nowrap;
 }
 .cellValMono {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #D1D4DC;
+  color: #C4C8D4;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .cellValDim {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: #6B7280;
+  color: #555B6A;
   white-space: nowrap;
 }
 .cellValStrike {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #60a5fa;
   font-variant-numeric: tabular-nums;
@@ -359,28 +451,30 @@
   height: 26px;
   border-radius: 5px;
   background: rgba(38, 166, 154, 0.10);
-  border: 1px solid rgba(38, 166, 154, 0.25);
+  border: 1px solid rgba(38, 166, 154, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 6px;
 }
 .mtmNeg {
   height: 26px;
   border-radius: 5px;
   background: rgba(242, 54, 69, 0.10);
-  border: 1px solid rgba(242, 54, 69, 0.25);
+  border: 1px solid rgba(242, 54, 69, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 6px;
 }
 .mtmValPos {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #26a69a;
   font-variant-numeric: tabular-nums;
 }
 .mtmValNeg {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #f23645;
   font-variant-numeric: tabular-nums;
@@ -388,48 +482,48 @@
 
 /* Action B/S badge */
 .actionBuy {
-  width: 28px;
+  width: 26px;
   height: 26px;
   border-radius: 5px;
-  background: rgba(38, 166, 154, 0.15);
-  border: 1px solid rgba(38, 166, 154, 0.45);
+  background: rgba(38, 166, 154, 0.12);
+  border: 1px solid rgba(38, 166, 154, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
 }
 .actionSell {
-  width: 28px;
+  width: 26px;
   height: 26px;
   border-radius: 5px;
-  background: rgba(242, 54, 69, 0.15);
-  border: 1px solid rgba(242, 54, 69, 0.45);
+  background: rgba(242, 54, 69, 0.12);
+  border: 1px solid rgba(242, 54, 69, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
 }
-.actionLabelBuy { font-size: 13px; font-weight: 800; color: #26a69a; }
-.actionLabelSell { font-size: 13px; font-weight: 800; color: #f23645; }
+.actionLabelBuy { font-size: 12px; font-weight: 800; color: #26a69a; }
+.actionLabelSell { font-size: 12px; font-weight: 800; color: #f23645; }
 
 /* Type CE/PE badge */
 .typeBadge {
-  width: 36px;
+  width: 34px;
   height: 26px;
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.typeCe { font-size: 13px; font-weight: 700; color: #facc15; }
-.typePe { font-size: 13px; font-weight: 700; color: #c084fc; }
+.typeCe { font-size: 12px; font-weight: 700; color: #facc15; }
+.typePe { font-size: 12px; font-weight: 700; color: #c084fc; }
 
 /* Checkbox */
 .checkbox {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -438,31 +532,31 @@
   flex-shrink: 0;
 }
 .checkboxOn {
-  background: rgba(129, 140, 248, 0.15);
-  border: 1px solid rgba(129, 140, 248, 0.5);
+  background: rgba(129, 140, 248, 0.12);
+  border: 1px solid rgba(129, 140, 248, 0.45);
 }
 .checkboxOff {
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 /* Lots stepper */
 .lotsStepper {
-  width: 88px;
+  width: 84px;
   height: 26px;
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 5px;
   overflow: hidden;
 }
 .lotsStepBtn {
-  width: 22px;
+  width: 20px;
   height: 26px;
   background: transparent;
   border: none;
-  color: #6B7280;
+  color: #555B6A;
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
@@ -471,11 +565,11 @@
   align-items: center;
   justify-content: center;
 }
-.lotsStepBtn:hover { color: #D1D4DC; }
+.lotsStepBtn:hover { color: #C4C8D4; }
 .lotsInput {
   flex: 1;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #E2E8F0;
   background: transparent;
@@ -487,12 +581,12 @@
 
 /* Delete button */
 .deleteBtn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #374151;
+  color: #333842;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -507,9 +601,9 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #171717;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111318;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   overflow: hidden;
   position: relative;
 }
@@ -523,4 +617,20 @@
   border-radius: 2px;
   transition: background 0.15s;
 }
-.divider:hover { background: rgba(255, 255, 255, 0.08); }
+.divider:hover { background: rgba(255, 255, 255, 0.07); }
+
+/* ── colHeader (legacy, keep for Greeks flex mode) ───────────────────────── */
+.colHeader {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.colHeaderTh {
+  padding: 5px 6px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 10px;
+  color: #3D4455;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

@@ -772,47 +772,35 @@ function MtmGroupTable({ group, showGreeks, columns }: { group: { symbol: string
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {/* Instrument group header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: sc.bg, border: `1px solid ${sc.accent}1a`, margin: '4px 0' }}>
-        <div style={{ width: 4, height: 20, borderRadius: 2, background: sc.accent, flexShrink: 0 }} />
-        <span style={{ fontSize: 14, fontWeight: 800, color: sc.accent, letterSpacing: '0.04em' }}>{group.symbol}</span>
-        <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 500, paddingLeft: 4 }}>{group.legs.length} leg{group.legs.length > 1 ? 's' : ''}</span>
+    <div className={mtm.groupBlock}>
+      {/* Group header */}
+      <div className={mtm.groupHeader}>
+        <div className={mtm.groupAccentBar} style={{ background: sc.accent }} />
+        <span className={mtm.groupSymbol} style={{ color: sc.accent }}>{group.symbol}</span>
+        <span className={mtm.groupLegCount}>{group.legs.length} leg{group.legs.length > 1 ? 's' : ''}</span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 16, fontWeight: 700, color: mtmColor, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{fmtMtm(groupMtm)}</span>
-        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 500, textTransform: 'capitalize', letterSpacing: '0.03em' }}>net mtm</span>
+        <span className={mtm.groupNetMtm} style={{ color: mtmColor }}>{fmtMtm(groupMtm)}</span>
+        <span className={mtm.groupNetLabel}>Net MTM</span>
       </div>
-      {/* TanStack Legs */}
+      {/* Legs */}
       {showGreeks ? (
-        table.getRowModel().rows.map(row => (
-          <div key={row.id} style={{
-            background: 'var(--bg-inset)',
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.03)',
-            display: 'flex',
-            alignItems: 'stretch',
-            opacity: row.original.checked ? 1 : 0.45,
-            transition: 'opacity 0.2s',
-          }}>
-            {row.getVisibleCells().map(cell => (
-              <React.Fragment key={cell.id}>
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </React.Fragment>
-            ))}
-          </div>
-        ))
+        <div className={mtm.groupBody}>
+          {table.getRowModel().rows.map(row => (
+            <div key={row.id} style={{ display: 'flex', alignItems: 'stretch', opacity: row.original.checked ? 1 : 0.45, transition: 'opacity 0.2s', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              {row.getVisibleCells().map(cell => (
+                <React.Fragment key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</React.Fragment>
+              ))}
+            </div>
+          ))}
+        </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', tableLayout: 'fixed' }}>
-          <colgroup>
-            {table.getAllColumns().map(col => (
-              <col key={col.id} style={{ width: col.getSize() }} />
-            ))}
-          </colgroup>
+        <table className={mtm.legsTable}>
+          <colgroup>{table.getAllColumns().map(col => <col key={col.id} style={{ width: col.getSize() }} />)}</colgroup>
           <tbody>
             {table.getRowModel().rows.map(row => (
-              <tr key={row.id} style={{ opacity: row.original.checked ? 1 : 0.45, transition: 'opacity 0.2s' }}>
-                {row.getVisibleCells().map(cell => (
-                  <td key={cell.id} style={{ padding: '0 3px', verticalAlign: 'middle' }}>
+              <tr key={row.id} className={`${mtm.legRow} ${row.original.checked ? '' : mtm.legRowUnchecked} ${row.original.action === 'B' ? mtm.legRowBuy : mtm.legRowSell}`}>
+                {row.getVisibleCells().map((cell, ci) => (
+                  <td key={cell.id} className={`${mtm.legCell} ${ci === 0 ? mtm.legCellFirst : ''} ${ci === row.getVisibleCells().length - 1 ? mtm.legCellLast : ''}`}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -975,9 +963,11 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     if (item?.oc_asset_type) setOcAssetType(item.oc_asset_type);
     setCloudOpen(false);
 
-    // If WS not connected, fetch live LTP via orderbook API for each leg
-    const wsOpen = mtmWsRef.current?.readyState === WebSocket.OPEN;
-    if (!wsOpen) {
+    // Fetch live LTP via orderbook API when market is closed (before 9:15 or after 15:30 IST)
+    const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
+    const istMin = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+    const marketOpen = istMin >= 9 * 60 + 15 && istMin < 15 * 60 + 30;
+    if (!marketOpen) {
       const token    = localStorage.getItem('nubra_session_token') ?? '';
       const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
       if (token) {
@@ -1727,11 +1717,11 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       {/* Left panel */}
       <div className={`${mtm.leftPanel} ${isHistoricalMode ? mtm.leftPanelHistorical : ''}`}
         style={{ width: `${leftPct}%` }}>
-        {/* Search bar + dropdown */}
-        <div className={mtm.toolbar}>
+        {/* ── Header bar: search + toggles + actions ── */}
+        <div className={mtm.headerBar}>
           <div className={mtm.searchWrap}>
             <div className={mtm.searchBox}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#787B86" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555B6A" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
                 <circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" />
               </svg>
               <input
@@ -1823,121 +1813,56 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
             )}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <label className="inline-flex items-center cursor-pointer">
-            <span className={`select-none text-[13px] font-semibold tracking-wide mr-2 transition-colors duration-200 ${!isHistoricalMode ? 'text-[#34d399]' : 'text-[#6B7280]'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>Live</span>
-            <input type="checkbox" className="sr-only peer" checked={isHistoricalMode} onChange={e => setIsHistoricalMode(e.target.checked)} />
-            <div className={`relative w-10 h-[22px] rounded-full peer peer-focus:outline-none peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${isHistoricalMode ? 'bg-[#FF9800]' : 'bg-[#333333]'} shadow-inner border border-[rgba(255,255,255,0.05)]`}></div>
-            <span className={`select-none text-[13px] font-semibold tracking-wide ml-2 transition-colors duration-200 ${isHistoricalMode ? 'text-[#FF9800]' : 'text-[#6B7280]'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>History</span>
-          </label>
-          <label className="inline-flex items-center cursor-pointer">
-            <span className={`select-none text-[13px] font-semibold tracking-wide mr-2 transition-colors duration-200 ${showGreeks ? 'text-[#34d399]' : 'text-[#6B7280]'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>Greeks</span>
-            <input type="checkbox" className="sr-only peer" checked={showGreeks} onChange={e => setShowGreeks(e.target.checked)} />
-            <div className={`relative w-10 h-[22px] rounded-full peer peer-focus:outline-none peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${showGreeks ? 'bg-[#34d399]' : 'bg-[#333333]'} shadow-inner border border-[rgba(255,255,255,0.05)]`}></div>
-          </label>
+          {/* Divider */}
+          <div className={mtm.headerDivider} />
+
+          {/* Toggles */}
+          <div className={mtm.toggleGroup}>
+            {/* Live / History toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }} onClick={() => setIsHistoricalMode(v => !v)}>
+              <span className={mtm.toggleLabel} style={{ color: !isHistoricalMode ? '#34d399' : '#555B6A' }}>Live</span>
+              <div style={{ position: 'relative', width: 36, height: 20, borderRadius: 10, background: isHistoricalMode ? '#FF9800' : '#2A2F3E', border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 2, left: isHistoricalMode ? 17 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.18s' }} />
+              </div>
+              <span className={mtm.toggleLabel} style={{ color: isHistoricalMode ? '#FF9800' : '#555B6A' }}>Hist</span>
+            </div>
+            {/* Greeks toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }} onClick={() => setShowGreeks(v => !v)}>
+              <span className={mtm.toggleLabel} style={{ color: showGreeks ? '#34d399' : '#555B6A' }}>Greeks</span>
+              <div style={{ position: 'relative', width: 36, height: 20, borderRadius: 10, background: showGreeks ? '#34d399' : '#2A2F3E', border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 2, left: showGreeks ? 17 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.18s' }} />
+              </div>
+            </div>
           </div>
 
           <div style={{ flex: 1 }} />
-          {/* Layout theme switcher — far right */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {/* Layout toggle */}
             {([
-              { t: 'theme1' as const, label: 'Cards', icon: (
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="1" y="1" width="6" height="6" rx="1.5" opacity="0.9" />
-                  <rect x="9" y="1" width="6" height="6" rx="1.5" opacity="0.9" />
-                  <rect x="1" y="9" width="6" height="6" rx="1.5" opacity="0.9" />
-                  <rect x="9" y="9" width="6" height="6" rx="1.5" opacity="0.9" />
-                </svg>
-              )},
-              { t: 'theme2' as const, label: 'Table', icon: (
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="1" y="1" width="14" height="3.5" rx="1.5" opacity="0.9" />
-                  <rect x="1" y="6.25" width="14" height="3.5" rx="1.5" opacity="0.7" />
-                  <rect x="1" y="11.5" width="14" height="3.5" rx="1.5" opacity="0.5" />
-                </svg>
-              )},
+              { t: 'theme1' as const, label: 'Cards', icon: (<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="9" y="1" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="1" y="9" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="9" y="9" width="6" height="6" rx="1.5" opacity="0.9"/></svg>) },
+              { t: 'theme2' as const, label: 'Table', icon: (<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="14" height="3.5" rx="1.5" opacity="0.9"/><rect x="1" y="6.25" width="14" height="3.5" rx="1.5" opacity="0.7"/><rect x="1" y="11.5" width="14" height="3.5" rx="1.5" opacity="0.5"/></svg>) },
             ]).map(({ t, label, icon }) => (
-              <button
-                key={t}
-                onClick={() => setLayoutTheme(t)}
-                title={label}
-                style={{
-                  ...iconBtnBase,
-                  background: layoutTheme === t ? 'rgba(79,142,247,0.18)' : 'rgba(255,255,255,0.03)',
-                  color: layoutTheme === t ? '#4F8EF7' : '#4B5563',
-                  outline: layoutTheme === t ? '1px solid rgba(79,142,247,0.35)' : '1px solid rgba(255,255,255,0.06)',
-                }}
-                onMouseEnter={e => iconBtnHover(e.currentTarget as HTMLElement, layoutTheme === t)}
-                onMouseLeave={e => iconBtnLeave(e.currentTarget as HTMLElement, layoutTheme === t)}
-              >
+              <button key={t} onClick={() => setLayoutTheme(t)} title={label} style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s', background: layoutTheme === t ? 'rgba(79,142,247,0.15)' : 'rgba(255,255,255,0.03)', color: layoutTheme === t ? '#4F8EF7' : '#4B5563', borderColor: layoutTheme === t ? 'rgba(79,142,247,0.3)' : 'rgba(255,255,255,0.07)' }}>
                 {icon}
               </button>
             ))}
+            {/* Option chain */}
+            <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} style={{ width: 26, height: 26, borderRadius: 5, border: `1px solid ${ocOpen ? 'rgba(255,152,0,0.4)' : 'rgba(255,255,255,0.07)'}`, background: ocOpen ? 'rgba(255,152,0,0.12)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="9 10 20 17.6">
+                <g><path d="M19.3956 10.4C19.3956 10.1791 19.2165 10 18.9956 10C18.7748 10 18.5957 10.1791 18.5957 10.4V27.2002C18.5957 27.4211 18.7748 27.6002 18.9956 27.6002C19.2165 27.6002 19.3956 27.4211 19.3956 27.2002V10.4Z" fill="#9CA3AF"/><path d="M16.1929 11.5977H11.3936C10.9519 11.5977 10.5938 11.9558 10.5938 12.3977C10.5938 12.8395 10.9519 13.1977 11.3936 13.1977H16.1929C16.6347 13.1977 16.9928 12.8395 16.9928 12.3977C16.9928 11.9558 16.6347 11.5977 16.1929 11.5977Z" fill="#9CA3AF"/><path d="M27.401 11.5977H21.8018C21.3601 11.5977 21.002 11.9558 21.002 12.3977C21.002 12.8395 21.3601 13.1977 21.8018 13.1977H27.401C27.8428 13.1977 28.2009 12.8395 28.2009 12.3977C28.2009 11.9558 27.8428 11.5977 27.401 11.5977Z" fill="#9CA3AF"/><path d="M16.1989 19.6016H9.79988C9.35812 19.6016 9 19.9597 9 20.4016C9 20.8434 9.35812 21.2016 9.79988 21.2016H16.1989C16.6407 21.2016 16.9988 20.8434 16.9988 20.4016C16.9988 19.9597 16.6407 19.6016 16.1989 19.6016Z" fill="#9CA3AF"/><path d="M25.0014 19.6016H21.8018C21.3601 19.6016 21.002 19.9597 21.002 20.4016C21.002 20.8434 21.3601 21.2016 21.8018 21.2016H25.0014C25.4431 21.2016 25.8013 20.8434 25.8013 20.4016C25.8013 19.9597 25.4431 19.6016 25.0014 19.6016Z" fill="#9CA3AF"/><path d="M16.1928 15.6016H12.9932C12.5515 15.6016 12.1934 15.9597 12.1934 16.4016C12.1934 16.8434 12.5515 17.2016 12.9932 17.2016H16.1928C16.6345 17.2016 16.9927 16.8434 16.9927 16.4016C16.9927 15.9597 16.6345 15.6016 16.1928 15.6016Z" fill="#9CA3AF"/><path d="M28.2009 15.6016H21.8018C21.3601 15.6016 21.002 15.9597 21.002 16.4016C21.002 16.8434 21.3601 17.2016 21.8018 17.2016H28.2009C28.6427 17.2016 29.0008 16.8434 29.0008 16.4016C29.0008 15.9597 28.6427 15.6016 28.2009 15.6016Z" fill="#9CA3AF"/><path d="M16.1979 23.5996H10.5987C10.1569 23.5996 9.79883 23.9578 9.79883 24.3996C9.79883 24.8414 10.1569 25.1996 10.5987 25.1996H16.1979C16.6397 25.1996 16.9978 24.8414 16.9978 24.3996C16.9978 23.9578 16.6397 23.5996 16.1979 23.5996Z" fill="#9CA3AF"/><path d="M26.6011 23.5996H21.8018C21.3601 23.5996 21.002 23.9578 21.002 24.3996C21.002 24.8414 21.3601 25.1996 21.8018 25.1996H26.6011C27.0429 25.1996 27.401 24.8414 27.401 24.3996C27.401 23.9578 27.0429 23.5996 26.6011 23.5996Z" fill="#9CA3AF"/></g>
+              </svg>
+            </button>
+            {/* Export */}
+            <button onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }} title="Export strategy" style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555B6A' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 21h14a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2"/></svg>
+            </button>
+            {/* Import */}
+            <button onClick={() => { setCloudTab('import'); setCloudError(''); setCloudOpen(true); fetchCloudList(); }} title="Import strategy" style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555B6A' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21V9"/><path d="M16 13l-4 4-4-4"/><path d="M5 3h14a2 2 0 0 1 2 2v3"/><path d="M3 8V5a2 2 0 0 1 2-2"/></svg>
+            </button>
           </div>
-          {/* Open Option Chain button */}
-          <button
-            onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }}
-            title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'}
-            style={{
-              ...iconBtnBase,
-              background: ocOpen ? 'rgba(255,152,0,0.15)' : iconBtnBase.background,
-              border: ocOpen ? '1px solid rgba(255,152,0,0.4)' : iconBtnBase.border,
-            }}
-            onMouseEnter={e => {
-              if (ocOpen) return;
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,152,0,0.12)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,152,0,0.35)';
-            }}
-            onMouseLeave={e => {
-              if (ocOpen) return;
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.06)';
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="9 10 20 17.6">
-              <g id="Group 8174">
-                <path d="M19.3956 10.4C19.3956 10.1791 19.2165 10 18.9956 10C18.7748 10 18.5957 10.1791 18.5957 10.4V27.2002C18.5957 27.4211 18.7748 27.6002 18.9956 27.6002C19.2165 27.6002 19.3956 27.4211 19.3956 27.2002V10.4Z" fill="#9CA3AF"/>
-                <path d="M16.1929 11.5977H11.3936C10.9519 11.5977 10.5938 11.9558 10.5938 12.3977C10.5938 12.8395 10.9519 13.1977 11.3936 13.1977H16.1929C16.6347 13.1977 16.9928 12.8395 16.9928 12.3977C16.9928 11.9558 16.6347 11.5977 16.1929 11.5977Z" fill="#9CA3AF"/>
-                <path d="M27.401 11.5977H21.8018C21.3601 11.5977 21.002 11.9558 21.002 12.3977C21.002 12.8395 21.3601 13.1977 21.8018 13.1977H27.401C27.8428 13.1977 28.2009 12.8395 28.2009 12.3977C28.2009 11.9558 27.8428 11.5977 27.401 11.5977Z" fill="#9CA3AF"/>
-                <path d="M16.1989 19.6016H9.79988C9.35812 19.6016 9 19.9597 9 20.4016C9 20.8434 9.35812 21.2016 9.79988 21.2016H16.1989C16.6407 21.2016 16.9988 20.8434 16.9988 20.4016C16.9988 19.9597 16.6407 19.6016 16.1989 19.6016Z" fill="#9CA3AF"/>
-                <path d="M25.0014 19.6016H21.8018C21.3601 19.6016 21.002 19.9597 21.002 20.4016C21.002 20.8434 21.3601 21.2016 21.8018 21.2016H25.0014C25.4431 21.2016 25.8013 20.8434 25.8013 20.4016C25.8013 19.9597 25.4431 19.6016 25.0014 19.6016Z" fill="#9CA3AF"/>
-                <path d="M16.1928 15.6016H12.9932C12.5515 15.6016 12.1934 15.9597 12.1934 16.4016C12.1934 16.8434 12.5515 17.2016 12.9932 17.2016H16.1928C16.6345 17.2016 16.9927 16.8434 16.9927 16.4016C16.9927 15.9597 16.6345 15.6016 16.1928 15.6016Z" fill="#9CA3AF"/>
-                <path d="M28.2009 15.6016H21.8018C21.3601 15.6016 21.002 15.9597 21.002 16.4016C21.002 16.8434 21.3601 17.2016 21.8018 17.2016H28.2009C28.6427 17.2016 29.0008 16.8434 29.0008 16.4016C29.0008 15.9597 28.6427 15.6016 28.2009 15.6016Z" fill="#9CA3AF"/>
-                <path d="M16.1979 23.5996H10.5987C10.1569 23.5996 9.79883 23.9578 9.79883 24.3996C9.79883 24.8414 10.1569 25.1996 10.5987 25.1996H16.1979C16.6397 25.1996 16.9978 24.8414 16.9978 24.3996C16.9978 23.9578 16.6397 23.5996 16.1979 23.5996Z" fill="#9CA3AF"/>
-                <path d="M26.6011 23.5996H21.8018C21.3601 23.5996 21.002 23.9578 21.002 24.3996C21.002 24.8414 21.3601 25.1996 21.8018 25.1996H26.6011C27.0429 25.1996 27.401 24.8414 27.401 24.3996C27.401 23.9578 27.0429 23.5996 26.6011 23.5996Z" fill="#9CA3AF"/>
-              </g>
-            </svg>
-          </button>
-          {/* Export strategy */}
-          <button
-            onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }}
-            title="Export strategy"
-            style={iconBtnBase}
-            onMouseEnter={e => iconBtnHover(e.currentTarget as HTMLElement)}
-            onMouseLeave={e => iconBtnLeave(e.currentTarget as HTMLElement)}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#9CA3AF' }}>
-              <path d="M12 3v12" />
-              <path d="M8 7l4-4 4 4" />
-              <path d="M5 21h14a2 2 0 0 0 2-2v-3" />
-              <path d="M3 16v3a2 2 0 0 0 2 2" />
-            </svg>
-          </button>
-          {/* Import strategy */}
-          <button
-            onClick={() => { setCloudTab('import'); setCloudError(''); setCloudOpen(true); fetchCloudList(); }}
-            title="Import strategy"
-            style={iconBtnBase}
-            onMouseEnter={e => iconBtnHover(e.currentTarget as HTMLElement)}
-            onMouseLeave={e => iconBtnLeave(e.currentTarget as HTMLElement)}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#9CA3AF' }}>
-              <path d="M12 21V9" />
-              <path d="M16 13l-4 4-4-4" />
-              <path d="M5 3h14a2 2 0 0 1 2 2v3" />
-              <path d="M3 8V5a2 2 0 0 1 2-2" />
-            </svg>
-          </button>
         </div>
         {cloudOpen && (
           <div onClick={() => setCloudOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2022,18 +1947,9 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
             </div>
           </div>
         )}
-        {/* Separator */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '0 14px 0 4px', flexShrink: 0 }} />
-
-        {/* Strategy tabs */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          padding: '6px 10px', flexShrink: 0,
-          background: 'rgba(0,0,0,0.15)',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
-        }}>
-          {/* Card tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+        {/* ── Strategy tabs bar ── */}
+        <div className={mtm.tabsBar}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
             {Array.from({ length: strategyCount }, (_, i) => i + 1).map(n => {
               const isActive = activeStrategy === n;
               const tabLegs = isActive ? legs : (strategyLegs[n] ?? []);
@@ -2048,15 +1964,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               return (
                 <div
                   key={n}
-                  style={{
-                    flex: '1 1 0', minWidth: 0, maxWidth: 160, position: 'relative',
-                    height: 62, borderRadius: 8,
-                    display: 'flex', flexDirection: 'row', alignItems: 'center',
-                    background: isActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
-                    border: isActive ? '1px solid rgba(255,255,255,0.22)' : '1px solid rgba(255,255,255,0.1)',
-                    boxShadow: isActive ? '0 2px 10px rgba(0,0,0,0.4)' : 'none',
-                    transition: 'all 0.13s', overflow: 'hidden', cursor: 'pointer',
-                  }}
+                  className={`${mtm.tabCard} ${isActive ? mtm.tabCardActive : mtm.tabCardInactive}`}
                   onClick={() => {
                     setStrategyLegs(prev => ({ ...prev, [activeStrategy]: legs }));
                     const nextLegs = strategyLegs[n] ?? [];
@@ -2067,106 +1975,42 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     }
                     setActiveStrategy(n);
                   }}
-                  onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.05)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.09)'; } }}
-                  onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.025)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.05)'; } }}
                 >
-                  {/* orange accent bar */}
-                  {isActive && (
-                    <div style={{
-                      position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-                      background: 'linear-gradient(90deg, #FF9800, rgba(255,152,0,0.35))',
-                      borderRadius: '8px 8px 0 0',
-                    }} />
-                  )}
-
-                  {/* column: name on top, PnL below */}
-                  <div style={{
-                    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-                    justifyContent: 'center', gap: 5, padding: '0 28px 0 10px',
-                  }}>
+                  {isActive && <div className={mtm.tabAccentBar} />}
+                  <div className={mtm.tabContent}>
                     {renamingStrategy === n ? (
                       <input
                         ref={renameInputRef}
                         value={renameValue}
                         onChange={e => setRenameValue(e.target.value)}
                         onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            setStrategyNames(prev => ({ ...prev, [n]: renameValue.trim() || `Strategy ${n}` }));
-                            setRenamingStrategy(null);
-                          } else if (e.key === 'Escape') {
-                            setRenamingStrategy(null);
-                          }
+                          if (e.key === 'Enter') { setStrategyNames(prev => ({ ...prev, [n]: renameValue.trim() || `Strategy ${n}` })); setRenamingStrategy(null); }
+                          else if (e.key === 'Escape') setRenamingStrategy(null);
                         }}
-                        onBlur={() => {
-                          setStrategyNames(prev => ({ ...prev, [n]: renameValue.trim() || `Strategy ${n}` }));
-                          setRenamingStrategy(null);
-                        }}
+                        onBlur={() => { setStrategyNames(prev => ({ ...prev, [n]: renameValue.trim() || `Strategy ${n}` })); setRenamingStrategy(null); }}
                         onClick={e => e.stopPropagation()}
-                        style={{
-                          width: '100%', background: 'rgba(255,152,0,0.08)',
-                          border: '1px solid rgba(255,152,0,0.45)', borderRadius: 5,
-                          color: '#FFFFFF', fontSize: 13, fontWeight: 600,
-                          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-                          padding: '3px 6px', outline: 'none',
-                        }}
-                        maxLength={20}
-                        autoFocus
+                        style={{ width: '100%', background: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.45)', borderRadius: 4, color: '#FFF', fontSize: 11, fontWeight: 600, padding: '2px 5px', outline: 'none' }}
+                        maxLength={20} autoFocus
                       />
                     ) : (
                       <>
-                        {/* name row */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                          <span style={{
-                            fontSize: 13, fontWeight: isActive ? 600 : 500,
-                            color: isActive ? '#FFFFFF' : '#C0C4CE',
-                            letterSpacing: '0.01em', lineHeight: 1,
-                            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>{strategyNames[n] ?? `Strategy ${n}`}</span>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              setRenameValue(strategyNames[n] ?? `Strategy ${n}`);
-                              setRenamingStrategy(n);
-                            }}
-                            title="Rename"
-                            style={{
-                              flexShrink: 0, width: 14, height: 14, borderRadius: 3,
-                              background: 'transparent', border: 'none', cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: '#FFFFFF', opacity: 0.35, padding: 0, transition: 'opacity 0.1s',
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#FF9800'; }}
-                            onMouseLeave={e => { e.currentTarget.style.opacity = '0.35'; e.currentTarget.style.color = '#FFFFFF'; }}
-                          >
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                            </svg>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                          <span className={mtm.tabName} style={{ color: isActive ? '#E2E8F0' : '#9CA3AF' }}>{strategyNames[n] ?? `Strategy ${n}`}</span>
+                          <button onClick={e => { e.stopPropagation(); setRenameValue(strategyNames[n] ?? `Strategy ${n}`); setRenamingStrategy(n); }} title="Rename" style={{ flexShrink: 0, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: '#555B6A', display: 'flex', alignItems: 'center' }} onMouseEnter={e => { e.currentTarget.style.color = '#FF9800'; }} onMouseLeave={e => { e.currentTarget.style.color = '#555B6A'; }}>
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                           </button>
                         </div>
-                        {/* PnL row */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{
-                            fontSize: 16, lineHeight: 1, fontWeight: 800,
-                            color: hasPnl ? pnlColor : (isActive ? '#3D4455' : '#252A36'),
-                            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-                            letterSpacing: '0.01em',
-                          }}>
+                        <div className={mtm.tabPnlRow}>
+                          <span className={mtm.tabPnl} style={{ color: hasPnl ? pnlColor : (isActive ? '#3D4455' : '#252A36') }}>
                             {hasPnl ? `${totalPnl >= 0 ? '+' : ''}₹${Math.abs(totalPnl) >= 1000 ? (totalPnl / 1000).toFixed(1) + 'k' : totalPnl.toFixed(0)}` : '—'}
                           </span>
-                          {legCount > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? '#D1D4DC' : '#9CA3AF' }}>
-                              {legCount}L
-                            </span>
-                          )}
+                          {legCount > 0 && <span className={mtm.tabLegCount}>{legCount}L</span>}
                         </div>
                       </>
                     )}
                   </div>
-
-                  {/* delete × button */}
                   {canDelete && (
-                    <button
+                    <button className={mtm.tabCloseBtn}
                       onClick={e => {
                         e.stopPropagation();
                         const newLegs: Record<number, Leg[]> = {};
@@ -2176,66 +2020,24 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                           newCount++;
                           newLegs[newCount] = k === activeStrategy ? legs : (strategyLegs[k] ?? []);
                         });
-                        const newActive = n === activeStrategy
-                          ? Math.max(1, n - 1 <= newCount ? n - 1 || 1 : newCount)
-                          : activeStrategy > n ? activeStrategy - 1 : activeStrategy;
-                        setStrategyLegs(newLegs);
-                        setStrategyCount(newCount);
-                        setActiveStrategy(newActive);
+                        const newActive = n === activeStrategy ? Math.max(1, n - 1 <= newCount ? n - 1 || 1 : newCount) : activeStrategy > n ? activeStrategy - 1 : activeStrategy;
+                        setStrategyLegs(newLegs); setStrategyCount(newCount); setActiveStrategy(newActive);
                         const nextLegs = newLegs[newActive] ?? [];
                         setLegs(nextLegs);
-                        if (nextLegs.length > 0) {
-                          setChartSymbol(nextLegs[0].symbol);
-                          if (nextLegs[0].exchange) setChartExchange(nextLegs[0].exchange);
-                        }
-                      }}
-                      title="Remove strategy"
-                      style={{
-                        position: 'absolute', top: 6, right: 6,
-                        width: 18, height: 18, borderRadius: 4,
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#555B6A', padding: 0, transition: 'all 0.1s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.color = '#f23645'; e.currentTarget.style.background = 'rgba(242,54,69,0.15)'; e.currentTarget.style.borderColor = 'rgba(242,54,69,0.3)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = '#555B6A'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                      </svg>
+                        if (nextLegs.length > 0) { setChartSymbol(nextLegs[0].symbol); if (nextLegs[0].exchange) setChartExchange(nextLegs[0].exchange); }
+                      }} title="Remove strategy">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                   )}
                 </div>
               );
             })}
           </div>
-
-          {/* + Add strategy */}
           {strategyCount < 6 && (
-            <button
-              onClick={() => {
-                const next = strategyCount + 1;
-                setStrategyLegs(prev => ({ ...prev, [next]: [] }));
-                setStrategyNames(prev => ({ ...prev, [next]: `Strategy ${next}` }));
-                setStrategyCount(next);
-              }}
-              title="Add strategy"
-              style={{
-                flexShrink: 0, width: 38, height: 62, borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.07)',
-                background: 'rgba(255,255,255,0.025)',
-                color: '#4B5563', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.13s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#D1D4DC'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#4B5563'; e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+            <button className={mtm.tabAddBtn}
+              onClick={() => { const next = strategyCount + 1; setStrategyLegs(prev => ({ ...prev, [next]: [] })); setStrategyNames(prev => ({ ...prev, [next]: `Strategy ${next}` })); setStrategyCount(next); }}
+              title="Add strategy">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             </button>
           )}
         </div>
@@ -2332,7 +2134,30 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
 
       {/* Right panel — Strategy Chart */}
       <div className={mtm.rightPanel}>
-        <StrategyChart legs={legs} ocSymbol={chartSymbol || ocSymbol} ocExchange={chartExchange || ocExchange} instruments={instruments} nubraInstruments={nubraInstruments} nubraIndexes={nubraIndexes} isHistoricalMode={isHistoricalMode} />
+        <StrategyChart
+          legs={legs}
+          ocSymbol={chartSymbol || ocSymbol}
+          ocExchange={chartExchange || ocExchange}
+          instruments={instruments}
+          nubraInstruments={nubraInstruments}
+          nubraIndexes={nubraIndexes}
+          isHistoricalMode={isHistoricalMode}
+          onLtpSnapshot={(snap) => {
+            setLegs(prev => prev.map(leg => {
+              const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+              const ltp = snap.get(key);
+              return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
+            }));
+            setStrategyLegs(prev => ({
+              ...prev,
+              [activeStrategy]: (prev[activeStrategy] ?? []).map(leg => {
+                const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+                const ltp = snap.get(key);
+                return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
+              }),
+            }));
+          }}
+        />
       </div>
     </div>
   );
@@ -2833,6 +2658,7 @@ export default function App() {
   const NAV_ITEMS: { page: Page; label: string; icon: React.ReactNode }[] = [
     { page: 'home',      label: 'Home',      icon: <IconHome /> },
     { page: 'chart',     label: 'Charts',    icon: <IconBarChart2 /> },
+    { page: 'mtm',       label: 'Mtm Analyzer', icon: <IconTrendingUp /> },
     { page: 'straddle',  label: 'Straddle',  icon: <IconLayers /> },
     { page: 'oiprofile', label: 'OI Profile', icon: <IconActivity /> },
     { page: 'nubra',     label: 'Nubra IV',  icon: <IconFlask /> },
@@ -3015,7 +2841,7 @@ export default function App() {
           <div className="h-5 w-px bg-[#2a2a2a]" />
 
           {/* Page title when not on chart */}
-          {page !== 'chart' && page !== 'mtm' && (
+          {page !== 'chart' && (
             <span className="text-[13px] font-semibold text-[#D1D4DC]" style={{ fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>
               {NAV_ITEMS.find(n => n.page === page)?.label}
             </span>
@@ -3023,27 +2849,6 @@ export default function App() {
 
           {/* Navbar links */}
           <div className="flex items-center gap-1 ml-auto">
-            <button
-              onClick={() => navigateTo('mtm')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                height: 32, padding: '0 14px',
-                borderRadius: 7,
-                fontSize: 13, fontWeight: 700, letterSpacing: '0.01em',
-                cursor: 'pointer',
-                border: page === 'mtm' ? '1px solid rgba(79,142,247,0.45)' : '1px solid transparent',
-                background: page === 'mtm' ? 'rgba(79,142,247,0.18)' : 'transparent',
-                color: page === 'mtm' ? '#FFFFFF' : '#D1D4DC',
-                boxShadow: page === 'mtm' ? '0 0 12px rgba(79,142,247,0.25)' : 'none',
-                transition: 'background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s',
-              }}
-              onMouseEnter={e => { if (page !== 'mtm') { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = '#FFFFFF'; } }}
-              onMouseLeave={e => { if (page !== 'mtm') { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#D1D4DC'; } }}
-            >
-              <span style={{ lineHeight: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, background: page === 'mtm' ? 'rgba(79,142,247,0.25)' : 'rgba(255,255,255,0.08)', border: page === 'mtm' ? '1px solid rgba(79,142,247,0.55)' : '1px solid rgba(255,255,255,0.12)', color: page === 'mtm' ? '#7EB8FF' : '#C9D1DC', transition: 'background 0.15s, border-color 0.15s, color 0.15s' }}><IconTrendingUp /></span>
-              <span style={{ lineHeight: 1, fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>Mtm Analyzer</span>
-            </button>
-
             {/* Basket icon button */}
             <button
               ref={basketBtnRef}

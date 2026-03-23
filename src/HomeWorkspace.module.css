@@ -4,15 +4,126 @@
   width: 100%;
   height: 100%;
   background: #0c0b0a;
-  overflow-y: scroll;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  /* Own compositor layer so sidebar slide doesn't repaint page */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
-/* ── Grid layout ──────────────────────────────────────────────────────────── */
-.gridLayout {
+/* ── Sidebar cell — slides in/out at 60fps via width transition ────────────── */
+.sidebarCell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  padding: 1px;
+  box-sizing: border-box;
+  contain: layout style;
+  /* GPU layer + smooth open/close */
+  transform: translateZ(0);
+  will-change: width, flex-basis;
+  transition: flex-basis 220ms cubic-bezier(0.4, 0, 0.2, 1),
+              min-width   220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Scrollable canvas wrapper ────────────────────────────────────────────── */
+.canvasScroll {
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px;
+  box-sizing: border-box;
+  /* Slide in sync with sidebar — GPU composited */
+  transform: translateZ(0);
+  will-change: flex-basis;
+  transition: flex-basis 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Fixed grid root ──────────────────────────────────────────────────────── */
+.gridRoot {
+  min-width: 100%;
+  min-height: 100%;
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  gap: 0;
+}
+
+/* ── Grid row ─────────────────────────────────────────────────────────────── */
+.gridRow {
+  display: flex;
+  flex-direction: row;
+  overflow: visible;
+  min-height: 200px;
+  gap: 0;
+}
+
+/* ── Grid cell ────────────────────────────────────────────────────────────── */
+.gridCell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 260px;
+  padding: 1px;
+  box-sizing: border-box;
+  /* Isolate paint/layout per cell */
+  contain: layout style;
+  transform: translateZ(0);
+}
+
+/* ── Row splitter (horizontal resize handle) ──────────────────────────────── */
+.rowSplitter {
+  flex-shrink: 0;
+  height: 3px;
+  width: 100%;
+  background: transparent;
+  cursor: row-resize;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.rowSplitter:hover { background: rgba(79,142,247,0.25); }
+.rowSplitter::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 1px;
+  border-radius: 1px;
+  background: rgba(255,255,255,0.12);
+}
+
+/* ── Col splitter (vertical resize handle) ────────────────────────────────── */
+.colSplitter {
+  flex-shrink: 0;
+  width: 3px;
+  height: 100%;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.colSplitter:hover { background: rgba(79,142,247,0.25); }
+.colSplitter::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 32px;
+  border-radius: 1px;
+  background: rgba(255,255,255,0.12);
 }
 
 /* ── Card ─────────────────────────────────────────────────────────────────── */
@@ -27,11 +138,10 @@
   box-shadow: 0 2px 16px rgba(0,0,0,0.6);
   overflow: hidden;
   box-sizing: border-box;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.card:hover {
-  border-color: rgba(255,255,255,0.18);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+  /* No transition — avoids repaint cascade during drag/resize */
+  /* Own compositor layer for 60fps scroll */
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* ── Header (drag handle) ─────────────────────────────────────────────────── */
@@ -44,11 +154,10 @@
   border-bottom: 1px solid rgba(255,255,255,0.08);
   user-select: none;
   flex-shrink: 0;
-  cursor: grab;
+  cursor: default;
   gap: 6px;
   min-width: 0;
 }
-.header:active { cursor: grabbing; }
 
 /* Inline symbol search inside header (candle-chart panels) */
 .headerSearch {
@@ -361,62 +470,687 @@
   margin-right: 3px;
 }
 
-/* ── Grid item GPU isolation ──────────────────────────────────────────────── */
-:global(.react-grid-item.react-draggable-dragging),
-:global(.react-grid-item.resizing) {
-  will-change: transform;
-  z-index: 100;
-}
 
-/* ── Override react-grid-layout resize handle color ──────────────────────── */
-:global(.react-resizable-handle) {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-:global(.react-grid-item:hover .react-resizable-handle),
-:global(.react-grid-item:focus-within .react-resizable-handle) {
-  opacity: 1;
-}
-:global(.react-resizable-handle::after) {
-  border-color: rgba(79,142,247,0.6) !important;
-}
-:global(.react-grid-item.react-grid-placeholder) {
-  background: rgba(79,142,247,0.12) !important;
-  border: 1px dashed rgba(79,142,247,0.4) !important;
-  border-radius: 10px !important;
-}
-
-/* ── Placeholder ──────────────────────────────────────────────────────────── */
-.placeholder {
+/* ── Template picker ──────────────────────────────────────────────────────── */
+.templatePicker {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 16px; user-select: none;
+  gap: 20px; user-select: none;
+  padding: 24px;
+  overflow-y: auto;
 }
-.sub { font-size: 11px; color: rgba(255,255,255,0.1); margin: 0; }
 
-/* ── Add button ───────────────────────────────────────────────────────────── */
-.addBtn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 22px; border-radius: 8px;
-  border: 1px solid rgba(79,142,247,0.35);
-  background: rgba(79,142,247,0.1); color: rgba(79,142,247,0.9);
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+/* ── Tabs (Templates / Custom) ────────────────────────────────────────────── */
+.tplTabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 3px;
 }
-.addBtn:hover { background: rgba(79,142,247,0.2); border-color: rgba(79,142,247,0.6); color: #7eb8ff; }
+.tplTab {
+  padding: 6px 20px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(209,212,220,0.4);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tplTab:hover { color: rgba(209,212,220,0.7); }
+.tplTabActive {
+  background: rgba(79,142,247,0.18);
+  color: #7eb8ff;
+}
+.templatePickerTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.5);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  max-width: 720px;
+  width: 100%;
+}
+.templateCardWrap {
+  position: relative;
+}
+.templateCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.templateCard:hover {
+  background: rgba(79,142,247,0.1);
+  border-color: rgba(79,142,247,0.4);
+  transform: translateY(-1px);
+}
+.templateCardSave {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(16,20,30,0.72);
+  color: rgba(209,212,220,0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: all 0.12s;
+}
+.templateCardSave:hover {
+  color: #7eb8ff;
+  border-color: rgba(79,142,247,0.5);
+  background: rgba(79,142,247,0.14);
+}
+.templatePreview {
+  width: 72px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.templatePreview svg {
+  width: 100%;
+  height: 100%;
+}
+.templateLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(209,212,220,0.45);
+  text-align: center;
+  white-space: nowrap;
+}
+.templateSaveBar {
+  width: 100%;
+  max-width: 520px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  padding: 8px;
+}
 
-/* ── Float button ─────────────────────────────────────────────────────────── */
-.floatBtn {
-  position: fixed; bottom: 20px; right: 24px; z-index: 200;
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 14px; border-radius: 8px;
-  border: 1px solid rgba(79,142,247,0.35);
-  background: rgba(17,17,17,0.95); color: rgba(79,142,247,0.9);
-  font-size: 12px; font-weight: 600; cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: background 0.15s, border-color 0.15s;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+/* ── Custom builder ───────────────────────────────────────────────────────── */
+.customBuilder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 640px;
 }
-.floatBtn:hover:not(:disabled) { background: rgba(79,142,247,0.18); border-color: rgba(79,142,247,0.6); color: #7eb8ff; }
-.floatBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.customBody {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  align-items: flex-start;
+}
+.customControls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.builderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.builderRowLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.35);
+  width: 36px;
+  flex-shrink: 0;
+}
+.builderColBtns {
+  display: flex;
+  gap: 3px;
+}
+.builderColBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: rgba(209,212,220,0.5);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.builderColBtn:hover { background: rgba(255,255,255,0.08); color: #D1D4DC; }
+.builderColBtnActive {
+  background: rgba(79,142,247,0.2);
+  border-color: rgba(79,142,247,0.5);
+  color: #7eb8ff;
+}
+.builderSizes {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.builderSizeBtn {
+  flex: 1;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  color: rgba(209,212,220,0.45);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.builderSizeBtn:hover { background: rgba(255,189,68,0.1); color: #ffbd44; border-color: rgba(255,189,68,0.3); }
+.builderRemoveBtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(255,69,58,0.1);
+  color: rgba(255,69,58,0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.builderRemoveBtn:hover { background: rgba(255,69,58,0.22); color: #ff453a; }
+.builderStepBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: rgba(209,212,220,0.6);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+  line-height: 1;
+}
+.builderStepBtn:hover:not(:disabled) { background: rgba(79,142,247,0.18); color: #7eb8ff; border-color: rgba(79,142,247,0.4); }
+.builderStepBtn:disabled { opacity: 0.25; cursor: not-allowed; }
+.builderStepVal {
+  min-width: 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #D1D4DC;
+}
+.builderActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  align-items: center;
+}
+.builderRowStepper {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 7px;
+  padding: 4px 8px;
+}
+.builderRowStepperLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.35);
+  margin-right: 2px;
+}
+.builderApplyBtn {
+  flex: 1;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(79,142,247,0.4);
+  background: rgba(79,142,247,0.15);
+  color: #7eb8ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.builderApplyBtn:hover { background: rgba(79,142,247,0.28); border-color: rgba(79,142,247,0.7); }
+.customPreviewBox {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  flex: 1;
+  min-width: 280px;
+  min-height: 320px;
+  height: 0; /* forces flex children to fill via flex-grow */
+}
+.customPreviewLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  flex-shrink: 0;
+}
+.customPreviewHint {
+  font-size: 11px;
+  color: rgba(209,212,220,0.3);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── Live interactive preview ─────────────────────────────────────────────── */
+.livePreview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  min-height: 0;
+}
+.livePreviewRow {
+  display: flex;
+  flex-direction: row;
+  min-height: 28px;
+  overflow: hidden;
+}
+.livePreviewCell {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(79,142,247,0.08);
+  border: 1px solid rgba(79,142,247,0.25);
+  border-radius: 4px;
+  margin: 2px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  min-width: 0;
+  overflow: visible;
+}
+.livePreviewCell:hover {
+  background: rgba(79,142,247,0.16);
+  border-color: rgba(79,142,247,0.5);
+}
+.livePreviewCellLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(79,142,247,0.8);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+}
+/* Col splitter inside preview */
+.livePreviewColSplit {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  transition: background 0.12s;
+}
+.livePreviewColSplit:hover { background: rgba(79,142,247,0.3); }
+/* Row splitter inside preview */
+.livePreviewRowSplit {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  transition: background 0.12s;
+}
+.livePreviewRowSplit:hover { background: rgba(79,142,247,0.3); }
+
+/* Active cell highlight */
+.livePreviewCellActive {
+  background: rgba(79,142,247,0.25) !important;
+  border-color: rgba(79,142,247,0.7) !important;
+}
+
+/* Picker overlay — sits above the preview, below the label */
+.pickerOverlay {
+  background: #1A1E2B;
+  border: 1px solid rgba(79,142,247,0.3);
+  border-radius: 10px;
+  padding: 10px;
+  flex-shrink: 0;
+  animation: fadeIn 0.1s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.pickerOverlayTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.pickerOverlayGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.pickerOverlayItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  color: rgba(209,212,220,0.55);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.pickerOverlayItem:hover { background: rgba(79,142,247,0.12); color: #D1D4DC; border-color: rgba(79,142,247,0.3); }
+.pickerOverlayItemActive { background: rgba(79,142,247,0.2); color: #7eb8ff; border-color: rgba(79,142,247,0.5); }
+.pickerOverlayIcon { display: flex; align-items: center; color: rgba(209,212,220,0.4); }
+.pickerOverlayItemActive .pickerOverlayIcon { color: #7eb8ff; }
+
+/* Saved tab badge */
+.tplTabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(79,142,247,0.2);
+  border: 1px solid rgba(79,142,247,0.35);
+  color: #7eb8ff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Saved layouts state */
+.savedEmpty {
+  width: 100%;
+  max-width: 520px;
+  min-height: 180px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgba(209,212,220,0.45);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+}
+
+.savedGrid {
+  width: 100%;
+  max-width: 720px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.savedCard {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  overflow: hidden;
+  min-height: 110px;
+}
+
+.savedCardApply {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  text-align: left;
+}
+
+.savedCard:hover {
+  border-color: rgba(79,142,247,0.35);
+  background: rgba(79,142,247,0.08);
+}
+
+.savedCardPreview {
+  height: 58px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(11,14,22,0.65);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 3px;
+}
+
+.savedCardPreviewRow {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+}
+
+.savedCardPreviewCell {
+  flex: 1;
+  border-radius: 3px;
+  background: rgba(79,142,247,0.18);
+  border: 1px solid rgba(79,142,247,0.4);
+}
+
+.savedCardName {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(209,212,220,0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 22px;
+}
+
+.savedCardDel {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: none;
+  background: rgba(255,69,58,0.15);
+  color: rgba(255,69,58,0.85);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.savedCardDel:hover {
+  background: rgba(255,69,58,0.28);
+  color: #ff453a;
+}
+
+/* Save custom layout name/input row */
+.saveNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.saveNameInput {
+  flex: 1;
+  min-width: 120px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: #D1D4DC;
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+}
+
+.saveNameInput::placeholder {
+  color: rgba(209,212,220,0.35);
+}
+
+.saveNameInput:focus {
+  border-color: rgba(79,142,247,0.45);
+  box-shadow: 0 0 0 2px rgba(79,142,247,0.1);
+}
+
+.saveNameConfirm,
+.saveNameCancel {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.saveNameConfirm {
+  background: rgba(52,211,153,0.15);
+  color: #34d399;
+}
+
+.saveNameConfirm:hover:not(:disabled) {
+  background: rgba(52,211,153,0.28);
+}
+
+.saveNameConfirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.saveNameCancel {
+  background: rgba(255,69,58,0.15);
+  color: rgba(255,69,58,0.85);
+}
+
+.saveNameCancel:hover {
+  background: rgba(255,69,58,0.28);
+}
+
+.saveIconBtn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.11);
+  background: rgba(255,255,255,0.04);
+  color: rgba(209,212,220,0.75);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.saveIconBtn:hover {
+  background: rgba(255,255,255,0.08);
+  color: #D1D4DC;
+  border-color: rgba(255,255,255,0.2);
+}
+
+.saveIconBtnFlash {
+  border-color: rgba(52,211,153,0.45);
+  color: #34d399;
+  box-shadow: 0 0 0 2px rgba(52,211,153,0.12);
+}
+
+/* Responsive tuning for layout picker/builder */
+@media (max-width: 980px) {
+  .templateGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .savedGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customBody {
+    flex-direction: column;
+  }
+
+  .customBuilder {
+    max-width: 820px;
+  }
+}
+
+@media (max-width: 680px) {
+  .templateGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .savedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tplTabs {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .tplTab {
+    flex: 1;
+    padding: 7px 8px;
+  }
+
+  .builderActions {
+    flex-wrap: wrap;
+  }
+}
