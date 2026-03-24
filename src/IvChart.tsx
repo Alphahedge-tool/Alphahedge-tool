@@ -375,6 +375,116 @@ function getSpotInstrumentKey(sym: string, instruments: Instrument[]): string | 
   return null;
 }
 
+// ── Shared Nubra WS singleton ─────────────────────────────────────────────────
+// One WS connection shared across all IvChart instances.
+// Each instance subscribes with its own ref_ids and callback.
+
+type NubraGreeksMsg = { ref_id: number; iv: number };
+type NubraCallback  = (refId: number, iv: number) => void;
+
+const nubraWsSingleton = (() => {
+  let ws: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // refId → Set of callbacks
+  const subscribers = new Map<number, Set<NubraCallback>>();
+  // refId → count of active subscriptions (for server subscribe/unsubscribe)
+  const refCounts = new Map<number, number>();
+
+  function send(msg: object) {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
+  function connect() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    ws = new WebSocket('ws://localhost:8765');
+
+    ws.onopen = () => {
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      // Re-subscribe all currently tracked ref_ids
+      const allIds = [...refCounts.keys()];
+      if (allIds.length > 0) {
+        send({
+          action: 'subscribe',
+          session_token: localStorage.getItem('nubra_session_token') ?? '',
+          data_type: 'greeks',
+          symbols: [],
+          ref_ids: allIds,
+        });
+      }
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type !== 'greeks' || !msg.data?.ref_id) return;
+        const refId = Number(msg.data.ref_id);
+        const iv    = msg.data.iv != null && msg.data.iv > 0 ? msg.data.iv * 100 : 0;
+        if (iv <= 0) return;
+        subscribers.get(refId)?.forEach(cb => cb(refId, iv));
+      } catch { /**/ }
+    };
+
+    ws.onclose = () => {
+      ws = null;
+      // Reconnect if there are still active subscribers
+      if (refCounts.size > 0) {
+        reconnectTimer = setTimeout(connect, 2000);
+      }
+    };
+
+    ws.onerror = () => { ws?.close(); };
+  }
+
+  return {
+    subscribe(refIds: number[], cb: NubraCallback, exch: string) {
+      const newIds: number[] = [];
+      for (const id of refIds) {
+        if (!subscribers.has(id)) subscribers.set(id, new Set());
+        subscribers.get(id)!.add(cb);
+        const prev = refCounts.get(id) ?? 0;
+        refCounts.set(id, prev + 1);
+        if (prev === 0) newIds.push(id); // first subscriber for this refId
+      }
+      connect();
+      if (newIds.length > 0) {
+        send({
+          action: 'subscribe',
+          session_token: localStorage.getItem('nubra_session_token') ?? '',
+          data_type: 'greeks',
+          symbols: [],
+          ref_ids: newIds,
+          exchange: exch,
+        });
+      }
+    },
+
+    unsubscribe(refIds: number[], cb: NubraCallback) {
+      const toUnsub: number[] = [];
+      for (const id of refIds) {
+        subscribers.get(id)?.delete(cb);
+        if (subscribers.get(id)?.size === 0) subscribers.delete(id);
+        const prev = refCounts.get(id) ?? 0;
+        const next = Math.max(0, prev - 1);
+        if (next === 0) { refCounts.delete(id); toUnsub.push(id); }
+        else refCounts.set(id, next);
+      }
+      if (toUnsub.length > 0) {
+        send({
+          action: 'unsubscribe',
+          session_token: localStorage.getItem('nubra_session_token') ?? '',
+          data_type: 'greeks',
+          ref_ids: toUnsub,
+        });
+      }
+      // Close WS if no more subscribers
+      if (refCounts.size === 0) {
+        ws?.close();
+        ws = null;
+      }
+    },
+  };
+})();
+
 // ── IvChart ───────────────────────────────────────────────────────────────────
 
 export default function IvChart({ instruments, nubraInstruments, workerRef }: Props) {
@@ -399,9 +509,9 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
   const [showPcr, setShowPcr] = useState(false);
   const [pcr,     setPcr]     = useState(0);
 
-  // Nubra WS for live IV
-  const nubraWsRef    = useRef<WebSocket | null>(null);
-  const subRefIdsRef  = useRef<Set<number>>(new Set());
+  // Nubra WS for live IV — now via shared singleton
+  const subRefIdsRef  = useRef<number[]>([]);
+  const nubraCbRef    = useRef<NubraCallback | null>(null);
   const latestIvRef   = useRef<Map<number, number>>(new Map()); // refId → iv
   const liveBarRef    = useRef<LineData | null>(null);           // live IV bar
 
@@ -512,19 +622,11 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
 
   // ── Disconnect Nubra WS ───────────────────────────────────────────────────
   const disconnectNubraWs = useCallback(() => {
-    const ws = nubraWsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN && subRefIdsRef.current.size > 0) {
-      const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
-      ws.send(JSON.stringify({
-        action: 'unsubscribe',
-        session_token: sessionToken,
-        data_type: 'greeks',
-        ref_ids: [...subRefIdsRef.current],
-      }));
+    if (nubraCbRef.current && subRefIdsRef.current.length > 0) {
+      nubraWsSingleton.unsubscribe(subRefIdsRef.current, nubraCbRef.current);
     }
-    ws?.close();
-    nubraWsRef.current = null;
-    subRefIdsRef.current.clear();
+    nubraCbRef.current = null;
+    subRefIdsRef.current = [];
     latestIvRef.current.clear();
     liveBarRef.current = null;
   }, []);
@@ -539,7 +641,7 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
     }
   }, []);
 
-  // ── Connect Nubra WS for live ATM IV ─────────────────────────────────────
+  // ── Connect Nubra WS for live ATM IV — uses shared singleton ────────────
   const connectNubraWs = useCallback((sym: string, exch: string, exp: string, atmStr: number) => {
     disconnectNubraWs();
     const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
@@ -570,49 +672,24 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
 
     const ceId = Number(ce.ref_id);
     const peId = Number(pe.ref_id);
-    subRefIdsRef.current = new Set([ceId, peId]);
+    subRefIdsRef.current = [ceId, peId];
+    latestIvRef.current.clear();
 
-    const ws = new WebSocket('ws://localhost:8765');
-    nubraWsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        action: 'subscribe',
-        session_token: sessionToken,
-        data_type: 'greeks',
-        symbols: [],
-        ref_ids: [ceId, peId],
-        exchange: exch,
-      }));
+    const cb: NubraCallback = (refId, iv) => {
+      latestIvRef.current.set(refId, iv);
+      if (latestIvRef.current.size >= 2) {
+        const vals = [...latestIvRef.current.values()];
+        const avgIv = vals.reduce((a, b) => a + b, 0) / vals.length;
+        setAtmIv(avgIv);
+        const nowBarSec = snapToMinBar(Date.now()) as unknown as Time;
+        const pt: LineData = { time: nowBarSec, value: avgIv };
+        liveBarRef.current = pt;
+        try { ivSeriesRef.current?.update(pt); } catch { /**/ }
+      }
     };
 
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type !== 'greeks' || !msg.data?.ref_id) return;
-        const d = msg.data;
-        const refId = Number(d.ref_id);
-        if (!subRefIdsRef.current.has(refId)) return;
-
-        const iv = d.iv != null && d.iv > 0 ? d.iv * 100 : 0;
-        if (iv <= 0) return;
-
-        latestIvRef.current.set(refId, iv);
-
-        if (latestIvRef.current.size >= 2) {
-          const vals = [...latestIvRef.current.values()];
-          const avgIv = vals.reduce((a, b) => a + b, 0) / vals.length;
-          setAtmIv(avgIv);
-
-          const nowBarSec = snapToMinBar(Date.now()) as unknown as Time;
-          const pt: LineData = { time: nowBarSec, value: avgIv };
-          liveBarRef.current = pt;
-          try { ivSeriesRef.current?.update(pt); } catch { /**/ }
-        }
-      } catch { /**/ }
-    };
-
-    ws.onerror = () => { /* silent */ };
+    nubraCbRef.current = cb;
+    nubraWsSingleton.subscribe([ceId, peId], cb, exch);
   }, [nubraInstruments, disconnectNubraWs]);
 
   // ── Connect Upstox WS for live spot candlestick (mirrors CandleChart exactly)
