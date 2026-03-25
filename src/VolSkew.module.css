@@ -10,7 +10,7 @@
   padding: 0 12px; gap: 10px;
   background: #1c1a17;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  position: relative; z-index: 99999; overflow: visible;
+  position: relative; z-index: 2; overflow: visible;
 }
 .toolbarLeft  { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .toolbarRight { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -40,7 +40,7 @@
 
 .dropdown {
   position: absolute; top: calc(100% + 4px); left: 0;
-  z-index: 99999; background: #0F1117;
+  z-index: 9999; background: #0F1117;
   border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
   overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.9);
   min-width: 260px; max-width: 340px; max-height: 280px;

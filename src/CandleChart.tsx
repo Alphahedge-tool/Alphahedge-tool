@@ -1337,6 +1337,7 @@ function VwapSettingsPanel({
 export default function CandleChart({ instrument, instruments = [], onSearchOpen, visible = true, onViewChange, activeLayout, onLayoutChange, hideToolbar = false, defaultInterval, onIntervalChange, oiShowProp, onOiShowChange, optionChainOpenProp, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, vwapShowProp, onVwapShowChange, vwapAnchorProp, onVwapAnchorChange, vwapColorProp, onVwapColorChange, vwapExpiryDayProp, onVwapExpiryDayChange, twapShowProp, onTwapShowChange, drawingRef, onDrawingsChange }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const histLoadBarRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -2131,7 +2132,19 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           };
           liveVolRef.current = poppedVol ? { ...poppedVol, color: ltp >= poppedCandle.open ? 'rgba(46,189,133,0.5)' : 'rgba(242,54,69,0.5)' } : null;
         } else {
-          liveBarRef.current = null;
+          // Current bar not in REST data yet — seed it from last close so it shows immediately
+          // WS will update it with real OHLC on first tick
+          const lastClose = lastCandle?.close ?? 0;
+          if (lastClose > 0) {
+            const snapshot = wsManager.get(instrument.instrument_key);
+            const ltp = (snapshot?.ltp ?? 0) > 0 ? snapshot!.ltp : lastClose;
+            liveBarRef.current = {
+              time: wallBarSec as unknown as typeof liveBarRef.current.time,
+              open: ltp, high: ltp, low: ltp, close: ltp,
+            };
+          } else {
+            liveBarRef.current = null;
+          }
           liveVolRef.current = null;
         }
 
@@ -2152,14 +2165,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           if (liveVolRef.current) try { volSeriesRef.current.update(liveVolRef.current); } catch { /* ignore */ }
           const zoomData = liveBarRef.current ? [...cData, liveBarRef.current] : cData;
           zoomToEnd(zoomData);
-          // Second rAF: chart has painted — reset Y axis so it fits visible candles (same as double-click)
-          requestAnimationFrame(() => {
+          // After paint settles — reset Y axis to fit visible candles (same as double-click)
+          setTimeout(() => {
             try {
               const ps = chartRef.current?.priceScale('right');
               ps?.applyOptions({ autoScale: false });
               ps?.applyOptions({ autoScale: true });
             } catch { /* ignore */ }
-          });
+          }, 50);
           setRestLoadedKey(instrument.instrument_key);
           setTimeout(() => { if (oiShowLiveRef.current) redrawOI(); }, 120);
           // On initial load, hold skeleton for MIN_SKELETON_MS so everything settles before revealing
@@ -2472,6 +2485,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
     isLoadingMoreRef.current = true;
     loadLockRef.current = true;
+    histLoadBarRef.current?.classList.add(s.histLoadBarVisible);
     requestAnimationFrame(() => setLoadingMore(true));
 
     const ts = chartRef.current?.timeScale();
@@ -2526,7 +2540,10 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       // ignore
     } finally {
       isLoadingMoreRef.current = false;
-      requestAnimationFrame(() => setLoadingMore(false));
+      requestAnimationFrame(() => {
+        histLoadBarRef.current?.classList.remove(s.histLoadBarVisible);
+        setLoadingMore(false);
+      });
       setTimeout(() => { loadLockRef.current = false; }, 400);
     }
   }, [instrument.instrument_key]);
@@ -2766,6 +2783,11 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
         {/* Chart container + OI canvas overlay */}
         <div ref={wrapperRef} className={`flex-1 min-w-0 ${s.chartWrapper}`}>
           <div ref={containerRef} data-chart-container className={s.chartContainer} />
+
+          {/* Left-edge loading shimmer — toggled via DOM ref, no React re-render during scroll */}
+          <div ref={histLoadBarRef} className={s.histLoadBar} aria-hidden="true">
+            <div className={s.histLoadShimmer} />
+          </div>
 
           {/* Skeleton bars — unmounted entirely when not loading (no DOM nodes = no animation CPU cost) */}
           {loading && (

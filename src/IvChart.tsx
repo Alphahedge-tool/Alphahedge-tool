@@ -169,7 +169,8 @@ async function fetchAtmIvChart(
   const startDate  = `${startDateStr}T03:45:00.000Z`; // 09:15 IST
   const endDate    = bestEndDateUtc();
 
-  const commonDates = { interval: '1m', intraDay: false, realTime: false, startDate, endDate };
+  const isIntraday = startDateStr === lastTradingDay();
+  const commonDates = { interval: '1m', intraDay: isIntraday, realTime: false, startDate, endDate };
 
   const res = await fetch('/api/nubra-timeseries', {
     method: 'POST',
@@ -197,7 +198,13 @@ async function fetchAtmIvChart(
     }
     if (pts.length) break;
   }
-  return pts.map(p => ({ time: Math.round(p.ts / 1e9) as unknown as Time, value: p.v * 100 }));
+  // ts is in nanoseconds — convert to seconds, then snap to 1-min bar in IST
+  // to match exactly how spot candles are timestamped
+  return pts.map(p => {
+    const sec = Math.round(p.ts / 1e9);
+    const snapped = Math.floor((sec + IST_OFFSET_SEC) / 60) * 60 - IST_OFFSET_SEC;
+    return { time: snapped as unknown as Time, value: p.v * 100 };
+  });
 }
 
 async function fetchPcrChart(
@@ -217,7 +224,8 @@ async function fetchPcrChart(
   const startDate  = `${startDateStr}T03:45:00.000Z`;
   const endDate    = bestEndDateUtc();
 
-  const commonDates = { interval: '1m', intraDay: false, realTime: false, startDate, endDate };
+  const isIntraday = startDateStr === lastTradingDay();
+  const commonDates = { interval: '1m', intraDay: isIntraday, realTime: false, startDate, endDate };
 
   const res = await fetch('/api/nubra-timeseries', {
     method: 'POST',
@@ -247,7 +255,7 @@ async function fetchPcrChart(
   const callOi: { ts: number; v: number }[] = chainData?.cumulative_call_oi ?? [];
   const putOi:  { ts: number; v: number }[] = chainData?.cumulative_put_oi  ?? [];
 
-  // Build PCR = put_oi / call_oi, keyed by timestamp
+  // Build PCR = put_oi / call_oi, keyed by raw ts (nanoseconds) for matching
   const callMap = new Map<number, number>();
   for (const p of callOi) callMap.set(p.ts, p.v);
 
@@ -255,7 +263,10 @@ async function fetchPcrChart(
   for (const p of putOi) {
     const call = callMap.get(p.ts);
     if (!call || call === 0) continue;
-    pts.push({ time: Math.round(p.ts / 1e9) as unknown as Time, value: p.v / call });
+    // Snap to 1-min IST bar — same as IV timestamps
+    const sec = Math.round(p.ts / 1e9);
+    const snapped = Math.floor((sec + IST_OFFSET_SEC) / 60) * 60 - IST_OFFSET_SEC;
+    pts.push({ time: snapped as unknown as Time, value: p.v / call });
   }
   return sortDedup(pts);
 }
@@ -385,13 +396,30 @@ type NubraCallback  = (refId: number, iv: number) => void;
 const nubraWsSingleton = (() => {
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
   // refId → Set of callbacks
   const subscribers = new Map<number, Set<NubraCallback>>();
   // refId → count of active subscriptions (for server subscribe/unsubscribe)
   const refCounts = new Map<number, number>();
+  // exchange per refId — needed for reconnect re-subscribe
+  const refExchange = new Map<number, string>();
 
   function send(msg: object) {
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
+  function stopPing() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+  }
+
+  function startPing() {
+    stopPing();
+    // Send a ping every 20s to keep the connection alive
+    pingTimer = setInterval(() => {
+      if (ws?.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ action: 'ping' })); } catch { /**/ }
+      }
+    }, 20_000);
   }
 
   function connect() {
@@ -400,15 +428,23 @@ const nubraWsSingleton = (() => {
 
     ws.onopen = () => {
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-      // Re-subscribe all currently tracked ref_ids
-      const allIds = [...refCounts.keys()];
-      if (allIds.length > 0) {
+      startPing();
+      // Re-subscribe all currently tracked ref_ids, grouped by exchange
+      const byExchange = new Map<string, number[]>();
+      for (const [id, exch] of refExchange) {
+        if (!refCounts.has(id)) continue;
+        if (!byExchange.has(exch)) byExchange.set(exch, []);
+        byExchange.get(exch)!.push(id);
+      }
+      const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+      for (const [exch, ids] of byExchange) {
         send({
           action: 'subscribe',
-          session_token: localStorage.getItem('nubra_session_token') ?? '',
+          session_token: sessionToken,
           data_type: 'greeks',
           symbols: [],
-          ref_ids: allIds,
+          ref_ids: ids,
+          exchange: exch,
         });
       }
     };
@@ -426,6 +462,7 @@ const nubraWsSingleton = (() => {
 
     ws.onclose = () => {
       ws = null;
+      stopPing();
       // Reconnect if there are still active subscribers
       if (refCounts.size > 0) {
         reconnectTimer = setTimeout(connect, 2000);
@@ -441,9 +478,10 @@ const nubraWsSingleton = (() => {
       for (const id of refIds) {
         if (!subscribers.has(id)) subscribers.set(id, new Set());
         subscribers.get(id)!.add(cb);
+        refExchange.set(id, exch); // remember exchange for reconnect
         const prev = refCounts.get(id) ?? 0;
         refCounts.set(id, prev + 1);
-        if (prev === 0) newIds.push(id); // first subscriber for this refId
+        if (prev === 0) newIds.push(id);
       }
       connect();
       if (newIds.length > 0) {
@@ -465,7 +503,7 @@ const nubraWsSingleton = (() => {
         if (subscribers.get(id)?.size === 0) subscribers.delete(id);
         const prev = refCounts.get(id) ?? 0;
         const next = Math.max(0, prev - 1);
-        if (next === 0) { refCounts.delete(id); toUnsub.push(id); }
+        if (next === 0) { refCounts.delete(id); refExchange.delete(id); toUnsub.push(id); }
         else refCounts.set(id, next);
       }
       if (toUnsub.length > 0) {
@@ -478,6 +516,7 @@ const nubraWsSingleton = (() => {
       }
       // Close WS if no more subscribers
       if (refCounts.size === 0) {
+        stopPing();
         ws?.close();
         ws = null;
       }
@@ -534,6 +573,7 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
   const loadLockRef         = useRef(false);
   const spotInstrKeyRef     = useRef<string>('');
   const pcrPollRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initialZoomDoneRef  = useRef(false); // reset on each symbol load
 
   // ── Init chart ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -618,6 +658,31 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
       pcrSeriesRef.current = null;
       spotSeriesRef.current = null;
     };
+  }, []);
+
+  // ── Zoom to last N candles right-anchored (mirrors CandleChart exactly) ─────
+  const zoomToEnd = useCallback((data: CandlestickData[]) => {
+    if (initialZoomDoneRef.current) return;
+    if (data.length === 0) return;
+    const ts = chartRef.current?.timeScale();
+    if (!ts) return;
+    initialZoomDoneRef.current = true;
+    const visible = Math.min(120, data.length);
+    const containerWidth = containerRef.current?.clientWidth ?? 800;
+    const spacing = Math.max(4, Math.floor(containerWidth / visible));
+    ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
+    ts.scrollToRealTime();
+    // After paint settles — fit Y axis (same as double-click)
+    setTimeout(() => {
+      try {
+        const ps = chartRef.current?.priceScale('right');
+        ps?.applyOptions({ autoScale: false });
+        ps?.applyOptions({ autoScale: true });
+        const psL = chartRef.current?.priceScale('left');
+        psL?.applyOptions({ autoScale: false });
+        psL?.applyOptions({ autoScale: true });
+      } catch { /**/ }
+    }, 50);
   }, []);
 
   // ── Disconnect Nubra WS ───────────────────────────────────────────────────
@@ -708,7 +773,7 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
     const mySession = sessionRef.current;
 
     const unsub = wsManager.subscribe(key, (md: InstrumentMarketData) => {
-      if (restLoadingRef.current) return;
+      if (restLoadingRef.current) return; // still loading REST data — discard
       const candleSeries = spotSeriesRef.current;
       if (!candleSeries) return;
 
@@ -726,9 +791,10 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
         ? Math.floor(Number(ohlcEntry.ts) / 1000) : null;
       const useOhlc = ohlcEntry != null && ohlcBarSec === Number(wallBarSec);
 
-      // Don't push live bar older than last REST bar
+      // Don't push a live bar that's older than the last confirmed REST bar
       const lastRestTime = allSpotRef.current.length > 0
         ? Number((allSpotRef.current[allSpotRef.current.length - 1] as CandlestickData).time) : 0;
+      // Allow current bar (wallBarSec >= lastRestTime) — equality means we're updating the same bar
       if (Number(wallBarSec) < lastRestTime) return;
 
       const prev = spotLiveBarRef.current;
@@ -806,6 +872,7 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
     // Reset spot data refs — keep spotInstrKeyRef as-is (set by handleSymbolSelect just before load)
     allSpotRef.current = [];
     spotPrevTsRef.current = null;
+    initialZoomDoneRef.current = false;
 
     // New session — stale WS ticks for old symbol are discarded
     const mySession = ++sessionRef.current;
@@ -825,21 +892,35 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
       const spotKey = spotInstrKeyRef.current || getSpotInstrumentKey(spotSym, instruments) || '';
       spotInstrKeyRef.current = spotKey;
 
-      // ── Fetch spot historical candles (mirrors CandleChart exactly) ──────
+      // ── Fetch spot historical candles ────────────────────────────────────
       if (spotKey) {
+        // Start from today EOD — keep fetching pages until we have today's candles
         const d = new Date(); d.setHours(23, 59, 59, 999);
         let res = await fetchRawCandles(spotKey, d.getTime());
-        if (res.candles.length === 0 && res.prevTimestamp) {
-          res = await fetchRawCandles(spotKey, res.prevTimestamp);
-          if (res.candles.length === 0 && res.prevTimestamp) {
-            res = await fetchRawCandles(spotKey, res.prevTimestamp);
-          }
-        }
-        if (mySession !== sessionRef.current) return;
-        spotPrevTsRef.current = res.prevTimestamp;
-        const spotData = candlesToCandleData(res.candles);
 
-        // Pop the currently-forming bar — WS will keep it live (mirrors CandleChart)
+        // If first page is empty or has no today candles, keep fetching back
+        let allCandles = [...res.candles];
+        let prevTs = res.prevTimestamp;
+
+        // Fetch up to 3 pages to ensure we cover today's full session
+        for (let i = 0; i < 2 && prevTs && allCandles.length < 375; i++) {
+          const more = await fetchRawCandles(spotKey, prevTs);
+          allCandles = [...more.candles, ...allCandles];
+          prevTs = more.prevTimestamp;
+        }
+
+        if (mySession !== sessionRef.current) return;
+        spotPrevTsRef.current = prevTs;
+
+        // Dedup + sort oldest-first
+        const seen = new Set<number>();
+        const deduped = allCandles
+          .filter(c => { if (seen.has(c[0])) return false; seen.add(c[0]); return true; })
+          .sort((a, b) => a[0] - b[0]);
+
+        const spotData = candlesToCandleData(deduped);
+
+        // Pop the currently-forming bar — WS will keep it live
         const wallBarSec = snapToMinBar(Date.now());
         if (spotData.length > 0 && Number(spotData[spotData.length - 1].time) === wallBarSec) {
           const forming = spotData.pop()!;
@@ -853,6 +934,10 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
         }
         const lastClose = spotLiveBarRef.current?.close ?? spotData[spotData.length - 1]?.close ?? 0;
         if (lastClose > 0) setSpot(lastClose);
+
+        // Zoom + fit Y axis exactly like CandleChart
+        const zoomData = spotLiveBarRef.current ? [...spotData, spotLiveBarRef.current] : spotData;
+        requestAnimationFrame(() => zoomToEnd(zoomData));
       }
 
       restLoadingRef.current = false;
@@ -863,9 +948,17 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
           fetchAtmIvChart(sym, exch, expiryMs, today, instrType),
           fetchPcrChart(sym, exch, expiryMs, today, instrType),
         ]);
+        if (mySession !== sessionRef.current) return;
         if (ivData.length) {
-          ivSeriesRef.current?.setData(sortDedup(ivData));
-          const last = ivData[ivData.length - 1];
+          // Merge IV data with live bar — drop any REST point that overlaps live bar time
+          const liveTime = liveBarRef.current ? Number(liveBarRef.current.time) : 0;
+          const filtered = liveTime > 0 ? sortDedup(ivData).filter(p => Number(p.time) < liveTime) : sortDedup(ivData);
+          ivSeriesRef.current?.setData(filtered);
+          // Re-apply live IV bar on top so there's no gap
+          if (liveBarRef.current) {
+            try { ivSeriesRef.current?.update(liveBarRef.current); } catch { /**/ }
+          }
+          const last = filtered[filtered.length - 1] ?? ivData[ivData.length - 1];
           if (last) setAtmIv(last.value);
         }
         if (pcrData.length) {
@@ -881,19 +974,32 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
         }
       }
 
-      // ── Connect live spot (Upstox sym), on first tick connect Nubra WS ───
+      // ── Connect live spot WS ──────────────────────────────────────────────
       connectSpot(spotSym, exch, spotOnly ? undefined : (ltp: number) => {
         const atmStr = calcATMStrike(ltp, nubraInstruments, sym, exp);
         setAtmStrike(atmStr);
         if (atmStr > 0) connectNubraWs(sym, exch, exp, atmStr);
       });
+
+      // ── Also connect Nubra WS immediately using already-known spot price ──
+      // Don't wait for first WS tick — use last close from REST data
+      if (!spotOnly) {
+        const knownSpot = spotLiveBarRef.current?.close
+          ?? allSpotRef.current[allSpotRef.current.length - 1]?.close
+          ?? 0;
+        if (knownSpot > 0) {
+          const atmStr = calcATMStrike(knownSpot, nubraInstruments, sym, exp);
+          setAtmStrike(atmStr);
+          if (atmStr > 0) connectNubraWs(sym, exch, exp, atmStr);
+        }
+      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to load');
       restLoadingRef.current = false;
     } finally {
       setLoading(false);
     }
-  }, [instruments, nubraInstruments, connectSpot, connectNubraWs, startPcrPoller]);
+  }, [instruments, nubraInstruments, connectSpot, connectNubraWs, startPcrPoller, zoomToEnd]);
 
   // ── Load more spot candles when user scrolls left ─────────────────────────
   const loadMoreSpot = useCallback(async () => {

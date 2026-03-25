@@ -220,12 +220,13 @@
 /* ── Content menu ─────────────────────────────────────────────────────────── */
 .menuWrap {
   position: relative;
+  z-index: 100000;
 }
 .menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  z-index: 999;
+  z-index: 100000;
   background: #1A1E2B;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
