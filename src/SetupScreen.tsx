@@ -396,17 +396,25 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
               </div>
             ) : nuTotpKey && upKey && upPhone ? (
               /* ── Creds saved, TOTP available — auto login ── */
-              <Btn loading={loading} onClick={() => {
-                const creds: UserCreds = {
-                  upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
-                  nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
-                };
-                runAutoLogin(creds);
-              }}>
-                Generate Auth Token →
-              </Btn>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Btn loading={loading} onClick={() => {
+                  const creds: UserCreds = {
+                    upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
+                    nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
+                  };
+                  runAutoLogin(creds);
+                }}>
+                  Generate Auth Token →
+                </Btn>
+                <button onClick={() => {
+                  setNuTotpKey('');
+                  localStorage.removeItem('nubra_totp_secret');
+                }} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.45)', cursor: 'pointer' }}>
+                  Re-setup Nubra TOTP
+                </button>
+              </div>
             ) : (
-              /* ── First time: send OTP to get TOTP secret ── */
+              /* ── First time / re-setup: send OTP to get TOTP secret ── */
               <Btn loading={loading} onClick={handleSendOtp}>Send Nubra OTP →</Btn>
             )}
             <button onClick={onReady} style={{ display: 'block', width: '100%', marginTop: 8, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}>Skip for now</button>

@@ -2152,6 +2152,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           if (liveVolRef.current) try { volSeriesRef.current.update(liveVolRef.current); } catch { /* ignore */ }
           const zoomData = liveBarRef.current ? [...cData, liveBarRef.current] : cData;
           zoomToEnd(zoomData);
+          // Second rAF: chart has painted — reset Y axis so it fits visible candles (same as double-click)
+          requestAnimationFrame(() => {
+            try {
+              const ps = chartRef.current?.priceScale('right');
+              ps?.applyOptions({ autoScale: false });
+              ps?.applyOptions({ autoScale: true });
+            } catch { /* ignore */ }
+          });
           setRestLoadedKey(instrument.instrument_key);
           setTimeout(() => { if (oiShowLiveRef.current) redrawOI(); }, 120);
           // On initial load, hold skeleton for MIN_SKELETON_MS so everything settles before revealing

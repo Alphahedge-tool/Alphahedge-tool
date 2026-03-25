@@ -200,28 +200,16 @@ const nubraAuthAgent = new Agent({
   pipelining: 1,
 });
 
-// Generate a TOTP code from a base32 secret (RFC 6238, 6-digit, 30s step)
+// Generate a TOTP code for Nubra (RFC 6238, 6-digit, 30s step)
 function generateTOTP(secret: string, windowOffset = 0): string {
-  const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const c of secret.toUpperCase().replace(/=+$/, '')) {
-    const val = base32Chars.indexOf(c);
-    if (val === -1) continue;
-    bits += val.toString(2).padStart(5, '0');
-  }
-  const keyBytes = new Uint8Array(Math.floor(bits.length / 8));
-  for (let i = 0; i < keyBytes.length; i++) {
-    keyBytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
-  }
-
+  const key     = base32Decode(secret);
   const counter = Math.floor(Date.now() / 1000 / 30) + windowOffset;
-  const counterBuf = Buffer.alloc(8);
-  counterBuf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
-  counterBuf.writeUInt32BE(counter >>> 0, 4);
-
-  const hmac = createHmac('sha1', Buffer.from(keyBytes)).update(counterBuf).digest();
+  const buf     = Buffer.alloc(8);
+  buf.writeUInt32BE(Math.floor(counter / 0x1_0000_0000), 0);
+  buf.writeUInt32BE(counter >>> 0, 4);
+  const hmac   = createHmac('sha1', key).update(buf).digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
-  const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset + 1] << 16 | hmac[offset + 2] << 8 | hmac[offset + 3]) % 1_000_000;
+  const code   = ((hmac[offset] & 0x7f) << 24 | hmac[offset + 1] << 16 | hmac[offset + 2] << 8 | hmac[offset + 3]) % 1_000_000;
   return code.toString().padStart(6, '0');
 }
 
@@ -362,18 +350,25 @@ app.post('/api/nubra-setup-totp', async (req, reply) => {
     }
 
     // 5. Enable TOTP using the freshly generated secret
-    const totpCode = generateTOTP(secretKey);
-    const r4 = await fetch(`${NUBRA_API}/totp/enable`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionToken}`,
-        'x-device-id': deviceId,
-      },
-      body: JSON.stringify({ mpin, totp: totpCode }),
-      dispatcher: nubraAuthAgent,
-    } as any);
-    const d4 = await safeJson(r4, 'totp/enable');
+    // Try current window then ±1 to handle clock skew; send as integer (Nubra requires uint32)
+    let r4: any = null;
+    let d4: any = null;
+    for (const wo of [0, -1, 1]) {
+      const totpStr = generateTOTP(secretKey, wo);
+      console.log(`[nubra setup-totp] totp/enable offset=${wo} totp=${totpStr}`);
+      r4 = await fetch(`${NUBRA_API}/totp/enable`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`,
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ mpin, totp: totpStr }),
+        dispatcher: nubraAuthAgent,
+      } as any);
+      d4 = await safeJson(r4, 'totp/enable');
+      if (r4.ok) break;
+    }
     if (!r4.ok) {
       return reply.status(r4.status || 502).send({ error: 'Failed to enable TOTP', step: 4, detail: d4 });
     }
