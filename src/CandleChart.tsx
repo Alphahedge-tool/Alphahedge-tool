@@ -1399,6 +1399,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const [loading, setLoading] = useState(false);
   const [restLoadedKey, setRestLoadedKey] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false); // drives HIST spinner — set via rAF to avoid scroll jank
+  const [showGoLatest, setShowGoLatest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wsLive, setWsLive] = useState(false);
   const [optionChainOpenInternal, setOptionChainOpenInternal] = useState(false);
@@ -2515,12 +2516,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           allCandlesRef.current = [...older, ...allCandlesRef.current];
           allVolRef.current = [...olderVol, ...allVolRef.current];
 
-          // Snapshot logical range BEFORE setData so we can restore it exactly
+          // Snapshot logical range BEFORE setData to restore viewport exactly
           const rangeBefore = ts?.getVisibleLogicalRange();
-
-          // Disable autoScale during prepend to prevent Y-axis jump
-          const ps = chartRef.current?.priceScale('right');
-          ps?.applyOptions({ autoScale: false });
 
           candleSeriesRef.current!.setData(allCandlesRef.current);
           volSeriesRef.current!.setData(allVolRef.current);
@@ -2535,20 +2532,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             try { volSeriesRef.current!.update(liveVolRef.current); } catch { /* ignore */ }
           }
 
-          // Restore exact visible range shifted by prepended bars — no flicker
+          // Restore viewport shifted by prepended bars — prevents flicker/jump
           if (ts && rangeBefore) {
             programmaticScrollRef.current = true;
             ts.setVisibleLogicalRange({
               from: rangeBefore.from + uniqueOlder.length,
               to:   rangeBefore.to   + uniqueOlder.length,
             });
-            requestAnimationFrame(() => {
-              programmaticScrollRef.current = false;
-              // Re-enable autoScale after paint so Y fits visible bars
-              ps?.applyOptions({ autoScale: true });
-            });
-          } else {
-            requestAnimationFrame(() => { ps?.applyOptions({ autoScale: true }); });
+            requestAnimationFrame(() => { programmaticScrollRef.current = false; });
           }
         }
       }
@@ -2572,6 +2563,11 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
     const handler = (range: LogicalRange | null) => {
       if (!range) return;
+      // Show "go to latest" button when user has scrolled left (barsAfter > 5)
+      if (!programmaticScrollRef.current) {
+        const barsInfo = candleSeriesRef.current?.barsInLogicalRange(range);
+        setShowGoLatest(!!barsInfo && barsInfo.barsAfter > 5);
+      }
       if (loadLockRef.current || !prevTimestampRef.current) return;
       const barsInfo = candleSeriesRef.current?.barsInLogicalRange(range);
       if (barsInfo && barsInfo.barsBefore < 20) {
@@ -2838,6 +2834,36 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             style={{ pointerEvents: drawing.isPassive ? 'none' : 'all', cursor: drawing.cursorStyle }}
           />
 
+          {/* Go to latest button — bottom right, visible when scrolled away from right edge */}
+          <div
+            onClick={() => {
+              programmaticScrollRef.current = true;
+              chartRef.current?.timeScale().scrollToRealTime();
+              requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+              setShowGoLatest(false);
+            }}
+            style={{
+              position: 'absolute', bottom: 36, right: 12,
+              width: 28, height: 28, borderRadius: 6,
+              background: 'rgba(15,16,32,0.75)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              opacity: showGoLatest ? 1 : 0,
+              pointerEvents: showGoLatest ? 'all' : 'none',
+              transition: 'opacity 0.18s ease',
+              zIndex: 20,
+            }}
+            title="Go to latest"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M4.5 2L9.5 7L4.5 12" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M8.5 2L13.5 7L8.5 12" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.45"/>
+            </svg>
+          </div>
 
           {/* OHLC crosshair header overlay */}
           {(() => {
