@@ -797,6 +797,12 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [showDelta,   setShowDelta]   = useState(false);
   const [showIv,      setShowIv]      = useState(false);
   const [showAtmIv,   setShowAtmIv]   = useState(false);
+  // 'all' = show total + all per-underlying, 'total' = only total baseline, or a symbol string = only that underlying's MTM
+  const [mtmView, setMtmView] = useState<'all' | 'total' | string>('all');
+  const mtmViewRef  = useRef(mtmView);
+  const showMtmRef  = useRef(showMtm);
+  mtmViewRef.current  = mtmView;
+  showMtmRef.current  = showMtm;
   const showDeltaRef    = useRef(showDelta);
   const showIvRef       = useRef(showIv);
   const showAtmIvRef    = useRef(showAtmIv);
@@ -1128,7 +1134,9 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
     // MTM baseline series — pane 0, right axis (separate scale id so it doesn't mix with option prices)
     if (!ss.mtm) {
+      const mtmVisible = showMtmRef.current && (mtmViewRef.current === 'all' || mtmViewRef.current === 'total');
       ss.mtm = chart.addSeries(BaselineSeries, {
+        visible: mtmVisible,
         title: 'MTM',
         baseValue: { type: 'price', price: 0 },
         topLineColor:    'rgba(38,166,154,0.9)',
@@ -1163,11 +1171,13 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       uniqueSyms.forEach((sym, idx) => {
         if (!ss.mtmPerUnderlying.has(sym)) {
           const color = MTM_PER_COLORS[idx % MTM_PER_COLORS.length];
+          const perVisible = showMtmRef.current && (mtmViewRef.current === 'all' || mtmViewRef.current === sym);
           const s = chart.addSeries(LineSeries, {
             color, lineWidth: 2 as 2,
             title: `MTM ${sym}`,
             priceScaleId: 'right',
             lineStyle: 0, // solid
+            visible: perVisible,
             priceFormat: {
               type: 'custom',
               minMove: 0.01,
@@ -2147,9 +2157,17 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
   useEffect(() => {
     const ss = seriesRef.current;
-    ss.mtm?.applyOptions({ visible: showMtm });
-    for (const s of ss.mtmPerUnderlying.values()) s.applyOptions({ visible: showMtm });
-  }, [showMtm]);
+    if (!showMtm) {
+      ss.mtm?.applyOptions({ visible: false });
+      for (const s of ss.mtmPerUnderlying.values()) s.applyOptions({ visible: false });
+      return;
+    }
+    // mtmView: 'all' = total + all per-underlying, 'total' = only total, sym = only that underlying
+    ss.mtm?.applyOptions({ visible: mtmView === 'all' || mtmView === 'total' });
+    for (const [sym, s] of ss.mtmPerUnderlying) {
+      s.applyOptions({ visible: mtmView === 'all' || mtmView === sym });
+    }
+  }, [showMtm, mtmView]);
 
   useEffect(() => {
     const ss = seriesRef.current;
@@ -2499,7 +2517,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
             {([
               { key: 'spot',    label: 'Spot',    color: UNDERLYING_COLOR,  on: showSpot,    set: setShowSpot },
               { key: 'options', label: 'Options', color: '#2ebd85',         on: showOptions, set: setShowOptions },
-              { key: 'mtm',     label: 'MTM',     color: '#26a69a',         on: showMtm,     set: setShowMtm },
               { key: 'delta',   label: 'Delta',   color: DELTA_COLORS[0],  on: showDelta,   set: setShowDelta },
               { key: 'iv',      label: 'IV',      color: IV_COLORS[0],     on: showIv,      set: setShowIv },
               { key: 'atm-iv',  label: 'ATM IV',  color: ATM_IV_COLOR,     on: showAtmIv,   set: setShowAtmIv },
@@ -2521,6 +2538,65 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                 {label}
               </button>
             ))}
+            {/* MTM dropdown */}
+            {(() => {
+              const uniqueSyms = [...new Set(uniqueLegs.map(l => l.symbol))];
+              const mtmOptions: { value: string; label: string }[] = [
+                { value: 'off',   label: 'Off' },
+                { value: 'all',   label: 'All' },
+                { value: 'total', label: 'Total' },
+                ...uniqueSyms.map(sym => ({ value: sym, label: sym })),
+              ];
+              const currentLabel = !showMtm ? 'Off' : (mtmOptions.find(o => o.value === mtmView)?.label ?? mtmView);
+              return (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <select
+                    value={!showMtm ? 'off' : mtmView}
+                    onChange={e => {
+                      const v = e.target.value;
+                      if (v === 'off') { setShowMtm(false); }
+                      else { setShowMtm(true); setMtmView(v); }
+                    }}
+                    style={{
+                      appearance: 'none',
+                      display: 'flex', alignItems: 'center',
+                      padding: '7px 28px 7px 10px', borderRadius: 999, cursor: 'pointer',
+                      fontSize: 12, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.03em',
+                      border: `1px solid ${showMtm ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)'}`,
+                      background: showMtm
+                        ? 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)'
+                        : 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
+                      boxShadow: showMtm
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 2px 8px rgba(0,0,0,0.25)'
+                        : 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                      color: 'transparent',
+                      outline: 'none',
+                      minWidth: showMtm ? 90 : 70,
+                    }}
+                  >
+                    {mtmOptions.map(opt => (
+                      <option key={opt.value} value={opt.value} style={{ background: '#1a1a2e', color: '#E2E8F0' }}>{opt.label}</option>
+                    ))}
+                  </select>
+                  {/* visible label overlay */}
+                  <span style={{
+                    position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 12, fontWeight: 600, color: showMtm ? '#E2E8F0' : '#9CA3AF',
+                    pointerEvents: 'none', letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                  }}>
+                    <span style={{ color: showMtm ? '#26a69a' : '#525866', fontWeight: 700 }}>MTM</span>
+                    {showMtm ? <span style={{ color: '#525866' }}> · </span> : null}
+                    {showMtm ? currentLabel : null}
+                  </span>
+                  {/* chevron */}
+                  <svg style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 3.5L5 6.5L8 3.5" stroke={showMtm ? '#E2E8F0' : '#525866'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              );
+            })()}
             <div style={{ flex: 1 }} />
             {/* Positions button — always visible when legs exist */}
             <button

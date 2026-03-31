@@ -2139,7 +2139,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             const snapshot = wsManager.get(instrument.instrument_key);
             const ltp = (snapshot?.ltp ?? 0) > 0 ? snapshot!.ltp : lastClose;
             liveBarRef.current = {
-              time: wallBarSec as unknown as typeof liveBarRef.current.time,
+              time: wallBarSec as unknown as Time,
               open: ltp, high: ltp, low: ltp, close: ltp,
             };
           } else {
@@ -2515,6 +2515,13 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           allCandlesRef.current = [...older, ...allCandlesRef.current];
           allVolRef.current = [...olderVol, ...allVolRef.current];
 
+          // Snapshot logical range BEFORE setData so we can restore it exactly
+          const rangeBefore = ts?.getVisibleLogicalRange();
+
+          // Disable autoScale during prepend to prevent Y-axis jump
+          const ps = chartRef.current?.priceScale('right');
+          ps?.applyOptions({ autoScale: false });
+
           candleSeriesRef.current!.setData(allCandlesRef.current);
           volSeriesRef.current!.setData(allVolRef.current);
           if (vwapSeriesRef.current) updateVwapData();
@@ -2528,11 +2535,20 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             try { volSeriesRef.current!.update(liveVolRef.current); } catch { /* ignore */ }
           }
 
-          // Anchor right edge after prepend — scrollToPosition is cheap, no layout recalc
-          if (ts && logicalRange) {
+          // Restore exact visible range shifted by prepended bars — no flicker
+          if (ts && rangeBefore) {
             programmaticScrollRef.current = true;
-            ts.scrollToPosition(logicalRange.to + uniqueOlder.length - (ts.getVisibleLogicalRange()?.to ?? 0), false);
-            requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+            ts.setVisibleLogicalRange({
+              from: rangeBefore.from + uniqueOlder.length,
+              to:   rangeBefore.to   + uniqueOlder.length,
+            });
+            requestAnimationFrame(() => {
+              programmaticScrollRef.current = false;
+              // Re-enable autoScale after paint so Y fits visible bars
+              ps?.applyOptions({ autoScale: true });
+            });
+          } else {
+            requestAnimationFrame(() => { ps?.applyOptions({ autoScale: true }); });
           }
         }
       }

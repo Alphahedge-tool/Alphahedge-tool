@@ -951,7 +951,7 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
         if (mySession !== sessionRef.current) return;
         if (ivData.length) {
           // Merge IV data with live bar — drop any REST point that overlaps live bar time
-          const liveTime = liveBarRef.current ? Number(liveBarRef.current.time) : 0;
+          const liveTime = liveBarRef.current ? Number((liveBarRef.current as LineData).time) : 0;
           const filtered = liveTime > 0 ? sortDedup(ivData).filter(p => Number(p.time) < liveTime) : sortDedup(ivData);
           ivSeriesRef.current?.setData(filtered);
           // Re-apply live IV bar on top so there's no gap
@@ -1011,7 +1011,6 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
     loadLockRef.current = true;
 
     const ts = chartRef.current?.timeScale();
-    const logicalRange = ts?.getVisibleLogicalRange();
 
     try {
       const { candles, prevTimestamp } = await fetchRawCandles(
@@ -1029,18 +1028,27 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
         if (unique.length > 0) {
           const older = candlesToCandleData(unique);
           allSpotRef.current = [...older, ...allSpotRef.current];
+
+          // Snapshot range BEFORE setData to restore exactly — no flicker
+          const rangeBefore = ts?.getVisibleLogicalRange();
+          const ps = chartRef.current?.priceScale('right');
+          ps?.applyOptions({ autoScale: false });
+
           spotSeriesRef.current.setData(allSpotRef.current);
+
           // Re-apply live bar on top
           if (liveBarRef.current) {
             try { spotSeriesRef.current.update(liveBarRef.current); } catch { /**/ }
           }
-          // Anchor right edge after prepend
-          if (ts && logicalRange) {
-            ts.scrollToPosition(
-              logicalRange.to + unique.length - (ts.getVisibleLogicalRange()?.to ?? 0),
-              false,
-            );
+
+          // Restore viewport shifted by prepended bars — zero drift, no flicker
+          if (ts && rangeBefore) {
+            ts.setVisibleLogicalRange({
+              from: rangeBefore.from + unique.length,
+              to:   rangeBefore.to   + unique.length,
+            });
           }
+          requestAnimationFrame(() => { ps?.applyOptions({ autoScale: true }); });
         }
       }
     } catch { /**/ } finally {

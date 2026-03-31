@@ -426,7 +426,50 @@ app.post('/api/nubra-login', async (req, reply) => {
       if ((res.status === 200 || res.status === 201) && authToken) break;
     }
 
+    const totpNotEnabled =
+      step1Data?.detail?.error?.includes('not enabled') ||
+      step1Data?.error?.includes('not enabled') ||
+      JSON.stringify(step1Data ?? '').toLowerCase().includes('not enabled');
+
     if (!step1 || (step1.status !== 200 && step1.status !== 201) || !authToken) {
+      // ── TOTP not enabled: fall back to OTP login → MPIN → re-enable TOTP ──
+      if (totpNotEnabled) {
+        console.log('[nubra-login] TOTP not enabled — falling back to OTP + MPIN login, then re-enabling TOTP');
+        try {
+          // 1. sendphoneotp (skip_totp:false) → temp_token
+          const otp1Res = await fetch(`${NUBRA_API}/sendphoneotp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, skip_totp: false }),
+            dispatcher: nubraAuthAgent,
+          } as any);
+          const otp1Data = await otp1Res.json() as any;
+          console.log('[nubra-login fallback] sendphoneotp step1', otp1Res.status, JSON.stringify(otp1Data).slice(0, 200));
+          if (!otp1Data.temp_token) throw new Error('sendphoneotp step1 failed: ' + JSON.stringify(otp1Data));
+
+          // 2. sendphoneotp (skip_totp:true, x-temp-token) → new temp_token (forces SMS OTP)
+          const otp2Res = await fetch(`${NUBRA_API}/sendphoneotp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-temp-token': otp1Data.temp_token },
+            body: JSON.stringify({ phone, skip_totp: true }),
+            dispatcher: nubraAuthAgent,
+          } as any);
+          const otp2Data = await otp2Res.json() as any;
+          console.log('[nubra-login fallback] sendphoneotp step2', otp2Res.status, JSON.stringify(otp2Data).slice(0, 200));
+          const tempToken = otp2Data.temp_token ?? otp1Data.temp_token;
+
+          // Return 202 so frontend knows to ask user for OTP
+          return reply.status(202).send({
+            error: 'totp_not_enabled',
+            temp_token: tempToken,
+            message: 'TOTP not enabled. OTP sent to phone — enter OTP to re-enable TOTP automatically.',
+          });
+        } catch (fallbackErr: any) {
+          console.error('[nubra-login] OTP fallback failed', fallbackErr.message);
+          return reply.status(502).send({ error: 'TOTP not enabled and OTP fallback failed: ' + fallbackErr.message });
+        }
+      }
+
       return reply.status(step1?.status ?? 502).send({
         error: 'TOTP login failed',
         detail: step1Data,
@@ -466,6 +509,97 @@ app.post('/api/nubra-login', async (req, reply) => {
       phone: step2Data.phone ?? step2Data.data?.phone,
     });
   } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// ── OTP verify + re-enable TOTP (called when totp_not_enabled fallback triggered) ──
+// Flow: verifyphoneotp → verifypin → disable old TOTP → generate-secret → enable TOTP
+app.post('/api/nubra-otp-reenable-totp', async (req, reply) => {
+  const { phone, otp, mpin, temp_token, totp_secret } = req.body as {
+    phone: string; otp: string; mpin: string; temp_token: string; totp_secret: string;
+  };
+  if (!phone || !otp || !mpin || !temp_token || !totp_secret) {
+    return reply.status(400).send({ error: 'phone, otp, mpin, temp_token, and totp_secret are required' });
+  }
+  const deviceId = getDeviceId();
+  try {
+    // 1. Verify OTP → auth_token
+    const r1 = await fetch(`${NUBRA_API}/verifyphoneotp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-temp-token': temp_token, 'x-device-id': deviceId },
+      body: JSON.stringify({ phone, otp }),
+      dispatcher: nubraAuthAgent,
+    } as any);
+    const d1 = await r1.json() as any;
+    console.log('[nubra-otp-reenable] verifyphoneotp', r1.status, JSON.stringify(d1).slice(0, 200));
+    const authToken = d1.auth_token ?? d1.data?.auth_token;
+    if ((r1.status !== 200 && r1.status !== 201) || !authToken) {
+      return reply.status(r1.status || 502).send({ error: 'OTP verification failed', detail: d1 });
+    }
+
+    // 2. Verify MPIN → session_token
+    const r2 = await fetch(`${NUBRA_API}/verifypin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'x-device-id': deviceId },
+      body: JSON.stringify({ pin: mpin }),
+      dispatcher: nubraAuthAgent,
+    } as any);
+    const d2 = await r2.json() as any;
+    console.log('[nubra-otp-reenable] verifypin', r2.status, JSON.stringify(d2).slice(0, 200));
+    const sessionToken = d2.session_token ?? d2.data?.session_token ?? d2.data?.token;
+    if (!r2.ok || !sessionToken) {
+      return reply.status(r2.status || 502).send({ error: 'MPIN verification failed', detail: d2 });
+    }
+
+    // 3. Disable existing TOTP (ignore failure — may not be enabled)
+    await fetch(`${NUBRA_API}/totp/disable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}`, 'x-device-id': deviceId },
+      body: JSON.stringify({ mpin }),
+      dispatcher: nubraAuthAgent,
+    } as any).catch(() => {});
+
+    // 4. Generate fresh TOTP secret
+    const r3 = await fetch(`${NUBRA_API}/totp/generate-secret`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'x-device-id': deviceId },
+      dispatcher: nubraAuthAgent,
+    } as any);
+    const d3 = await r3.json() as any;
+    console.log('[nubra-otp-reenable] generate-secret', r3.status, JSON.stringify(d3).slice(0, 200));
+    const secretKey = d3.data?.secret_key ?? d3.secret_key;
+    if (!r3.ok || !secretKey) {
+      return reply.status(r3.status || 502).send({ error: 'Failed to generate TOTP secret', detail: d3 });
+    }
+
+    // 5. Enable TOTP with ±1 window for clock skew
+    let r4: any = null; let d4: any = null;
+    for (const wo of [0, -1, 1]) {
+      const totpStr = generateTOTP(secretKey, wo);
+      console.log(`[nubra-otp-reenable] totp/enable offset=${wo} totp=${totpStr}`);
+      r4 = await fetch(`${NUBRA_API}/totp/enable`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}`, 'x-device-id': deviceId },
+        body: JSON.stringify({ mpin, totp: totpStr }),
+        dispatcher: nubraAuthAgent,
+      } as any);
+      d4 = await r4.json() as any;
+      if (r4.ok) break;
+    }
+    if (!r4.ok) {
+      return reply.status(r4.status || 502).send({ error: 'Failed to enable TOTP', detail: d4 });
+    }
+
+    console.log('[nubra-otp-reenable] TOTP re-enabled successfully, secret_key updated');
+    return reply.send({
+      session_token: sessionToken,
+      auth_token: authToken,
+      secret_key: secretKey,
+      device_id: deviceId,
+    });
+  } catch (e: any) {
+    console.error('[nubra-otp-reenable error]', e.message);
     return reply.status(502).send({ error: e.message });
   }
 });

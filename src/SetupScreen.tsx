@@ -11,7 +11,8 @@ interface Props {
 type Phase =
   | 'checking'       // reading IDB
   | 'needs-setup'    // first time — ask credentials
-  | 'otp-sent'       // Nubra OTP sent
+  | 'otp-sent'       // Nubra OTP sent (first-time setup)
+  | 'reenable-otp'   // TOTP not enabled — OTP sent, need re-enable
   | 'logging-in'     // auto-login running
   | 'loading-instr'  // instruments loading
   | 'error';
@@ -86,6 +87,13 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
           }),
         });
         const nuData = await nuRes.json();
+        // 202 = TOTP not enabled — server sent OTP, need user to enter it
+        if (nuRes.status === 202 && nuData.error === 'totp_not_enabled') {
+          setTempToken(nuData.temp_token);
+          setPhase('reenable-otp');
+          setLoading(false);
+          return;
+        }
         if (!nuRes.ok || !nuData.session_token) {
           setErr(`Nubra: ${nuData.error ?? nuData.detail?.message ?? 'Login failed'}`);
           setPhase('error'); return;
@@ -282,6 +290,53 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     } catch (e: any) { setErr(e.message); setLoading(false); }
   }, [otp, nuPhone, nuMpin, tempToken, upPhone, upPin, upTotp, upKey, upSecret, sub, runAutoLogin, regenMode]);
 
+  // ── Re-enable TOTP: verify OTP → MPIN → generate+enable fresh TOTP secret ──
+  const handleReenableTotp = useCallback(async () => {
+    if (!otp) { setErr('Enter OTP'); return; }
+    setLoading(true); setErr('');
+    try {
+      const res = await fetch('/api/nubra-otp-reenable-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: nuPhone, otp, mpin: nuMpin, temp_token: tempToken, totp_secret: nuTotpKey }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.session_token) {
+        setErr(data.error ?? 'Re-enable TOTP failed');
+        setLoading(false); return;
+      }
+      // Update stored TOTP secret if server generated a new one
+      const newSecret = data.secret_key ?? nuTotpKey;
+      setNuTotpKey(newSecret);
+      localStorage.setItem('nubra_totp_secret', newSecret);
+      const rawCookie = `authToken=${data.auth_token}; sessionToken=${data.session_token}`;
+      localStorage.setItem('nubra_session_token', data.session_token);
+      localStorage.setItem('nubra_auth_token',    data.auth_token);
+      localStorage.setItem('nubra_raw_cookie',    rawCookie);
+      if (data.device_id) localStorage.setItem('nubra_device_id', data.device_id);
+      localStorage.setItem('nubra_login_date', todayIST());
+      const creds: UserCreds = {
+        upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
+        nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: newSecret },
+      };
+      await saveUserCreds(sub, creds).catch(() => {});
+      // Now do Upstox login and enter app
+      setMsg('TOTP re-enabled! Connecting Upstox…');
+      setPhase('logging-in');
+      const upRes = await fetch('/api/upstox-login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...creds.upstox, force: true }),
+      });
+      const upData = await upRes.json();
+      if (upData.access_token) {
+        localStorage.setItem('upstox_token', upData.access_token);
+      }
+      setMsg('Loading instruments…');
+      setPhase('loading-instr');
+    } catch (e: any) { setErr(e.message); }
+    setLoading(false);
+  }, [otp, nuPhone, nuMpin, tempToken, nuTotpKey, upPhone, upPin, upTotp, upKey, upSecret, sub]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const progressPct = () => {
     switch (instrStatus.phase) {
       case 'checking':      return 5;
@@ -431,6 +486,20 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
             {err && <p style={{ fontSize: 12, color: '#f87171', margin: '6px 0 10px' }}>{err}</p>}
             <Btn loading={loading} onClick={handleVerifyOtp}>Verify &amp; Connect →</Btn>
             <button onClick={() => { setPhase('needs-setup'); setErr(''); }} style={{ display: 'block', width: '100%', marginTop: 8, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.25)', cursor: 'pointer' }}>← Back</button>
+          </div>
+        )}
+
+        {/* TOTP not enabled — re-enable via OTP */}
+        {phase === 'reenable-otp' && (
+          <div style={{ background: '#0f1020', border: '1px solid rgba(255,165,0,0.2)', borderRadius: 12, padding: '20px 16px' }}>
+            <p style={{ fontSize: 13, color: '#f59e0b', marginBottom: 6, textAlign: 'center', fontWeight: 600 }}>TOTP Not Enabled</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 16, textAlign: 'center', lineHeight: 1.6 }}>
+              An OTP has been sent to <strong style={{ color: '#D1D4DC' }}>{nuPhone}</strong>.<br/>Enter it to re-enable TOTP automatically.
+            </p>
+            <Field label="OTP" value={otp} onChange={setOtp} placeholder="6-digit OTP" autoFocus />
+            {err && <p style={{ fontSize: 12, color: '#f87171', margin: '6px 0 10px' }}>{err}</p>}
+            <Btn loading={loading} onClick={handleReenableTotp}>Verify &amp; Re-enable TOTP →</Btn>
+            <button onClick={() => { setPhase('needs-setup'); setErr(''); setOtp(''); }} style={{ display: 'block', width: '100%', marginTop: 8, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.25)', cursor: 'pointer' }}>← Back</button>
           </div>
         )}
       </div>
