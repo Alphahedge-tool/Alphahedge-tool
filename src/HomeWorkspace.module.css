@@ -12,6 +12,53 @@
   will-change: transform;
 }
 
+/* ── Layout switcher ──────────────────────────────────────────────────────── */
+.layoutSwitchBtn {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(20,22,28,0.92);
+  color: rgba(200,205,215,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.14s;
+  backdrop-filter: blur(8px);
+}
+.layoutSwitchBtn:hover {
+  color: #7eb8ff;
+  border-color: rgba(79,142,247,0.5);
+  background: rgba(79,142,247,0.12);
+}
+.layoutPickerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  background: rgba(0,0,0,0.45);
+}
+.layoutPickerOverlay {
+  position: fixed;
+  bottom: 60px;
+  right: 16px;
+  z-index: 1002;
+  width: 560px;
+  height: 480px;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07);
+  animation: layoutPickerIn 0.18s cubic-bezier(0.22,1,0.36,1);
+}
+@keyframes layoutPickerIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
 /* ── Sidebar cell — slides in/out at 60fps via width transition ────────────── */
 .sidebarCell {
   display: flex;
@@ -540,6 +587,36 @@
   background: rgba(79,142,247,0.1);
   border-color: rgba(79,142,247,0.4);
   transform: translateY(-1px);
+}
+.templateCardApplySave {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(79,142,247,0.35);
+  background: rgba(16,20,30,0.9);
+  color: #7eb8ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  transition: all 0.12s;
+  opacity: 0;
+  pointer-events: none;
+}
+.templateCardWrap:hover .templateCardApplySave {
+  opacity: 1;
+  pointer-events: auto;
+}
+.templateCardApplySave:hover {
+  background: rgba(79,142,247,0.22);
+  border-color: rgba(79,142,247,0.7);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(79,142,247,0.4);
 }
 .templateCardSave {
   position: absolute;

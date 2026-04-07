@@ -7,6 +7,7 @@ import type { NubraInstrument } from './useNubraInstruments';
 import OptionChain from './OptionChain';
 import BasketOrder, { type BasketLeg, DomSidePanel } from './BasketOrder';
 import StrategyChart from './StrategyChart';
+import PayoffAnalyzer from './PayoffAnalyzer';
 import LoadingScreen from './LoadingScreen';
 import StraddleChart from './StraddleChart';
 import OIProfileView from './OIProfileView';
@@ -62,7 +63,7 @@ function filterByTab(instruments: Instrument[], tab: Tab): Instrument[] {
   if (tab === 'Cash') return instruments.filter(i => i.instrument_type === 'EQ');
   if (tab === 'F&O') return instruments.filter(i => i.segment === 'NSE_FO' || i.segment === 'BSE_FO');
   if (tab === 'Currency') return instruments.filter(i => i.segment === 'NCD_FO' || i.asset_type === 'CUR');
-  if (tab === 'Commodity') return instruments.filter(i => i.asset_type === 'COM' || i.segment?.includes('MCX') || i.segment === 'NSE_COM' || i.exchange === 'MCX');
+  if (tab === 'Commodity') return instruments.filter(i => i.asset_type === 'COM' || i.segment?.includes('MCX') || i.segment === 'NSE_COM' || i.exchange === 'MCX' || i.exchange === 'MCX_FO');
   return instruments;
 }
 
@@ -866,6 +867,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const [toastOpen, setToastOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [layoutTheme, setLayoutTheme] = useState<'theme1' | 'theme2'>('theme1');
+  const [rightView, setRightView] = useState<'chart' | 'payoff'>('chart');
+  const [currentSpot, setCurrentSpot] = useState(0);
   const [isHistoricalMode, setIsHistoricalMode] = useState(false);
   isHistoricalModeRef.current = isHistoricalMode;
   const [strategyCount, setStrategyCount] = useState(3);
@@ -1460,6 +1463,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const onLtpUpdate = useCallback((ltpMap: Map<number, { ce: number; pe: number; ceGreeks: Greeks; peGreeks: Greeks }>, spot: number, chainExpiry: string) => {
     ocSpotRef.current = spot;
     if (ocSymbol) spotBySymbolRef.current.set(ocSymbol.toUpperCase(), spot);
+    if (spot > 0) setCurrentSpot(spot);
     // Always store latest OC prices so execute can read current price
     ltpMap.forEach((v, strike) => {
       currentLtpMapRef.current.set(`${chainExpiry}:${strike}`, v);
@@ -1736,7 +1740,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     const sym = resolveNubraSymbol(sel as any);
                     const exch = (sel.exchange ?? 'NSE').replace('_INDEX', '');
                     const nubraAt = (sel as any).nubraAssetType as string ?? '';
-                    if (sel.exchange === 'MCX') {
+                    if (sel.exchange === 'MCX' || sel.exchange === 'MCX_FO') {
                       setMtmQuery(sym); setShowMtmDropdown(false);
                       setOcExpiries([]);
                       setOcSymbol(sym); setOcAssetType('STOCK_FO'); setOcExchange('MCX'); setOcOpen(true);
@@ -1764,7 +1768,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     <div className={mtm.dropdownEmpty}>No results for "{deferredMtmQuery}"</div>
                   ) : mtmRenderResults.map((ins, i) => {
                     const nubraAt = (ins as any).nubraAssetType as string ?? '';
-                    const isMcx = ins.exchange === 'MCX';
+                    const isMcx = ins.exchange === 'MCX' || ins.exchange === 'MCX_FO';
                     const atColor: Record<string, string> = { INDEX_FO: '#818cf8', STOCK_FO: '#60a5fa', STOCKS: '#34d399', ETF: '#f59e0b', INDEX: '#818cf8', MCX: '#f97316' };
                     const atBg: Record<string, string> = { INDEX_FO: 'rgba(129,140,248,0.12)', STOCK_FO: 'rgba(96,165,250,0.10)', STOCKS: 'rgba(52,211,153,0.10)', ETF: 'rgba(245,158,11,0.10)', INDEX: 'rgba(129,140,248,0.12)', MCX: 'rgba(249,115,22,0.12)' };
                     return (
@@ -2132,32 +2136,51 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
         className={mtm.divider}
       />
 
-      {/* Right panel — Strategy Chart */}
-      <div className={mtm.rightPanel}>
-        <StrategyChart
-          legs={legs}
-          ocSymbol={chartSymbol || ocSymbol}
-          ocExchange={chartExchange || ocExchange}
-          instruments={instruments}
-          nubraInstruments={nubraInstruments}
-          nubraIndexes={nubraIndexes}
-          isHistoricalMode={isHistoricalMode}
-          onLtpSnapshot={(snap) => {
-            setLegs(prev => prev.map(leg => {
-              const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
-              const ltp = snap.get(key);
-              return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
-            }));
-            setStrategyLegs(prev => ({
-              ...prev,
-              [activeStrategy]: (prev[activeStrategy] ?? []).map(leg => {
+      {/* Right panel — Strategy Chart / Payoff Analyzer */}
+      <div className={mtm.rightPanel} style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* View switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <button
+            onClick={() => setRightView('chart')}
+            style={{ padding: '6px 12px', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', cursor: 'pointer', color: rightView === 'chart' ? '#d1d4dc' : '#5d6673', borderBottom: `2px solid ${rightView === 'chart' ? '#818cf8' : 'transparent'}`, letterSpacing: '0.03em' }}
+          >MTM Chart</button>
+          <button
+            onClick={() => setRightView('payoff')}
+            style={{ padding: '6px 12px', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', cursor: 'pointer', color: rightView === 'payoff' ? '#d1d4dc' : '#5d6673', borderBottom: `2px solid ${rightView === 'payoff' ? '#818cf8' : 'transparent'}`, letterSpacing: '0.03em' }}
+          >Payoff / Greeks</button>
+        </div>
+        {/* Content */}
+        <div style={{ flex: 1, minHeight: 0, display: rightView === 'chart' ? 'flex' : 'none', flexDirection: 'column' }}>
+          <StrategyChart
+            legs={legs}
+            ocSymbol={chartSymbol || ocSymbol}
+            ocExchange={chartExchange || ocExchange}
+            instruments={instruments}
+            nubraInstruments={nubraInstruments}
+            nubraIndexes={nubraIndexes}
+            isHistoricalMode={isHistoricalMode}
+            onLtpSnapshot={(snap) => {
+              setLegs(prev => prev.map(leg => {
                 const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
                 const ltp = snap.get(key);
                 return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
-              }),
-            }));
-          }}
-        />
+              }));
+              setStrategyLegs(prev => ({
+                ...prev,
+                [activeStrategy]: (prev[activeStrategy] ?? []).map(leg => {
+                  const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+                  const ltp = snap.get(key);
+                  return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
+                }),
+              }));
+            }}
+          />
+        </div>
+        {rightView === 'payoff' && (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <PayoffAnalyzer legs={legs} spot={currentSpot || ocSpotRef.current} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2545,7 +2568,7 @@ export default function App() {
     });
 
     const mcxItems = instruments
-      .filter(ins => ins.exchange === 'MCX')
+      .filter(ins => ins.exchange === 'MCX' || ins.exchange === 'MCX_FO')
       .map(ins => {
         const sym = ins.trading_symbol ?? '';
         const asset = ins.underlying_symbol || sym;
@@ -3252,7 +3275,7 @@ export default function App() {
                       <img src="https://s3-symbol-logo.tradingview.com/source/NSE.svg" alt="NSE" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.85 }} />
                     ) : ins.exchange === 'BSE' ? (
                       <img src="https://s3-symbol-logo.tradingview.com/source/BSE.svg" alt="BSE" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.85 }} />
-                    ) : ins.exchange === 'MCX' ? (
+                    ) : (ins.exchange === 'MCX' || ins.exchange === 'MCX_FO') ? (
                       <img src="https://s3-symbol-logo.tradingview.com/source/MCX.svg" alt="MCX" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.85 }} />
                     ) : (
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#9598A1', letterSpacing: '0.04em' }}>{ins.exchange}</span>

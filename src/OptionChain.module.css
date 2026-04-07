@@ -5,9 +5,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #1d1a17;
-  color: #D1D5DB;
+  background: #131722;
+  color: #d1d4dc;
   position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
 }
 
 /* ── Settings modal ───────────────────────────────────────── */
@@ -22,12 +23,12 @@
   justify-content: center;
 }
 .settingsCard {
-  background: #1f1f1f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e222d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   width: 300px;
   padding: 18px 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
 .settingsHeader {
   display: flex;
@@ -38,18 +39,16 @@
 .settingsTitle {
   font-size: 13px;
   font-weight: 700;
-  color: #E2E8F0;
+  color: #d1d4dc;
 }
 .settingsCloseBtn {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #6b7280;
+  color: #5d6673;
   display: flex;
   padding: 2px;
 }
-
-/* Checkbox row (static parts — background/border are dynamic) */
 .cbCheckbox {
   width: 16px;
   height: 16px;
@@ -60,8 +59,6 @@
   justify-content: center;
   transition: all 0.15s ease;
 }
-
-/* col label — color is dynamic (colVis) */
 .cbLabel {
   font-size: 13px;
   font-weight: 500;
@@ -73,30 +70,76 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0;
   flex-shrink: 0;
-  background: var(--bg-panel);
+  position: relative;
+  height: 36px;
+}
+/* Calls label — left salmon bar */
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(239,83,80,0.18) 0%, transparent 45%);
+  pointer-events: none;
+}
+/* Puts label — right green bar */
+.header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(270deg, rgba(38,166,154,0.18) 0%, transparent 45%);
+  pointer-events: none;
 }
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 0 16px;
+  z-index: 1;
+}
+.headerCallsLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ef5350;
+  letter-spacing: 0.06em;
+}
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  z-index: 1;
+}
+.headerPutsLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #26a69a;
+  letter-spacing: 0.06em;
+}
+.headerCenter {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .headerSymbol {
-  font-size: 18px;
-  font-weight: 800;
-  color: #E2E8F0;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d1d4dc;
+  letter-spacing: 0.03em;
 }
 .headerSpot {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
-  color: #4F8EF7;
-  background: rgba(79, 142, 247, 0.1);
-  padding: 4px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(79, 142, 247, 0.2);
+  color: #2962ff;
+  background: rgba(41,98,255,0.1);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(41,98,255,0.25);
 }
 .headerMcxBadge {
   font-size: 10px;
@@ -107,69 +150,69 @@
   border-radius: 4px;
   border: 1px solid rgba(249, 115, 22, 0.25);
 }
-.headerRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .headerExpLabel {
-  font-size: 13px;
+  font-size: 11px;
+  color: #5d6673;
   font-weight: 600;
-  color: #6B7280;
 }
 .gearBtn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
-  color: #817E7E;
+  color: #5d6673;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  transition: background 0.15s;
+  width: 22px;
+  height: 22px;
+  transition: color 0.15s;
+  z-index: 1;
 }
+.gearBtn:hover { color: #d1d4dc; }
 .closeBtn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
-  color: #9CA3AF;
+  color: #5d6673;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
+  z-index: 1;
 }
+.closeBtn:hover { color: #d1d4dc; }
 
 /* ── Expiry row ───────────────────────────────────────────── */
 .expiryRow {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 6px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   flex-shrink: 0;
-  background: var(--bg-panel);
+  background: #1e222d;
 }
 .expiryRowScrollable {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  gap: 6px;
+  padding: 6px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   flex-shrink: 0;
-  background: var(--bg-panel);
+  background: #1e222d;
   overflow-x: auto;
   scrollbar-width: none;
 }
 .expiryLabel {
   font-size: 11px;
-  color: #6B7280;
-  font-weight: 700;
+  color: #5d6673;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   flex-shrink: 0;
 }
 .expirySelectWrap {
@@ -179,13 +222,13 @@
 .expirySelect {
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #E2E8F0;
+  background: #2a2e39;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  color: #d1d4dc;
   font-size: 12px;
   font-weight: 700;
-  padding: 5px 32px 5px 12px;
+  padding: 4px 28px 4px 10px;
   cursor: pointer;
   outline: none;
   letter-spacing: 0.02em;
@@ -193,11 +236,11 @@
 }
 .expirySelectChevron {
   position: absolute;
-  right: 10px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: #6B7280;
+  color: #5d6673;
 }
 .expiryNoData {
   font-size: 11px;
@@ -206,22 +249,27 @@
 /* MCX expiry pill buttons */
 .expiryBtn {
   padding: 4px 12px;
-  border-radius: 20px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
   border: 1px solid;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.12s;
 }
 .expiryBtnActive {
-  background: rgba(249, 115, 22, 0.15);
-  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249,115,22,0.15);
+  border-color: rgba(249,115,22,0.4);
   color: #f97316;
 }
 .expiryBtnInactive {
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.08);
-  color: #6B7280;
+  border-color: rgba(255,255,255,0.07);
+  color: #5d6673;
+}
+.expiryBtnInactive:hover {
+  border-color: rgba(255,255,255,0.15);
+  color: #d1d4dc;
 }
 
 /* ── Table scroll container ───────────────────────────────── */
@@ -230,9 +278,8 @@
   overflow-y: auto;
   overflow-x: auto;
   scrollbar-width: thin;
-  scrollbar-color: #2a2a2a transparent;
+  scrollbar-color: #2a2e39 transparent;
 }
-/* MCX uses its own virtualized scroll — container must not scroll */
 .tableScrollMcx {
   flex: 1;
   overflow: hidden;
@@ -259,18 +306,18 @@
   align-items: center;
   gap: 4px;
   padding: 5px 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.02);
 }
 .skeletonCell {
   border-radius: 3px;
   height: 10px;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.05);
   animation: skOcPulse 1.3s ease-in-out infinite;
   animation-delay: var(--sk-d, 0s);
   flex-shrink: 0;
 }
 .skeletonStrike {
-  background: rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.08);
   animation-delay: 0s !important;
 }
 @keyframes skOcPulse {
@@ -278,71 +325,214 @@
   50%       { opacity: 1;   }
 }
 .table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 2px;
   table-layout: fixed;
 }
 .thead {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--bg-panel);
+  background: #1e222d;
 }
 
 /* Super-header row */
 .superHeaderRow {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .thCall {
   text-align: center;
-  padding: 10px 0;
-  font-size: 13px;
-  font-weight: 800;
-  color: #e0a800;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ef5350;
   letter-spacing: 0.08em;
-  background: #333333;
+  background: rgba(239,83,80,0.06);
 }
 .thStrike {
   text-align: center;
-  padding: 10px 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: #9CA3AF;
-  background: #333333;
+  padding: 8px 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #cfd5e3;
+  background:
+    linear-gradient(180deg, rgba(26,30,44,0.95) 0%, rgba(13,15,23,0.98) 100%);
+  border-left: 1px solid rgba(125, 137, 176, 0.28);
+  border-right: 1px solid rgba(125, 137, 176, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.55);
 }
 .thPut {
   text-align: center;
-  padding: 10px 0;
-  font-size: 13px;
-  font-weight: 800;
-  color: #818cf8;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #26a69a;
   letter-spacing: 0.08em;
-  background: #333333;
+  background: rgba(38,166,154,0.06);
 }
 
 /* Sub-header row */
 .subHeaderRow {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 /* ── ATM divider row ──────────────────────────────────────── */
 .atmDividerSide {
-  padding: 2px 0;
-  border-top: 1px dashed rgba(224, 168, 0, 0.4);
-  background: rgba(224, 168, 0, 0.03);
+  padding: 1px 0;
+  border-top: 1px solid rgba(41,98,255,0.5);
+  background: rgba(41,98,255,0.04);
 }
 .atmDividerCenter {
   text-align: center;
-  padding: 2px 0;
-  font-size: 11px;
-  font-weight: 800;
-  color: #e0a800;
-  border-top: 1px dashed rgba(224, 168, 0, 0.4);
-  background: rgba(224, 168, 0, 0.03);
+  padding: 1px 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #2962ff;
+  border-top: 1px solid rgba(41,98,255,0.5);
+  background: rgba(41,98,255,0.08);
+  white-space: nowrap;
 }
 
 /* ── Body rows ────────────────────────────────────────────── */
 .dataRow {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: none;
+}
+.dataRow:hover td {
+  filter: brightness(1.08);
+}
+
+.bloomSideCell {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(0,0,0,0.45);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
+}
+.bloomCeCell {
+  background: linear-gradient(180deg, rgba(58,64,103,0.9) 0%, rgba(42,47,84,0.95) 100%);
+}
+.bloomPeCell {
+  background: linear-gradient(180deg, rgba(55,60,96,0.9) 0%, rgba(39,44,76,0.95) 100%);
+}
+.bloomCeItm {
+  background:
+    linear-gradient(90deg, rgba(255,120,120,0.12) 0%, rgba(255,120,120,0.02) 42%, rgba(58,64,103,0.9) 100%),
+    linear-gradient(180deg, rgba(62,69,111,0.95) 0%, rgba(43,49,88,0.98) 100%);
+}
+.bloomPeItm {
+  background:
+    linear-gradient(270deg, rgba(124,255,185,0.14) 0%, rgba(124,255,185,0.02) 42%, rgba(55,60,96,0.9) 100%),
+    linear-gradient(180deg, rgba(59,66,106,0.95) 0%, rgba(40,47,82,0.98) 100%);
+}
+.bloomStrikeCell {
+  background: linear-gradient(180deg, rgba(24,27,37,0.96) 0%, rgba(12,14,21,0.98) 100%);
+  color: #d8deef;
+  border-top: 1px solid rgba(122,137,184,0.34);
+  border-bottom: 1px solid rgba(0,0,0,0.6);
+  border-left: 1px solid rgba(122,137,184,0.24);
+  border-right: 1px solid rgba(122,137,184,0.24);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
+}
+.bloomStrikeCellAtm {
+  background:
+    linear-gradient(180deg, rgba(35,52,88,0.95) 0%, rgba(18,31,59,0.98) 100%);
+  border-top-color: rgba(89, 136, 255, 0.66);
+  border-left-color: rgba(89, 136, 255, 0.45);
+  border-right-color: rgba(89, 136, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(102, 162, 255, 0.22), 0 0 18px rgba(52, 117, 255, 0.22);
+}
+.bloomStrikeValue {
+  font-weight: 800;
+  color: #d8deef;
+  letter-spacing: 0.02em;
+}
+.bloomStrikeValueAtm {
+  color: #79b2ff;
+  text-shadow: 0 0 10px rgba(86, 146, 255, 0.35);
+}
+
+/* MCX-specific body styling (separate look from NSE chain) */
+.mcxRowShell {
+  border: 1px solid rgba(62, 77, 105, 0.32);
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0f1626 0%, #0c1321 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.mcxRowShellAtm {
+  border-color: rgba(90, 147, 255, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(90, 147, 255, 0.24);
+}
+.mcxCellBase {
+  border-top: none;
+  border-bottom: none;
+  font-variant-numeric: tabular-nums;
+}
+.mcxCeCell {
+  background: linear-gradient(180deg, rgba(39,36,56,0.82) 0%, rgba(28,25,44,0.92) 100%);
+}
+.mcxCeItm {
+  background:
+    linear-gradient(90deg, rgba(248,112,124,0.14) 0%, rgba(248,112,124,0.03) 34%, rgba(39,36,56,0.82) 100%),
+    linear-gradient(180deg, rgba(44,39,63,0.9) 0%, rgba(30,26,47,0.96) 100%);
+}
+.mcxPeCell {
+  background: linear-gradient(180deg, rgba(25,42,43,0.82) 0%, rgba(16,30,31,0.92) 100%);
+}
+.mcxPeItm {
+  background:
+    linear-gradient(270deg, rgba(124,255,185,0.14) 0%, rgba(124,255,185,0.03) 34%, rgba(25,42,43,0.82) 100%),
+    linear-gradient(180deg, rgba(29,47,48,0.9) 0%, rgba(18,33,34,0.96) 100%);
+}
+.mcxStrikeCell {
+  background: linear-gradient(180deg, rgba(22,30,48,0.95) 0%, rgba(14,21,35,0.99) 100%);
+  border-left: 1px solid rgba(123, 137, 172, 0.32);
+  border-right: 1px solid rgba(123, 137, 172, 0.32);
+  color: #dfe7f8;
+  font-weight: 800;
+}
+.mcxStrikeCellAtm {
+  background: linear-gradient(180deg, rgba(29,52,92,0.96) 0%, rgba(18,34,63,0.99) 100%);
+  border-left-color: rgba(102,162,255,0.58);
+  border-right-color: rgba(102,162,255,0.58);
+}
+.mcxStrikeValue {
+  color: #e9eef9;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.mcxStrikeValueAtm {
+  color: #9dccff;
+  text-shadow: 0 0 8px rgba(105, 171, 255, 0.25);
+}
+
+.mcxNum {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.mcxNumStrong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+  color: #eef3ff;
+}
+
+.mcxHeaderRoot {
+  background: linear-gradient(180deg, #121a2b 0%, #0e1626 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.mcxHeaderCalls {
+  color: #ff9faa;
+  background: linear-gradient(180deg, rgba(173, 66, 90, 0.22) 0%, rgba(173, 66, 90, 0.06) 100%);
+}
+.mcxHeaderStrike {
+  color: #e3eaf8;
+  background: linear-gradient(180deg, rgba(38,54,84,0.95) 0%, rgba(22,33,55,0.98) 100%);
+}
+.mcxHeaderPuts {
+  color: #92f0cb;
+  background: linear-gradient(180deg, rgba(31, 133, 111, 0.22) 0%, rgba(31, 133, 111, 0.06) 100%);
 }
 
 /* ── Overlays ─────────────────────────────────────────────── */
@@ -371,11 +561,11 @@
   position: fixed;
   transform: translateX(-50%);
   z-index: 9999;
-  background: #0e0e0e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e222d;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -388,7 +578,6 @@
   align-items: center;
   gap: 6px;
 }
-/* action badge (BUY/SELL) — color/bg are dynamic */
 .popupActionBadge {
   font-size: 11px;
   font-weight: 800;
@@ -399,33 +588,30 @@
 .popupStrike {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: #d1d4dc;
 }
-/* CE/PE type badge — color/bg/border are dynamic */
 .popupTypeBadge {
   font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 4px;
 }
-.popupSpacer {
-  flex: 1;
-}
+.popupSpacer { flex: 1; }
 .popupCloseBtn {
   background: none;
   border: none;
   cursor: pointer;
-  color: #6B7280;
+  color: #5d6673;
   padding: 0;
   display: flex;
   align-items: center;
 }
 .popupLtpRow {
   font-size: 11px;
-  color: #6B7280;
+  color: #5d6673;
 }
 .popupLtpValue {
-  color: #e5e7eb;
+  color: #d1d4dc;
   font-weight: 600;
 }
 .popupQtyRow {
@@ -435,15 +621,15 @@
 }
 .popupQtyLabel {
   font-size: 11px;
-  color: #6B7280;
+  color: #5d6673;
   font-weight: 600;
   flex: 1;
 }
 .popupStepper {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -452,7 +638,7 @@
   height: 26px;
   background: transparent;
   border: none;
-  color: #9CA3AF;
+  color: #787b86;
   cursor: pointer;
   font-size: 16px;
   display: flex;
@@ -464,13 +650,12 @@
   text-align: center;
   font-size: 13px;
   font-weight: 700;
-  color: #E2E8F0;
+  color: #d1d4dc;
   background: transparent;
   border: none;
   outline: none;
   -moz-appearance: textfield;
 }
-/* Confirm button — color/bg/border/cursor are dynamic (fetching state + type) */
 .popupConfirmBtn {
   padding: 7px 0;
   border-radius: 7px;
@@ -481,7 +666,7 @@
 
 /* ── CalendarPicker ───────────────────────────────────────── */
 .calRoot {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255,255,255,0.06);
   padding-top: 10px;
   margin-top: 8px;
   display: flex;
@@ -501,20 +686,20 @@
 .calDateLabel {
   font-size: 11px;
   font-weight: 700;
-  color: #9CA3AF;
+  color: #787b86;
 }
 .calDateValue {
   font-size: 12px;
   font-weight: 700;
-  color: #E2E8F0;
+  color: #d1d4dc;
 }
 .calDateInput {
   width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 8px 10px;
-  color: #E2E8F0;
+  color: #d1d4dc;
   font-size: 12px;
   font-weight: 600;
 }
@@ -526,14 +711,14 @@
 .calTimeLabel {
   font-size: 11px;
   font-weight: 700;
-  color: #9CA3AF;
+  color: #787b86;
 }
 .calTimeInputRow {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   padding: 6px 8px;
 }
@@ -542,7 +727,7 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #E2E8F0;
+  color: #d1d4dc;
   font-size: 12px;
   font-weight: 600;
   min-width: 0;
@@ -561,20 +746,19 @@
   text-align: center;
 }
 .calTimeSlotSelected {
-  background: rgba(255, 152, 0, 0.18);
-  border: 1px solid rgba(255, 152, 0, 0.6);
+  background: rgba(255,152,0,0.18);
+  border: 1px solid rgba(255,152,0,0.6);
   color: #FF9800;
 }
 .calTimeSlotUnselected {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #9CA3AF;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #787b86;
 }
 
-/* ── Greek value colours (static, not computed) ───────────── */
-.valGray  { color: #9CA3AF; }
-.valTeal  { color: #26a69a; }
-.valRed   { color: #f23645; }
-.valWhite { color: #C0C0C0; font-weight: 700; }
-.valWhiteBold { color: #E2E8F0; font-weight: 600; }
-/* chg%/oichg% color is dynamic (pos/neg) — kept inline */
+/* ── Greek value colours ──────────────────────────────────── */
+.valGray  { color: #b2b8c8; }
+.valTeal  { color: #62f0b2; }
+.valRed   { color: #ff7f89; }
+.valWhite { color: #f0f4ff; font-weight: 600; }
+.valWhiteBold { color: #f8fbff; font-weight: 700; }

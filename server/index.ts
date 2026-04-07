@@ -1229,6 +1229,35 @@ app.get('/api/nubra-optionchain', async (req, reply) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/nubra-price?session_token=&symbol=NIFTY&exchange=NSE
+// Returns { price, prev_close, change, exchange } for index spot %Chg
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/api/nubra-price', async (req, reply) => {
+  const { session_token, symbol, exchange } = req.query as Record<string, string>;
+  if (!session_token || !symbol) {
+    return reply.status(400).send({ error: 'session_token and symbol are required' });
+  }
+  const exch = exchange || 'NSE';
+  const deviceId = getDeviceId();
+  const url = `${NUBRA_API}/optionchains/${encodeURIComponent(symbol)}/price?exchange=${exch}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${session_token}`,
+        'x-device-id': deviceId,
+        'Accept': 'application/json',
+      },
+      dispatcher: nubraAuthAgent,
+    } as any);
+    const body = await res.text();
+    if (!res.ok) return reply.status(res.status).send({ error: body });
+    reply.header('Content-Type', 'application/json').send(body);
+  } catch (err) {
+    reply.status(500).send({ error: String(err) });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nubra-historical
 // Proxies historical OHLCV + Greeks data from Nubra Market Data API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1917,6 +1946,30 @@ app.get('/api/nubra-orderbook', async (req, reply) => {
   });
   const data = await res.json() as any;
   return reply.status(res.status).send(data);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/fii-dii — NSE FII/DII cash market activity (last 30 trading days)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/fii-dii', async (_req, reply) => {
+  try {
+    const res = await fetch('https://www.nseindia.com/api/fiidiiTradeReact', {
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Referer': 'https://www.nseindia.com/market-data/fii-dii-trading-activity',
+        'Origin': 'https://www.nseindia.com',
+      },
+    });
+    if (!res.ok) return reply.status(res.status).send({ error: `NSE returned ${res.status}` });
+    const data = await res.json();
+    reply.header('Cache-Control', 'public, max-age=300');
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
 });
 
 app.listen({ port: 3001 }, (err) => {

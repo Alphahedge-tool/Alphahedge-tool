@@ -9,8 +9,16 @@ const CandleChart  = React.lazy(() => import('./CandleChart'));
 const IvChart      = React.lazy(() => import('./IvChart'));
 const OpenInterest = React.lazy(() => import('./OpenInterest'));
 const VolSkew      = React.lazy(() => import('./VolSkew'));
+const FwdVolSpread = React.lazy(() => import('./FwdVolSpread'));
+const PcrChart          = React.lazy(() => import('./PcrChart'));
+const MaxPain           = React.lazy(() => import('./MaxPain'));
+const OIBuildup         = React.lazy(() => import('./OIBuildup'));
+const IVRank            = React.lazy(() => import('./IVRank'));
+const OIHeatmap         = React.lazy(() => import('./OIHeatmap'));
+const SupportResistance = React.lazy(() => import('./SupportResistance'));
+const FiiDii            = React.lazy(() => import('./FiiDii'));
 
-type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew';
+type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew' | 'fwd-vol' | 'pcr-chart' | 'max-pain' | 'oi-buildup' | 'iv-rank' | 'oi-heatmap' | 'support-resistance' | 'fii-dii';
 
 interface Panel {
   id: string;
@@ -94,6 +102,14 @@ const CONTENT_OPTIONS: { type: PanelContent; label: string; icon: React.ReactNod
   { type: 'iv-chart',      label: 'IV Chart',      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,12 6,6 10,18 14,10 18,4 21,8"/><path d="M3 20h18" strokeOpacity="0.4"/></svg> },
   { type: 'open-interest', label: 'Open Interest', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="18" y="5" width="4" height="16"/></svg> },
   { type: 'vol-skew',      label: 'Vol Skew',      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+  { type: 'fwd-vol',       label: 'Fwd Vol Spread', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20 L8 12 L14 16 L20 6"/><circle cx="20" cy="6" r="2"/></svg> },
+  { type: 'pcr-chart',    label: 'PCR Chart',      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> },
+  { type: 'max-pain',     label: 'Max Pain',       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
+  { type: 'oi-buildup',         label: 'OI Buildup',        icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> },
+  { type: 'iv-rank',            label: 'IV Rank',           icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg> },
+  { type: 'oi-heatmap',         label: 'OI Heatmap',        icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 9h20M2 15h20M9 2v20M15 2v20"/></svg> },
+  { type: 'support-resistance', label: 'Support/Resistance', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 18h18"/><path d="m3 12 9-6 9 6"/></svg> },
+  { type: 'fii-dii',            label: 'FII / DII',         icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m3 15 4-4 4 4 4-6 4 2"/></svg> },
 ];
 
 const MIN_COL_PX = 260;
@@ -332,6 +348,46 @@ const PanelBody = React.memo(function PanelBody({ content, symbol, exchange, exp
       {content === 'vol-skew' && (
         <div style={{ width: '100%', height: '100%' }}>
           <VolSkew nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'fwd-vol' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <FwdVolSpread nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'pcr-chart' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <PcrChart nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'max-pain' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <MaxPain nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'oi-buildup' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <OIBuildup nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'iv-rank' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <IVRank nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'oi-heatmap' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <OIHeatmap nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'support-resistance' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <SupportResistance nubraInstruments={nubraInstruments} />
+        </div>
+      )}
+      {content === 'fii-dii' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <FiiDii />
         </div>
       )}
     </React.Suspense>
@@ -724,6 +780,14 @@ const CONTENT_SHORT: Record<PanelContent, string> = {
   'iv-chart':      'IV',
   'open-interest': 'OI',
   'vol-skew':      'Skew',
+  'fwd-vol':       'FwdVol',
+  'pcr-chart':     'PCR',
+  'max-pain':            'MaxPain',
+  'oi-buildup':          'OI Build',
+  'iv-rank':             'IV Rank',
+  'oi-heatmap':          'OI Heat',
+  'support-resistance':  'S/R',
+  'fii-dii':             'FII/DII',
 };
 
 // ── TemplatePicker ─────────────────────────────────────────────────────────────
@@ -784,6 +848,24 @@ function TemplatePicker({ onApply }: { onApply: (tpl: LayoutTemplate) => void })
     setNameInput('');
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1200);
+  };
+
+  const quickApplyAndSave = (tpl: LayoutTemplate) => {
+    const tplRecord: SavedTemplate = {
+      id: `saved_${Date.now()}`,
+      name: tpl.label,
+      sourceTemplateId: tpl.id,
+      rows: tpl.rows,
+      _colSizes: (tpl as any)._colSizes ?? [],
+      _rowSizes: (tpl as any)._rowSizes ?? [],
+      _colContents: (tpl as any)._colContents ?? [],
+    };
+    const next = [...savedTemplates, tplRecord];
+    setSavedTemplates(next);
+    persistSavedTemplates(next);
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1200);
+    onApply(tpl);
   };
 
   const deleteSaved = (id: string) => {
@@ -942,6 +1024,15 @@ function TemplatePicker({ onApply }: { onApply: (tpl: LayoutTemplate) => void })
             <div className={s.templateGrid}>
               {TEMPLATES.map(tpl => (
                 <div key={tpl.id} className={s.templateCardWrap}>
+                  <button
+                    className={s.templateCardApplySave}
+                    title="Apply & save layout"
+                    onClick={(e) => { e.stopPropagation(); quickApplyAndSave(tpl); }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                  </button>
                   <button className={s.templateCard} onClick={() => onApply(tpl)}>
                     <div className={s.templatePreview}>{tpl.preview}</div>
                     <div className={s.templateLabel}>{tpl.label}</div>
@@ -1215,7 +1306,7 @@ export default function HomeWorkspace() {
     const mcxSeen = new Set<string>();
     const mcxItems: any[] = [];
     for (const ins of instruments) {
-      if (ins.exchange !== 'MCX') continue;
+      if (ins.exchange !== 'MCX' && ins.exchange !== 'MCX_FO') continue;
       const sym = ins.underlying_symbol || ins.trading_symbol || '';
       if (mcxSeen.has(sym)) continue;
       mcxSeen.add(sym);
@@ -1496,6 +1587,13 @@ export default function HomeWorkspace() {
     return rowsHeight + Math.max(0, rows.length - 1) * SPLITTER_PX + 2;
   }, [rows]);
 
+  const [showLayoutPicker, setShowLayoutPicker] = useState(false);
+
+  const handleApplyTemplate = useCallback((tpl: LayoutTemplate) => {
+    applyTemplate(tpl);
+    setShowLayoutPicker(false);
+  }, [applyTemplate]);
+
   // ── Boot screen ──
   if (bootPhase !== 'done') {
     return (
@@ -1601,6 +1699,27 @@ export default function HomeWorkspace() {
         );
       })}
       {rowArea}
+
+      {/* ── Layout switcher button (TradingView-style) ── */}
+      <button
+        className={s.layoutSwitchBtn}
+        title="Switch layout"
+        onClick={() => setShowLayoutPicker(v => !v)}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+      </button>
+
+      {/* ── Layout picker overlay ── */}
+      {showLayoutPicker && (
+        <>
+          <div className={s.layoutPickerBackdrop} onClick={() => setShowLayoutPicker(false)} />
+          <div className={s.layoutPickerOverlay}>
+            <TemplatePicker onApply={handleApplyTemplate} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

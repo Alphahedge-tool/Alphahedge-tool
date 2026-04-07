@@ -13,6 +13,8 @@ import { format } from 'date-fns';
 import { Clock } from 'lucide-react';
 import s from './OptionChain.module.css';
 
+const isMCX = (exchange: string | undefined) => exchange === 'MCX' || exchange === 'MCX_FO';
+
 // ── Time slots ────────────────────────────────────────────────────────────────
 const TIME_SLOTS = ['09:15','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:15','15:25'];
 
@@ -463,7 +465,11 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
       id: 'strike', header: 'Strike',
       cell: i => {
         const row = i.row.original;
-        return <span style={{ color: row.isAtm ? '#e0a800' : '#C0C0C0', fontWeight: row.isAtm ? 800 : 700 }}>{i.getValue() % 1 === 0 ? i.getValue().toFixed(0) : i.getValue().toFixed(2)}</span>;
+        return (
+          <span className={`${s.bloomStrikeValue} ${row.isAtm ? s.bloomStrikeValueAtm : ''}`}>
+            {i.getValue() % 1 === 0 ? i.getValue().toFixed(0) : i.getValue().toFixed(2)}
+          </span>
+        );
       },
     }),
     ch.accessor(r => r.pe.ltp,      { id: 'pe_price', header: 'Put LTP',  cell: i => {
@@ -644,43 +650,40 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — TradingView style: Calls | expiry+symbol | Puts */}
       <div className={s.header}>
         <div className={s.headerLeft}>
+          <span className={s.headerCallsLabel}>Calls</span>
+        </div>
+        <div className={s.headerCenter}>
           <span className={s.headerSymbol}>{symbol}</span>
+          <div className={s.expirySelectWrap}>
+            <select
+              value={selectedExpiry ?? ''}
+              onChange={e => setSelectedExpiry(e.target.value)}
+              className={s.expirySelect}
+            >
+              {expiries.map(exp => {
+                const eStr = String(exp);
+                return <option key={eStr} value={eStr} style={{ background: '#1e222d', color: '#d1d4dc' }}>{fmtExpiry(exp)}</option>;
+              })}
+            </select>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className={s.expirySelectChevron}>
+              <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
           {spot > 0 && <span className={s.headerSpot}>{spot.toFixed(2)}</span>}
         </div>
         <div className={s.headerRight}>
-          <span className={s.headerExpLabel}>{expLabel}</span>
-          {/* Gear / settings button */}
+          <span className={s.headerPutsLabel}>Puts</span>
           <button className={`oc-gear ${s.gearBtn}`} onClick={() => setSettingsOpen(true)} title="Choose columns">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 13.648 13.648" fill="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 13.648 13.648" fill="currentColor">
               <path fillRule="evenodd" clipRule="evenodd" d="M5.09373 0.995125C5.16241 0.427836 5.64541 0 6.21747 0H7.43151C8.0039 0 8.48663 0.428191 8.55525 0.996829C8.5553 0.997248 8.55536 0.997666 8.5554 0.9981L8.65947 1.81525C8.80015 1.86677 8.93789 1.92381 9.07227 1.98601L9.72415 1.47911C10.1776 1.12819 10.8237 1.16381 11.2251 1.57622L12.0753 2.42643C12.4854 2.82551 12.5214 3.47159 12.1697 3.92431L11.6628 4.57692C11.725 4.71124 11.782 4.84882 11.8335 4.98924L12.6526 5.09337C12.653 5.09342 12.6534 5.09348 12.6539 5.09352C13.2211 5.16221 13.6492 5.64522 13.6484 6.21766V7.4312C13.6484 8.00358 13.2203 8.48622 12.6517 8.5549C12.6513 8.55496 12.6508 8.55502 12.6503 8.55506L11.8338 8.65909C11.7824 8.7996 11.7254 8.93729 11.663 9.07168L12.1696 9.72354C12.5218 10.1776 12.4847 10.823 12.0728 11.2245L11.2224 12.0749C10.8233 12.485 10.1772 12.5209 9.72452 12.1692L9.07187 11.6624C8.93756 11.7246 8.79995 11.7815 8.65952 11.833L8.55539 12.6521C8.55533 12.6525 8.55528 12.653 8.55522 12.6534C8.48652 13.2206 8.00353 13.6484 7.43151 13.6484H6.21747C5.64485 13.6484 5.16232 13.22 5.09373 12.6506C5.09367 12.6501 5.09361 12.6496 5.09355 12.6491L4.98954 11.8328C4.84901 11.7814 4.71133 11.7244 4.57692 11.662L3.92477 12.1688C3.47111 12.5199 2.82587 12.4838 2.42408 12.0724L1.57358 11.2219C1.16354 10.8229 1.12761 10.1769 1.47927 9.72417L1.98614 9.0715C1.92397 8.93721 1.86696 8.7996 1.81546 8.65919L0.996348 8.55505C0.995929 8.555 0.995526 8.55494 0.995107 8.5549C0.427838 8.48619 0 8.00325 0 7.4312V6.21724C0 5.64481 0.428228 5.16211 0.996871 5.09351L1.81538 4.98929C1.86677 4.84897 1.92362 4.7113 1.98597 4.5768L1.47915 3.92465C1.12701 3.47063 1.1643 2.82485 1.57625 2.42329L2.42671 1.57338C2.82634 1.16348 3.47226 1.12815 3.92438 1.4792L4.57644 1.98589C4.71105 1.92352 4.84888 1.86662 4.98946 1.81519L5.09373 0.995125ZM6.82448 4.43525C5.50742 4.43525 4.43541 5.50723 4.43541 6.82422C4.43541 8.14119 5.50742 9.21317 6.82448 9.21317C8.14154 9.21317 9.21356 8.14119 9.21356 6.82422C9.21356 5.50723 8.14154 4.43525 6.82448 4.43525ZM3.79381 6.82422C3.79381 5.15287 5.15311 3.79365 6.82448 3.79365C8.49586 3.79365 9.85515 5.15287 9.85515 6.82422C9.85515 8.49556 8.49586 9.85477 6.82448 9.85477C5.15311 9.85477 3.79381 8.49556 3.79381 6.82422Z" />
             </svg>
           </button>
           <button onClick={onClose} className={s.closeBtn}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
-        </div>
-      </div>
-
-      {/* Expiry dropdown */}
-      <div className={s.expiryRow}>
-        <span className={s.expiryLabel}>Expiry</span>
-        <div className={s.expirySelectWrap}>
-          <select
-            value={selectedExpiry ?? ''}
-            onChange={e => setSelectedExpiry(e.target.value)}
-            className={s.expirySelect}
-          >
-            {expiries.map(exp => {
-              const eStr = String(exp);
-              return <option key={eStr} value={eStr} style={{ background: '#1f1f1f', color: '#E2E8F0' }}>{fmtExpiry(exp)}</option>;
-            })}
-          </select>
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className={s.expirySelectChevron}>
-            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
         </div>
       </div>
 
@@ -722,11 +725,14 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                     const isCe = CE_COLS.includes(id);
                     return (
                       <th key={h.id} style={{
-                        width: W[id], minWidth: W[id], padding: '8px 10px',
-                        fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase',
+                        width: W[id], minWidth: W[id], padding: '6px 8px',
+                        fontSize: 10, fontWeight: 700, color: '#8f98ad', letterSpacing: '0.05em', textTransform: 'uppercase',
                         textAlign: isStrike ? 'center' : isCe ? 'right' : 'left',
-                        background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)',
+                        background: isCe ? 'rgba(239,83,80,0.08)' : isStrike ? 'linear-gradient(180deg, rgba(26,30,44,0.9) 0%, rgba(13,15,23,0.95) 100%)' : 'rgba(38,166,154,0.08)',
                         whiteSpace: 'nowrap',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)',
+                        borderLeft: isStrike ? '1px solid rgba(125,137,176,0.26)' : undefined,
+                        borderRight: isStrike ? '1px solid rgba(125,137,176,0.26)' : undefined,
                       }}>
                         {flexRender(h.column.columnDef.header, h.getContext())}
                       </th>
@@ -788,19 +794,17 @@ function OptionChainNubra({ symbol, expiries, sessionToken, exchange = 'NSE', on
                         const id = cell.column.id;
                         const isStrike = id === 'strike';
                         const isCe = CE_COLS.includes(id);
-                        // Bloomberg-style ITM: vivid teal for CE, warm amber for PE
-                        const cellBg = isCe && isCeItm
-                          ? 'rgba(0,168,132,0.18)'
-                          : !isCe && !isStrike && isPeItm
-                          ? 'rgba(210,130,0,0.28)'
-                          : undefined;
+                        const cellClass = isStrike
+                          ? `${s.bloomStrikeCell} ${data.isAtm ? s.bloomStrikeCellAtm : ''}`
+                          : isCe
+                          ? `${s.bloomSideCell} ${s.bloomCeCell} ${isCeItm ? s.bloomCeItm : ''}`
+                          : `${s.bloomSideCell} ${s.bloomPeCell} ${isPeItm ? s.bloomPeItm : ''}`;
                         return (
-                          <td key={cell.id} data-col={id} className={isStrike ? 'oc-strike-cell' : ''} style={{
-                            width: W[id], minWidth: W[id], padding: '8px 10px',
-                            fontSize: 13, fontWeight: id==='strike' ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+                          <td key={cell.id} data-col={id} className={cellClass} style={{
+                            width: W[id], minWidth: W[id], padding: '5px 8px',
+                            fontSize: 12, fontWeight: id==='strike' ? 700 : 400, fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif',
                             textAlign: isStrike ? 'center' : isCe ? 'right' : 'left',
                             whiteSpace: 'nowrap',
-                            ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}),
                           }}>
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>
@@ -1060,13 +1064,13 @@ const MCX_COL_LABELS: Record<string, string> = {
   delta: 'Delta', theta: 'Theta', gamma: 'Gamma', vega: 'Vega', iv: 'IV',
 };
 const MW: Record<string, number> = {
-  mce_iv: 50, mce_gamma: 56, mce_vega: 50, mce_theta: 56, mce_delta: 52, mce_oi: 90, mce_chg: 72, mce_price: 76,
-  mstrike: 72,
-  mpe_price: 76, mpe_chg: 72, mpe_oi: 90, mpe_delta: 52, mpe_theta: 56, mpe_vega: 50, mpe_gamma: 56, mpe_iv: 50,
+  mce_iv: 50, mce_gamma: 56, mce_vega: 50, mce_theta: 56, mce_delta: 52, mce_oi: 90, mce_chg: 84, mce_price: 108,
+  mstrike: 82,
+  mpe_price: 108, mpe_chg: 84, mpe_oi: 90, mpe_delta: 52, mpe_theta: 56, mpe_vega: 50, mpe_gamma: 56, mpe_iv: 50,
 };
 
 // ── Virtualized MCX table ─────────────────────────────────────────────────────
-const MCX_ROW_HEIGHT = 33;
+const MCX_ROW_HEIGHT = 36;
 
 function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, spot, atmStrike, popup, showOverlay, hideOverlay, setPopup, setQty, overlayDataRef, listRef, table }: {
   tableRows: any[];
@@ -1122,11 +1126,11 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
     return (
       <div style={{ ...style, display: 'flex', flexDirection: 'column' }}>
         {showAtmLine && (
-          <div style={{ height: 2, background: 'rgba(224,168,0,0.5)', width: effectiveWidth, marginBottom: 1 }} />
+          <div style={{ height: 2, background: 'rgba(41,98,255,0.6)', width: effectiveWidth, marginBottom: 1 }} />
         )}
         <div
-          className={`oc-row ${data.isAtm ? 'oc-row-atm' : index % 2 === 0 ? 'oc-row-even' : 'oc-row-odd'}`}
-          style={{ display: 'flex', alignItems: 'center', height: MCX_ROW_HEIGHT, width: effectiveWidth, boxSizing: 'border-box' }}
+          className={`oc-row ${s.mcxRowShell} ${data.isAtm ? `${s.mcxRowShellAtm} oc-row-atm` : ''}`}
+          style={{ display: 'flex', alignItems: 'center', height: MCX_ROW_HEIGHT - 4, width: effectiveWidth, boxSizing: 'border-box', padding: '0 2px', margin: '2px 0' }}
           onMouseMove={e => {
             if (popup) return;
             const tr = e.currentTarget;
@@ -1152,11 +1156,15 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
             const id = cell.column.id;
             const isStrike = id === 'mstrike';
             const isCe = MCX_CE_COLS.includes(id);
-            const cellBg = isCe && isCeItm ? 'rgba(0,168,132,0.18)' : !isCe && !isStrike && isPeItm ? 'rgba(210,130,0,0.28)' : undefined;
             const isOi = id === 'mce_oi' || id === 'mpe_oi';
             const cw = (MW[id] ?? 72) + extraPerCol;
+            const cellClass = isStrike
+              ? `${s.mcxCellBase} ${s.mcxStrikeCell} ${data.isAtm ? s.mcxStrikeCellAtm : ''}`
+              : isCe
+              ? `${s.mcxCellBase} ${s.mcxCeCell} ${isCeItm ? s.mcxCeItm : ''}`
+              : `${s.mcxCellBase} ${s.mcxPeCell} ${isPeItm ? s.mcxPeItm : ''}`;
             return (
-              <div key={cell.id} data-col={id} style={{ width: cw, minWidth: cw, flexShrink: 0, padding: isOi ? 0 : '0 10px', fontSize: 13, fontWeight: isStrike ? 700 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', ...(cellBg ? { background: cellBg } : isStrike ? { background: '#333333' } : {}) }}>
+              <div key={cell.id} data-col={id} className={cellClass} style={{ width: cw, minWidth: cw, flexShrink: 0, padding: isOi ? 0 : '0 8px', fontSize: 12, fontWeight: isStrike ? 800 : 500, fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', borderRight: isStrike ? '1px solid rgba(108,129,172,0.34)' : '1px solid rgba(255,255,255,0.05)' }}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </div>
             );
@@ -1173,22 +1181,22 @@ function McxVirtualTable({ tableRows, visibleCeCols, visiblePeCols, totalWidth, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Sticky header */}
-      <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: '#1c1a17' }}>
+      <div ref={headerScrollRef} className={s.mcxHeaderRoot} style={{ flexShrink: 0, overflowX: 'hidden' }}>
         <div style={{ width: effectiveWidth }}>
           {/* Super header: Call / Strike / Put */}
           <div style={{ display: 'flex', height: 28 }}>
-            <div style={{ display: 'flex', flex: `0 0 ${visibleCeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#e0a800', letterSpacing: '0.06em', background: 'rgba(224,168,0,0.04)', borderBottom: '1px solid rgba(224,168,0,0.15)' }}>Call</div>
-            <div style={{ flex: `0 0 ${colW('mstrike')}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#9CA3AF', background: '#333333', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Strike</div>
-            <div style={{ display: 'flex', flex: `0 0 ${visiblePeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#818cf8', letterSpacing: '0.06em', background: 'rgba(129,140,248,0.04)', borderBottom: '1px solid rgba(129,140,248,0.15)' }}>Put</div>
+            <div className={s.mcxHeaderCalls} style={{ display: 'flex', flex: `0 0 ${visibleCeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.05)', borderTopLeftRadius: 6 }}>Calls</div>
+            <div className={s.mcxHeaderStrike} style={{ flex: `0 0 ${colW('mstrike')}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, borderBottom: '1px solid rgba(255,255,255,0.05)', borderLeft: '1px solid rgba(125,137,176,0.24)', borderRight: '1px solid rgba(125,137,176,0.24)' }}>Strike</div>
+            <div className={s.mcxHeaderPuts} style={{ display: 'flex', flex: `0 0 ${visiblePeCols.reduce((s, id) => s + colW(id), 0)}px`, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.05)', borderTopRightRadius: 6 }}>Puts</div>
           </div>
           {/* Sub header: column labels */}
-          <div style={{ display: 'flex', height: 30, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', height: 30, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             {colIds.map((id: string) => {
               const isStrike = id === 'mstrike';
               const isCe = MCX_CE_COLS.includes(id);
               const h = table.getHeaderGroups()[0]?.headers.find((hh: any) => hh.column.id === id);
               return (
-                <div key={id} style={{ width: colW(id), minWidth: colW(id), flexShrink: 0, padding: '0 10px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase' as const, background: isCe ? 'rgba(224,168,0,0.02)' : isStrike ? '#333333' : 'rgba(129,140,248,0.02)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box' }}>
+                <div key={id} style={{ width: colW(id), minWidth: colW(id), flexShrink: 0, padding: '0 8px', fontSize: 10, fontWeight: 600, color: '#a6afc3', letterSpacing: '0.05em', textTransform: 'uppercase' as const, background: isCe ? 'rgba(239,83,80,0.04)' : isStrike ? 'linear-gradient(180deg, rgba(20,27,49,0.84) 0%, rgba(12,17,34,0.92) 100%)' : 'rgba(38,166,154,0.04)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: isStrike ? 'center' : isCe ? 'flex-end' : 'flex-start', boxSizing: 'border-box', borderRight: isStrike ? '1px solid rgba(125,137,176,0.22)' : '1px solid rgba(255,255,255,0.04)', borderLeft: isStrike ? '1px solid rgba(125,137,176,0.22)' : undefined }}>
                   {h ? flexRender(h.column.columnDef.header, h.getContext()) : null}
                 </div>
               );
@@ -1229,7 +1237,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   const underlying = useMemo(() => {
     const key = symbol.toUpperCase();
     const match = instruments.find(i =>
-      i.exchange === 'MCX' && (
+      isMCX(i.exchange) && (
         i.trading_symbol?.toUpperCase() === key ||
         i.underlying_symbol?.toUpperCase() === key ||
         i.name?.toUpperCase() === key ||
@@ -1248,7 +1256,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       instruments.filter(i =>
         (i.instrument_type === 'CE' || i.instrument_type === 'PE') &&
         i.underlying_symbol?.toUpperCase() === underlying &&
-        i.exchange === 'MCX' &&
+        isMCX(i.exchange) &&
         i.expiry != null && i.expiry >= today - 86400000
       ).map(i => i.expiry as number)
     )].sort((a, b) => a - b);
@@ -1265,7 +1273,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     if (!selectedExpiry) return [];
     const strikeMap = new Map<number, { ceKey: string | null; peKey: string | null }>();
     for (const ins of instruments) {
-      if (ins.exchange !== 'MCX' || (ins.instrument_type !== 'CE' && ins.instrument_type !== 'PE')) continue;
+      if (!isMCX(ins.exchange) || (ins.instrument_type !== 'CE' && ins.instrument_type !== 'PE')) continue;
       if (ins.underlying_symbol?.toUpperCase() !== underlying || ins.expiry !== selectedExpiry) continue;
       const s = ins.strike_price ?? 0;
       if (!strikeMap.has(s)) strikeMap.set(s, { ceKey: null, peKey: null });
@@ -1363,7 +1371,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     const now = Date.now();
     // Pick the nearest-expiry MCX FUT for this underlying (front-month = closest to today)
     const futs = instruments.filter(i =>
-      i.exchange === 'MCX' &&
+      isMCX(i.exchange) &&
       i.instrument_type === 'FUT' &&
       i.underlying_symbol?.toUpperCase() === underlying &&
       i.expiry != null && i.expiry >= now
@@ -1374,7 +1382,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     }
     // Fallback: any MCX instrument whose trading_symbol starts with underlying
     const fallback = instruments.find(i =>
-      i.exchange === 'MCX' &&
+      isMCX(i.exchange) &&
       i.trading_symbol?.toUpperCase().startsWith(underlying)
     );
     return fallback?.instrument_key ?? null;
@@ -1427,6 +1435,8 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   // Columns — same as Nubra
   const maxCeOi = useMemo(() => Math.max(1, ...rows.map(r => r.ce.oi)), [rows]);
   const maxPeOi = useMemo(() => Math.max(1, ...rows.map(r => r.pe.oi)), [rows]);
+  const maxCeLtp = useMemo(() => Math.max(1, ...rows.map(r => r.ce.ltp)), [rows]);
+  const maxPeLtp = useMemo(() => Math.max(1, ...rows.map(r => r.pe.ltp)), [rows]);
 
   const [chainLoading, setChainLoading] = useState(false);
   const [qty, setQty] = useState(1);
@@ -1453,7 +1463,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
   }, [popup]);
 
   const effLotSize = useMemo(() => {
-    const ins = instruments.find(i => i.exchange === 'MCX' && (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol?.toUpperCase() === underlying);
+    const ins = instruments.find(i => isMCX(i.exchange) && (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol?.toUpperCase() === underlying);
     return ins?.lot_size ?? lotSize;
   }, [instruments, underlying, lotSize]);
 
@@ -1479,17 +1489,52 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
       const pct = Math.min(100, (i.getValue() / maxCeOi) * 100);
       return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', height: '100%', padding: '0 10px', background: `linear-gradient(to left, rgba(38,210,164,0.45) ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
     } }),
-    mch.accessor(r => r.ce.chgPct, { id: 'mce_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
+    mch.accessor(r => r.ce.chgPct, { id: 'mce_chg',  header: 'Chg%',    cell: i => {
+      const v = i.getValue();
+      const pct = Math.min(100, Math.abs(v) * 4);
+      const isPos = v >= 0;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', height: '100%', padding: '0 8px', background: `linear-gradient(to left, ${isPos ? 'rgba(92, 227, 178, 0.16)' : 'rgba(248,112,124,0.16)'} ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}>
+          <span className={s.mcxNum} style={{ color: isPos ? '#86dfbf' : '#ff97a0' }}>{fmtPct(v)}</span>
+        </div>
+      );
+    } }),
     mch.accessor(r => r.ce.ltp,   { id: 'mce_price', header: 'Call LTP', cell: i => {
-      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
+      const pct = Math.min(100, (i.getValue() / maxCeLtp) * 100);
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', height: '100%', padding: '0 8px', background: `linear-gradient(to left, rgba(255,146,160,0.16) ${pct}%, rgba(255,146,160,0.02) ${pct}%)`, boxSizing: 'border-box' }}>
+          <span className={s.mcxNumStrong}>{fmtPrice(i.getValue())}</span>
+        </div>
+      );
     } }),
     mch.accessor(r => r.strike, { id: 'mstrike', header: 'Strike',
-      cell: i => { const row = i.row.original; return <span className="oc-strike-cell" style={{ color: row.isAtm ? '#e0a800' : '#C0C0C0', fontWeight: row.isAtm ? 800 : 700, display: 'block', width: '100%' }}>{i.getValue() % 1 === 0 ? i.getValue().toFixed(0) : i.getValue().toFixed(2)}</span>; },
+      cell: i => {
+        const row = i.row.original;
+        return (
+          <span className={`${s.mcxStrikeValue} ${row.isAtm ? s.mcxStrikeValueAtm : ''}`} style={{ display: 'block', width: '100%', textAlign: 'center' }}>
+            {i.getValue() % 1 === 0 ? i.getValue().toFixed(0) : i.getValue().toFixed(2)}
+          </span>
+        );
+      },
     }),
     mch.accessor(r => r.pe.ltp,   { id: 'mpe_price', header: 'Put LTP',  cell: i => {
-      return <span className={s.valWhite}>{fmtPrice(i.getValue())}</span>;
+      const pct = Math.min(100, (i.getValue() / maxPeLtp) * 100);
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', width: '100%', height: '100%', padding: '0 8px', background: `linear-gradient(to right, rgba(123,253,210,0.16) ${pct}%, rgba(123,253,210,0.02) ${pct}%)`, boxSizing: 'border-box' }}>
+          <span className={s.mcxNumStrong}>{fmtPrice(i.getValue())}</span>
+        </div>
+      );
     } }),
-    mch.accessor(r => r.pe.chgPct, { id: 'mpe_chg',  header: 'Chg%',    cell: i => { const v = i.getValue(); return <span style={{ color: v >= 0 ? '#6bbfaa' : '#ef5350' }}>{fmtPct(v)}</span>; } }),
+    mch.accessor(r => r.pe.chgPct, { id: 'mpe_chg',  header: 'Chg%',    cell: i => {
+      const v = i.getValue();
+      const pct = Math.min(100, Math.abs(v) * 4);
+      const isPos = v >= 0;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', width: '100%', height: '100%', padding: '0 8px', background: `linear-gradient(to right, ${isPos ? 'rgba(92, 227, 178, 0.16)' : 'rgba(248,112,124,0.16)'} ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}>
+          <span className={s.mcxNum} style={{ color: isPos ? '#86dfbf' : '#ff97a0' }}>{fmtPct(v)}</span>
+        </div>
+      );
+    } }),
     mch.accessor(r => r.pe.oi,    { id: 'mpe_oi',    header: 'Put OI',   cell: i => {
       const pct = Math.min(100, (i.getValue() / maxPeOi) * 100);
       return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', width: '100%', height: '100%', padding: '0 10px', background: `linear-gradient(to right, rgba(242,54,69,0.45) ${pct}%, transparent ${pct}%)`, boxSizing: 'border-box' }}><span className={s.valWhiteBold}>{fmtOi(i.getValue())}</span></div>;
@@ -1499,7 +1544,7 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
     mch.accessor(r => r.pe.vega,  { id: 'mpe_vega',  header: 'Vega',     cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
     mch.accessor(r => r.pe.gamma, { id: 'mpe_gamma', header: 'Gamma',    cell: i => <span className={s.valGray}>{fmtGreek(i.getValue(), 4)}</span> }),
     mch.accessor(r => r.pe.iv,    { id: 'mpe_iv',    header: 'IV',       cell: i => <span className={s.valGray}>{fmtGreek(i.getValue())}</span> }),
-  ], [maxCeOi, maxPeOi]);
+  ], [maxCeOi, maxPeOi, maxCeLtp, maxPeLtp]);
 
   const columns = useMemo(() => {
     const orderedCe = [...colOrder].reverse().flatMap(k => MCX_COL_MAP[k]?.[0] ? [MCX_COL_MAP[k][0]] : []).filter(id => !hiddenIds.has(id));
@@ -1551,15 +1596,18 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — TradingView style */}
       <div className={s.header}>
-        <div className={s.headerLeft} style={{ gap: 10 }}>
+        <div className={s.headerLeft}>
+          <span className={s.headerCallsLabel}>Calls</span>
+        </div>
+        <div className={s.headerCenter}>
           <span className={s.headerSymbol}>{underlying}</span>
           <span className={s.headerMcxBadge}>MCX</span>
           {spot > 0 && <span className={s.headerSpot}>{spot.toFixed(2)}</span>}
         </div>
         <div className={s.headerRight}>
-          <span className={s.headerExpLabel}>{expLabel}</span>
+          <span className={s.headerPutsLabel}>Puts</span>
           <button className={`oc-gear ${s.gearBtn}`} onClick={() => setSettingsOpen(true)} title="Choose columns">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 13.648 13.648" fill="currentColor">
               <path fillRule="evenodd" clipRule="evenodd" d="M5.09373 0.995125C5.16241 0.427836 5.64541 0 6.21747 0H7.43151C8.0039 0 8.48663 0.428191 8.55525 0.996829C8.5553 0.997248 8.55536 0.997666 8.5554 0.9981L8.65947 1.81525C8.80015 1.86677 8.93789 1.92381 9.07227 1.98601L9.72415 1.47911C10.1776 1.12819 10.8237 1.16381 11.2251 1.57622L12.0753 2.42643C12.4854 2.82551 12.5214 3.47159 12.1697 3.92431L11.6628 4.57692C11.725 4.71124 11.782 4.84882 11.8335 4.98924L12.6526 5.09337C12.653 5.09342 12.6534 5.09348 12.6539 5.09352C13.2211 5.16221 13.6492 5.64522 13.6484 6.21766V7.4312C13.6484 8.00358 13.2203 8.48622 12.6517 8.5549C12.6513 8.55496 12.6508 8.55502 12.6503 8.55506L11.8338 8.65909C11.7824 8.7996 11.7254 8.93729 11.663 9.07168L12.1696 9.72354C12.5218 10.1776 12.4847 10.823 12.0728 11.2245L11.2224 12.0749C10.8233 12.485 10.1772 12.5209 9.72452 12.1692L9.07187 11.6624C8.93756 11.7246 8.79995 11.7815 8.65952 11.833L8.55539 12.6521C8.55533 12.6525 8.55528 12.653 8.55522 12.6534C8.48652 13.2206 8.00353 13.6484 7.43151 13.6484H6.21747C5.64485 13.6484 5.16232 13.22 5.09373 12.6506C5.09367 12.6501 5.09361 12.6496 5.09355 12.6491L4.98954 11.8328C4.84901 11.7814 4.71133 11.7244 4.57692 11.662L3.92477 12.1688C3.47111 12.5199 2.82587 12.4838 2.42408 12.0724L1.57358 11.2219C1.16354 10.8229 1.12761 10.1769 1.47927 9.72417L1.98614 9.0715C1.92397 8.93721 1.86696 8.7996 1.81546 8.65919L0.996348 8.55505C0.995929 8.555 0.995526 8.55494 0.995107 8.5549C0.427838 8.48619 0 8.00325 0 7.4312V6.21724C0 5.64481 0.428228 5.16211 0.996871 5.09351L1.81538 4.98929C1.86677 4.84897 1.92362 4.7113 1.98597 4.5768L1.47915 3.92465C1.12701 3.47063 1.1643 2.82485 1.57625 2.42329L2.42671 1.57338C2.82634 1.16348 3.47226 1.12815 3.92438 1.4792L4.57644 1.98589C4.71105 1.92352 4.84888 1.86662 4.98946 1.81519L5.09373 0.995125ZM6.82448 4.43525C5.50742 4.43525 4.43541 5.50723 4.43541 6.82422C4.43541 8.14119 5.50742 9.21317 6.82448 9.21317C8.14154 9.21317 9.21356 8.14119 9.21356 6.82422C9.21356 5.50723 8.14154 4.43525 6.82448 4.43525ZM3.79381 6.82422C3.79381 5.15287 5.15311 3.79365 6.82448 3.79365C8.49586 3.79365 9.85515 5.15287 9.85515 6.82422C9.85515 8.49556 8.49586 9.85477 6.82448 9.85477C5.15311 9.85477 3.79381 8.49556 3.79381 6.82422Z" />

@@ -21,6 +21,13 @@ function todayIST() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
+const NUBRA_SESSION_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+function nubraSessionValid(): boolean {
+  const ts = Number(localStorage.getItem('nubra_login_ts') ?? 0);
+  return !!localStorage.getItem('nubra_session_token') && ts > 0 && Date.now() - ts < NUBRA_SESSION_MS;
+}
+
 export default function SetupScreen({ googleUser, onReady }: Props) {
   const { status: instrStatus } = useInstruments();
   const sub = googleUser?.sub ?? 'default';
@@ -52,10 +59,8 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     setPhase('logging-in');
     setErr('');
 
-    // Skip if already logged in today (unless forced re-generate)
-    const alreadyToday = !force
-      && localStorage.getItem('nubra_login_date') === todayIST()
-      && !!localStorage.getItem('nubra_session_token');
+    // Skip if session is still within 12-hour window (unless forced re-generate)
+    const alreadyToday = !force && nubraSessionValid();
 
     try {
       // ── Upstox ──
@@ -104,6 +109,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
         localStorage.setItem('nubra_raw_cookie',    rawCookie);
         if (nuData.device_id) localStorage.setItem('nubra_device_id', nuData.device_id);
         localStorage.setItem('nubra_login_date', todayIST());
+        localStorage.setItem('nubra_login_ts', String(Date.now()));
         saveAuthToken('nubra', nuData.session_token, {
           auth_token: nuData.auth_token,
           raw_cookie: rawCookie,
@@ -153,12 +159,10 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
       setNuTotpKey(c?.nubra?.totp_secret || lsTotpSec);
 
       // Check if valid cached tokens exist (IDB or localStorage) — store in state for button to use
-      const hasValidNubraIDB  = nubraAuth?.date === today && !!nubraAuth?.token;
+      const hasValidNubraIDB  = nubraAuth?.date === today && !!nubraAuth?.token && nubraSessionValid();
       const hasValidUpstoxIDB = !!upstoxAuth?.token;
-      const lsNubraSession    = localStorage.getItem('nubra_session_token');
-      const lsNubraDate       = localStorage.getItem('nubra_login_date');
       const lsUpstox          = localStorage.getItem('upstox_token');
-      const hasValidLS        = !!(lsNubraSession && lsNubraDate === today && lsUpstox);
+      const hasValidLS        = !!(nubraSessionValid() && lsUpstox);
 
       if (hasValidNubraIDB && hasValidUpstoxIDB) {
         // Backfill localStorage from IDB
@@ -171,10 +175,11 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
         setHasValidCache(true);
       } else if (hasValidLS) {
         // Backfill IDB from localStorage
+        const lsSession   = localStorage.getItem('nubra_session_token')!;
         const lsAuthToken = localStorage.getItem('nubra_auth_token') ?? undefined;
         const lsRawCookie = localStorage.getItem('nubra_raw_cookie') ?? undefined;
         const lsDeviceId  = localStorage.getItem('nubra_device_id')  ?? undefined;
-        saveAuthToken('nubra', lsNubraSession!, { auth_token: lsAuthToken, raw_cookie: lsRawCookie, device_id: lsDeviceId }).catch(() => {});
+        saveAuthToken('nubra', lsSession, { auth_token: lsAuthToken, raw_cookie: lsRawCookie, device_id: lsDeviceId }).catch(() => {});
         saveAuthToken('upstox', lsUpstox!).catch(() => {});
         setHasValidCache(true);
       }
@@ -257,6 +262,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
       localStorage.setItem('nubra_raw_cookie',    rawCookie);
       if (data.device_id) localStorage.setItem('nubra_device_id', data.device_id);
       localStorage.setItem('nubra_login_date', todayIST());
+      localStorage.setItem('nubra_login_ts', String(Date.now()));
       // Cache auth tokens in IDB so next visit skips API calls
       saveAuthToken('nubra', data.session_token, {
         auth_token: data.auth_token,
@@ -433,13 +439,14 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
             {err && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 10 }}>{err}</p>}
 
             {hasValidCache ? (
-              /* ── Today's tokens are valid ── */
+              /* ── Session still valid (within 12h) ── */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <Btn loading={loading} onClick={() => { setMsg('Loading instruments…'); setPhase('loading-instr'); }}>
                   Go to App →
                 </Btn>
                 <button onClick={() => {
                   localStorage.removeItem('nubra_login_date');
+                  localStorage.removeItem('nubra_login_ts');
                   localStorage.removeItem('nubra_session_token');
                   localStorage.removeItem('nubra_auth_token');
                   localStorage.removeItem('nubra_raw_cookie');
@@ -450,26 +457,26 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
                 </button>
               </div>
             ) : nuTotpKey && upKey && upPhone ? (
-              /* ── Creds saved, TOTP available — auto login ── */
+              /* ── Session expired / first login today — TOTP available, auto re-login ── */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <Btn loading={loading} onClick={() => {
                   const creds: UserCreds = {
                     upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
                     nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
                   };
-                  runAutoLogin(creds);
+                  runAutoLogin(creds, true);
                 }}>
                   Generate Auth Token →
                 </Btn>
                 <button onClick={() => {
                   setNuTotpKey('');
                   localStorage.removeItem('nubra_totp_secret');
-                }} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.45)', cursor: 'pointer' }}>
-                  Re-setup Nubra TOTP
+                }} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.35)', cursor: 'pointer' }}>
+                  Re-setup via OTP instead
                 </button>
               </div>
             ) : (
-              /* ── First time / re-setup: send OTP to get TOTP secret ── */
+              /* ── No TOTP secret: send OTP to generate a fresh one ── */
               <Btn loading={loading} onClick={handleSendOtp}>Send Nubra OTP →</Btn>
             )}
             <button onClick={onReady} style={{ display: 'block', width: '100%', marginTop: 8, padding: 8, background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}>Skip for now</button>

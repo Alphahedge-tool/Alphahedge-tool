@@ -1,0 +1,971 @@
+/* ── Root ─────────────────────────────────────────────────────────────────── */
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #131110;
+  color: #d1d4dc;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #1c1a17;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+  min-height: 76px;
+}
+
+.toolbarLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  padding: 8px 0;
+}
+
+/* ── Tab strip ───────────────────────────────────────────────────────────── */
+.tabStrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  background: #252220;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  color: #787B86;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  user-select: none;
+}
+.tab:hover { background: #2e2b27; color: #d1d4dc; border-color: rgba(255,255,255,0.12); }
+
+.tabActive {
+  background: rgba(255,152,0,0.10) !important;
+  border-color: rgba(255,152,0,0.45) !important;
+  color: #FF9800 !important;
+}
+
+.tabLabel { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tabClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.1s, color 0.1s;
+  padding: 0;
+}
+.tabClose:hover { opacity: 1; color: #ef5350; }
+
+/* Symbol search pill */
+.symWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  background: #252220;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  transition: border-color 0.12s;
+  cursor: text;
+}
+.symWrap:focus-within {
+  border-color: rgba(255,152,0,0.5);
+  background: rgba(255,152,0,0.05);
+}
+
+.symInput {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 11px;
+  color: #d1d4dc;
+  width: 115px;
+}
+.symInput::placeholder { color: #4a4e5c; }
+
+/* ── Controls row ────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ctrlLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #5d6673;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ctrlVal {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d1d4dc;
+}
+
+.ctrlSep { color: rgba(255,255,255,0.08); font-size: 16px; line-height: 1; }
+
+/* ── Inline select ───────────────────────────────────────────────────────── */
+.inlineBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: #5d6673;
+  background: #252220;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.inlineBtn:hover { border-color: rgba(255,255,255,0.14); color: #d1d4dc; background: #2e2b27; }
+.inlineBtnFilled { color: #d1d4dc; border-color: rgba(255,255,255,0.10); }
+.inlineBtnDisabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+.inlineBtnText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+/* ── Dropdown ─────────────────────────────────────────────────────────────── */
+.dropList {
+  background: #1c1a17;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #252220 transparent;
+}
+
+.dropItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #787b86;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.08s;
+}
+.dropItem:hover { background: rgba(255,255,255,0.04); color: #d1d4dc; }
+.dropItemActive { background: rgba(255,152,0,0.08); color: #d1d4dc; }
+.dropItemSym { font-weight: 700; color: #d1d4dc; flex: 1; }
+
+/* ── Content area ────────────────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Empty / loading / error ─────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  color: #3D4150;
+}
+.empty p { font-size: 13px; margin: 0; }
+
+.tableErr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  color: #ef5350;
+}
+
+.tableLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  font-size: 12px;
+  color: #5d6673;
+}
+
+.tableEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 13px;
+  color: #3D4150;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-top-color: #FF9800;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Table wrapper ───────────────────────────────────────────────────────── */
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Spot bar ────────────────────────────────────────────────────────────── */
+.spotBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 16px;
+  background: #1c1a17;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+.spotLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #5d6673;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.spotVal {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d1d4dc;
+  font-variant-numeric: tabular-nums;
+}
+.atmVal {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2962ff;
+  background: rgba(41,98,255,0.1);
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(41,98,255,0.25);
+  font-variant-numeric: tabular-nums;
+}
+.spotSep { color: rgba(255,255,255,0.08); font-size: 16px; }
+
+/* ── Table scroll ────────────────────────────────────────────────────────── */
+.tableScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #252220 transparent;
+}
+.tableScroll::-webkit-scrollbar { width: 5px; height: 5px; }
+.tableScroll::-webkit-scrollbar-track { background: transparent; }
+.tableScroll::-webkit-scrollbar-thumb { background: #252220; border-radius: 3px; }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.table thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* Super header */
+.superRow {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.thSuperStrike {
+  background: linear-gradient(180deg, rgba(24,27,37,0.97) 0%, rgba(14,17,26,0.99) 100%);
+  border-left: 1px solid rgba(122,137,184,0.24);
+  border-right: 1px solid rgba(122,137,184,0.24);
+}
+
+.thSuperMid {
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  background: rgba(255,152,0,0.06);
+  color: #FF9800;
+  border-bottom: 1px solid rgba(255,152,0,0.15);
+}
+
+/* Sub header */
+.subRow { border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+.thStrike {
+  padding: 7px 16px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #cfd5e3;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(26,30,44,0.97) 0%, rgba(13,15,23,0.99) 100%);
+  border-left: 1px solid rgba(125,137,176,0.28);
+  border-right: 1px solid rgba(125,137,176,0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.5);
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.thCall {
+  padding: 7px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+  color: #e28b7a;
+  background: #2b201d;
+  border-bottom: 1px solid rgba(226,139,122,0.22);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.thPut {
+  padding: 7px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+  color: #6eb7ad;
+  background: #1a2b29;
+  border-bottom: 1px solid rgba(110,183,173,0.22);
+  white-space: nowrap;
+  min-width: 80px;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+.thMid {
+  padding: 7px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+  color: #a8b3ad;
+  background: #252b2a;
+  border-bottom: 1px solid rgba(183,199,193,0.12);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+/* ── Body rows ───────────────────────────────────────────────────────────── */
+.tr {
+  transition: filter 0.1s;
+}
+.tr:hover td { filter: brightness(1.1); }
+
+/* CE cells — warm dark */
+.tdCall {
+  padding: 6px 12px;
+  text-align: right;
+  background: linear-gradient(180deg, rgba(44,33,30,0.90) 0%, rgba(34,26,24,0.95) 100%);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.4);
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+/* PE cells — cool dark */
+.tdPut {
+  padding: 6px 12px;
+  text-align: right;
+  background: linear-gradient(180deg, rgba(25,40,38,0.90) 0%, rgba(19,31,29,0.95) 100%);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.4);
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Strike cell — hexagon clipped, same as OptionChain */
+.tdStrike {
+  padding: 6px 14px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(24,27,37,0.96) 0%, rgba(12,14,21,0.98) 100%);
+  color: #d8deef;
+  font-weight: 800;
+  font-size: 12.5px;
+  border-top: 1px solid rgba(122,137,184,0.3);
+  border-bottom: 1px solid rgba(0,0,0,0.55);
+  border-left: 1px solid rgba(122,137,184,0.22);
+  border-right: 1px solid rgba(255,255,255,0.10);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
+  white-space: nowrap;
+  position: relative;
+}
+
+/* ATM strike — blue glow */
+.tdStrikeAtm {
+  background: linear-gradient(180deg, rgba(35,52,88,0.95) 0%, rgba(18,31,59,0.98) 100%);
+  border-top-color: rgba(89,136,255,0.65);
+  border-left-color: rgba(89,136,255,0.45);
+  border-right-color: rgba(89,136,255,0.45);
+  box-shadow: inset 0 0 0 1px rgba(102,162,255,0.22), 0 0 18px rgba(52,117,255,0.2);
+}
+
+/* Mid cells */
+.tdMid {
+  padding: 6px 12px;
+  text-align: right;
+  background: linear-gradient(180deg, rgba(27,32,31,0.90) 0%, rgba(21,26,25,0.95) 100%);
+  border-top: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(0,0,0,0.35);
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ATM row highlight on CE/PE/mid cells */
+.tdCallAtm {
+  background: linear-gradient(180deg, rgba(35,52,88,0.5) 0%, rgba(25,40,70,0.6) 100%) !important;
+  border-top-color: rgba(89,136,255,0.3) !important;
+}
+.tdPutAtm {
+  background: linear-gradient(180deg, rgba(35,52,88,0.5) 0%, rgba(25,40,70,0.6) 100%) !important;
+  border-top-color: rgba(89,136,255,0.3) !important;
+}
+.tdMidAtm {
+  background: linear-gradient(180deg, rgba(30,44,76,0.6) 0%, rgba(18,28,52,0.7) 100%) !important;
+  border-top-color: rgba(89,136,255,0.25) !important;
+}
+
+/* ── Value styles ─────────────────────────────────────────────────────────── */
+.priceCall {
+  color: #e28b7a;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.pricePut {
+  color: #6eb7ad;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.strikeVal {
+  color: #d8deef;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.strikeValAtm {
+  color: #79b2ff;
+  text-shadow: 0 0 10px rgba(86,146,255,0.35);
+}
+.straddleVal {
+  color: #FF9800;
+  font-weight: 700;
+  font-size: 12px;
+}
+.ivVal {
+  color: #f7e2a7;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.deltaVal {
+  color: #aab2ff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.greek {
+  color: #c4c9d8;
+  font-size: 11.5px;
+}
+.oiVal {
+  font-size: 11.5px;
+  color: #b2b8c8;
+  font-weight: 600;
+}
+
+/* OI bar fill behind value */
+.oiBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 1px 0;
+  border-radius: 2px;
+  background: linear-gradient(to left, var(--clr) var(--pct), transparent var(--pct));
+}
+
+/* ATM pill — blue badge */
+.atmPill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #79b2ff;
+  background: rgba(41,98,255,0.15);
+  border: 1px solid rgba(89,136,255,0.5);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.viewTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.viewTab {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #252220;
+  color: #787b86;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.viewTabActive {
+  border-color: rgba(255,152,0,0.4);
+  color: #ff9800;
+  background: rgba(255,152,0,0.09);
+}
+
+.calendarWrap {
+  --desk-bg: #121514;
+  --desk-panel: #171c1b;
+  --desk-border: rgba(196, 210, 205, 0.10);
+  --desk-text: #d6ddd9;
+  --desk-muted: #8f9a95;
+  --desk-call: #e28b7a;
+  --desk-put: #6eb7ad;
+  --desk-strike: #b9c5da;
+  --desk-net-pos: #72c8a4;
+  --desk-net-neg: #e28b7a;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.calendarControls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px 5px;
+  border-bottom: 1px solid var(--desk-border);
+  background: var(--desk-panel);
+}
+
+.calendarControlsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendarTopRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.expiryChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.expiryChip {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #252220;
+  color: #8f93a3;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.expiryChipActive {
+  border-color: rgba(255,152,0,0.4);
+  background: rgba(255,152,0,0.12);
+  color: #ffb13b;
+}
+
+.expiryCheckWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+}
+
+.expiryCheckItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #d1d4dc;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.expiryCheckItem:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.expiryCheckItem input {
+  accent-color: #ff9800;
+}
+
+.calendarPairRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  background: #171512;
+}
+
+.calendarPairSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendarBuilder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  overflow-x: auto;
+}
+
+.legBlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #1c1a17;
+}
+
+.legLtp {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d1d4dc;
+  padding-left: 4px;
+}
+
+.netCard {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin-left: auto;
+  padding: 5px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #1c1a17;
+  min-width: 120px;
+}
+
+.netVal {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.netPos { color: #2ebd85; }
+.netNeg { color: #ef5350; }
+.netPremium {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.netHint {
+  font-size: 10px;
+  color: #7a7f8f;
+}
+
+.calendarTableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #252220 transparent;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  contain: strict;
+  backface-visibility: hidden;
+}
+
+.calendarTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 1px;
+  font-variant-numeric: tabular-nums;
+  table-layout: auto;
+  color: var(--desk-text);
+}
+
+.calendarTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  backdrop-filter: none;
+  opacity: 1;
+  white-space: nowrap;
+}
+
+.calendarTable td {
+  white-space: nowrap;
+}
+
+.calendarTable tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 34px;
+}
+
+.calendarTable .tr:hover td {
+  filter: brightness(1.03);
+}
+
+.calendarTable .thStrike {
+  color: var(--desk-strike);
+  background: linear-gradient(180deg, rgba(46,54,74,0.95) 0%, rgba(29,34,49,0.98) 100%);
+  border-left-color: rgba(143, 159, 196, 0.35);
+  border-right-color: rgba(143, 159, 196, 0.35);
+  min-width: 74px;
+  padding: 6px 8px;
+}
+
+.calendarTable .thCall {
+  color: var(--desk-call);
+  background: #2b201d;
+  border-bottom-color: rgba(226,139,122,0.22);
+  min-width: 178px;
+  padding: 6px 6px;
+  font-size: 10px;
+}
+
+.calendarTable .thPut {
+  color: var(--desk-put);
+  background: #1a2b29;
+  border-bottom-color: rgba(110,183,173,0.22);
+  min-width: 178px;
+  padding: 6px 6px;
+  font-size: 10px;
+}
+
+.calendarTable .thMid {
+  color: #a8b3ad;
+  background: #252b2a;
+  border-bottom-color: rgba(183, 199, 193, 0.12);
+  min-width: 104px;
+  padding: 6px 6px;
+  font-size: 10px;
+}
+
+.calendarTable .tdStrike {
+  color: var(--desk-strike);
+  background: linear-gradient(180deg, rgba(39,46,64,0.94) 0%, rgba(24,29,42,0.98) 100%);
+}
+
+.calendarTable .tdStrikeAtm {
+  background: linear-gradient(180deg, rgba(62,83,124,0.90) 0%, rgba(38,56,89,0.95) 100%);
+  box-shadow: inset 0 0 0 1px rgba(135,165,221,0.22), 0 0 10px rgba(99,136,215,0.16);
+}
+
+.calendarTable .tdCall {
+  background: linear-gradient(180deg, rgba(44,33,30,0.90) 0%, rgba(34,26,24,0.95) 100%);
+}
+
+.calendarTable .tdPut {
+  background: linear-gradient(180deg, rgba(25,40,38,0.90) 0%, rgba(19,31,29,0.95) 100%);
+}
+
+.calendarTable .tdMid {
+  background: linear-gradient(180deg, rgba(27,32,31,0.90) 0%, rgba(21,26,25,0.95) 100%);
+}
+
+.table th:last-child,
+.table td:last-child,
+.calendarTable th:last-child,
+.calendarTable td:last-child {
+  border-right: none;
+}
+
+.calendarTable .priceCall {
+  color: var(--desk-call);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.calendarTable .pricePut {
+  color: var(--desk-put);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.calendarTable .ivVal {
+  color: #f7e2a7;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.calendarTable .netPremium {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.comboNarrow {
+  min-width: 56px !important;
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+}
+
+.comboBar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.comboBarVal {
+  color: #d9e0ef;
+  font-weight: 700;
+}
+
+.draggableHead {
+  cursor: grab;
+  user-select: none;
+  transition: background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease, color 120ms ease;
+  will-change: background-color, box-shadow, opacity;
+}
+
+.draggableHead:active {
+  cursor: grabbing;
+}
+
+.dragOverHead {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+  background-color: rgba(255,255,255,0.08) !important;
+}
+
+.draggingHead {
+  opacity: 0.82;
+}
+
+.calendarTable .netPos {
+  color: var(--desk-net-pos);
+}
+
+.calendarTable .netNeg {
+  color: var(--desk-net-neg);
+}
+
+.calendarTable .atmPill {
+  color: #9fc1ff;
+  border-color: rgba(143,175,232,0.45);
+  background: rgba(94,130,205,0.16);
+}
+
+.calendarCellHead {
+  padding: 5px 6px;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 700;
+  color: #aeb4c4;
+  background: #171512;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.calendarCell {
+  padding: 4px 6px;
+  text-align: right;
+  font-size: 11px;
+  background: linear-gradient(180deg, rgba(20,18,15,0.88) 0%, rgba(16,14,12,0.93) 100%);
+  border-top: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(0,0,0,0.35);
+  white-space: nowrap;
+}
+
+.calendarCellStrike {
+  text-align: left;
+  min-width: 76px;
+  background: linear-gradient(180deg, rgba(24,27,37,0.96) 0%, rgba(12,14,21,0.98) 100%);
+}
+
+.calendarExpiryHead {
+  padding: 7px 10px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ff9800;
+  background: rgba(255,152,0,0.08);
+  border-bottom: 1px solid rgba(255,152,0,0.16);
+}
+
+.calendarStrikeHead {
+  padding: 7px 10px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d5dcec;
+  background: linear-gradient(180deg, rgba(26,30,44,0.97) 0%, rgba(13,15,23,0.99) 100%);
+  border-left: 1px solid rgba(125,137,176,0.28);
+  border-right: 1px solid rgba(125,137,176,0.28);
+}

@@ -535,8 +535,8 @@ export default function OpenInterest({ nubraInstruments }: Props) {
       const ceValues  = filtered.map(b => b.ce);
       const peValues  = filtered.map(b => b.pe);
 
-      const CE_COLOR = '#F6465D';   // red  — Call
-      const PE_COLOR = '#0ECB81';   // green — Put
+      const CE_COLOR = '#0ECB81';   // green — Call
+      const PE_COLOR = '#F6465D';   // red  — Put
 
       const barW = optType === 'BOTH' ? 14 : 18;
 
@@ -554,7 +554,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
           itemStyle: {
             color: (params: any) => {
               const v = typeof params === 'object' ? params.value : params;
-              return isChange && v < 0 ? 'rgba(246,70,93,0.45)' : CE_COLOR;
+              return isChange && v < 0 ? 'rgba(14,203,129,0.35)' : CE_COLOR;
             },
             borderRadius: [3, 3, 0, 0],
           },
@@ -571,7 +571,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
           itemStyle: {
             color: (params: any) => {
               const v = typeof params === 'object' ? params.value : params;
-              return isChange && v < 0 ? 'rgba(14,203,129,0.35)' : PE_COLOR;
+              return isChange && v < 0 ? 'rgba(246,70,93,0.45)' : PE_COLOR;
             },
             borderRadius: [3, 3, 0, 0],
           },
@@ -607,7 +607,7 @@ export default function OpenInterest({ nubraInstruments }: Props) {
             let html = `<div style="font-size:14px;font-weight:700;margin-bottom:8px;color:#ffffff;letter-spacing:0.02em">${strike}</div>`;
             for (const p of params) {
               if (p.value == null || (!isChange && !p.value)) continue;
-              const color = p.seriesName.includes('Call') ? '#F6465D' : '#0ECB81';
+              const color = p.seriesName.includes('Call') ? '#0ECB81' : '#F6465D';
               const val   = fmtOI(Number(p.value));
               html += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                 <span style="width:10px;height:10px;border-radius:2px;background:${color};display:inline-block;flex-shrink:0"></span>

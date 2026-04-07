@@ -794,6 +794,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [showSpot,    setShowSpot]    = useState(true);
   const [showOptions, setShowOptions] = useState(false);
   const [showMtm,     setShowMtm]     = useState(true);
+  const [mtmMode,     setMtmMode]     = useState<'total' | 'series'>('total');
   const [showDelta,   setShowDelta]   = useState(false);
   const [showIv,      setShowIv]      = useState(false);
   const [showAtmIv,   setShowAtmIv]   = useState(false);
