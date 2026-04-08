@@ -1,0 +1,783 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 82, 82, 0.08), transparent 30%),
+    radial-gradient(circle at top left, rgba(0, 224, 170, 0.09), transparent 28%),
+    #111315;
+  color: #e7edf6;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.viewTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+.viewTab {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(19, 21, 26, 0.95);
+  color: #b9c2d1;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.viewTabActive {
+  background: rgba(78, 126, 255, 0.18);
+  border-color: rgba(97, 150, 255, 0.45);
+  color: #dce8ff;
+}
+
+.control,
+.toggleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.searchableWrap {
+  position: relative;
+}
+
+.controlLabel {
+  font-size: 11px;
+  line-height: 1;
+  color: #9da6b5;
+}
+
+.select {
+  min-width: 150px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(19, 21, 26, 0.95);
+  color: #f2f5fb;
+  font-size: 14px;
+  outline: none;
+}
+
+.searchInput {
+  min-width: 150px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(19, 21, 26, 0.95);
+  color: #f2f5fb;
+  font-size: 14px;
+  outline: none;
+}
+
+.selectButton {
+  min-width: 150px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(19, 21, 26, 0.95);
+  color: #f2f5fb;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.select:focus {
+  border-color: rgba(84, 154, 255, 0.55);
+}
+
+.searchInput:focus {
+  border-color: rgba(84, 154, 255, 0.55);
+}
+
+.searchDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  min-width: 180px;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #171a1f;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.columnDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 190px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #171a1f;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.columnOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: #dfe7f3;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.columnOption:hover {
+  background: rgba(84, 154, 255, 0.1);
+}
+
+.columnOption input {
+  accent-color: #5aa7ff;
+}
+
+.selectCaret {
+  color: #8ea6d0;
+}
+
+.searchOption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: #dfe7f3;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.searchOption:hover,
+.searchOptionActive {
+  background: rgba(84, 154, 255, 0.14);
+}
+
+.searchOptionMain {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8eef8;
+}
+
+.searchOptionSub {
+  font-size: 11px;
+  color: #8e98aa;
+}
+
+.searchEmpty {
+  padding: 10px 12px;
+  color: #8e98aa;
+  font-size: 13px;
+}
+
+.toggleWrap {
+  min-width: 110px;
+}
+
+.toggle {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  position: relative;
+  cursor: pointer;
+}
+
+.toggleOn {
+  background: rgba(255, 161, 0, 0.18);
+  border-color: rgba(255, 161, 0, 0.45);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #d7dee7;
+  transition: transform 0.16s ease;
+}
+
+.toggleOn .toggleKnob {
+  transform: translateX(18px);
+  background: #ffb347;
+}
+
+.infoChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(90, 132, 255, 0.24);
+  background: rgba(38, 49, 79, 0.32);
+  color: #c7d4f2;
+  font-size: 13px;
+}
+
+.infoDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4c86ff;
+  box-shadow: 0 0 0 4px rgba(76, 134, 255, 0.12);
+}
+
+.bannerError,
+.bannerInfo {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.bannerError {
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.22);
+  color: #ff8f8f;
+}
+
+.bannerInfo {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #aeb8c9;
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 8, 10, 0.75);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1240px;
+}
+
+.table th,
+.table td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.superHead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.expiryHeadRow th {
+  position: sticky;
+  top: 40px;
+  z-index: 3;
+}
+
+.metricHeadRow th {
+  position: sticky;
+  top: 80px;
+  z-index: 3;
+}
+
+.superCell {
+  height: 46px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: #222726;
+}
+
+.callsHead {
+  color: #2ce0af;
+  background: #133f36;
+  text-align: left;
+  padding-left: 14px;
+}
+
+.putsHead {
+  color: #ff6b91;
+  background: #4c2732;
+  text-align: right;
+  padding-right: 14px;
+}
+
+.strikeHead {
+  min-width: 70px;
+  background: #242729;
+  color: #cfd7e4;
+}
+
+.expiryHead,
+.metricHead {
+  background: #202425;
+  color: #cad0dc;
+}
+
+.expiryHead {
+  height: 42px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.metricHead {
+  height: 34px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.callGroupHead0 {
+  background: #232728;
+}
+
+.callGroupHead1 {
+  background: #2a2b2d;
+}
+
+.callGroupHead2 {
+  background: #1e1f21;
+}
+
+.putGroupHead0 {
+  background: #1f2022;
+}
+
+.putGroupHead1 {
+  background: #2a2b2d;
+}
+
+.putGroupHead2 {
+  background: #232728;
+}
+
+.callCell,
+.putCell,
+.strikeCell {
+  height: 44px;
+  font-size: 14px;
+}
+
+.callCell {
+  background: #151717;
+  color: #dde7f4;
+}
+
+.putCell {
+  background: #141416;
+  color: #dde7f4;
+}
+
+.callGroupCell0 {
+  background: #181a1b;
+}
+
+.callGroupCell1 {
+  background: #303031;
+}
+
+.callGroupCell2 {
+  background: #141416;
+}
+
+.putGroupCell0 {
+  background: #141416;
+}
+
+.putGroupCell1 {
+  background: #303031;
+}
+
+.putGroupCell2 {
+  background: #181a1b;
+}
+
+.priceCell {
+  min-width: 96px;
+}
+
+.priceMain {
+  display: block;
+  font-weight: 700;
+}
+
+.oiBar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.oiBar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: var(--oi-fill, 0%);
+  z-index: -1;
+  transition: width 0.2s ease;
+}
+
+.oiBarCall {
+  box-shadow: inset 0 0 0 1px rgba(82, 168, 255, 0.14);
+}
+
+.oiBarCall::before {
+  background: linear-gradient(90deg, rgba(82, 168, 255, 0.34), rgba(82, 168, 255, 0.14));
+}
+
+.oiBarPut {
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 92, 0.14);
+}
+
+.oiBarPut::before {
+  background: linear-gradient(90deg, rgba(255, 190, 92, 0.32), rgba(255, 190, 92, 0.13));
+}
+
+.oiBarText {
+  display: block;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.oiBarSub {
+  display: block;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.upText {
+  color: #1fe0af;
+}
+
+.downText {
+  color: #ff6588;
+}
+
+.priceUp,
+.priceDown {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.priceUp {
+  color: #1fe0af;
+}
+
+.priceDown {
+  color: #ff6588;
+}
+
+.strikeCell {
+  padding: 6px 14px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(24, 27, 37, 0.96) 0%, rgba(12, 14, 21, 0.98) 100%);
+  color: #d8deef;
+  font-weight: 800;
+  font-size: 12.5px;
+  min-width: 86px;
+  border-top: 1px solid rgba(122, 137, 184, 0.3);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.55);
+  border-left: 1px solid rgba(122, 137, 184, 0.22);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
+  white-space: nowrap;
+  position: relative;
+}
+
+.atmRow .callCell,
+.atmRow .putCell,
+.strikeCellAtm {
+  background: rgba(120, 92, 28, 0.35);
+}
+
+.strikeCellAtm {
+  background: linear-gradient(180deg, rgba(35, 52, 88, 0.95) 0%, rgba(18, 31, 59, 0.98) 100%);
+  border-top-color: rgba(89, 136, 255, 0.65);
+  border-left-color: rgba(89, 136, 255, 0.45);
+  border-right-color: rgba(89, 136, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(102, 162, 255, 0.22), 0 0 18px rgba(52, 117, 255, 0.2);
+}
+
+.atmRow .callGroupCell0,
+.atmRow .callGroupCell1,
+.atmRow .callGroupCell2,
+.atmRow .putGroupCell0,
+.atmRow .putGroupCell1,
+.atmRow .putGroupCell2 {
+  background: rgba(77, 63, 27, 0.52);
+}
+
+.emptyCell {
+  height: 180px;
+  color: #8b96a7;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.bfTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1220px;
+}
+
+.bfTable th,
+.bfTable td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.bfTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #1d2324;
+  color: #dce5f1;
+  font-weight: 700;
+}
+
+.bfLegBuy,
+.bfLegSell {
+  font-weight: 700;
+  color: #dbe6fb;
+}
+
+.bfLegBuy {
+  background: rgba(36, 83, 74, 0.25);
+}
+
+.bfLegSell {
+  background: rgba(77, 53, 53, 0.24);
+}
+
+.bfLegBuy span,
+.bfLegSell span {
+  color: #4f87ff;
+  margin-left: 4px;
+}
+
+.bfPos {
+  color: #1fe0af;
+  font-weight: 700;
+}
+
+.bfNeg {
+  color: #ff6588;
+  font-weight: 700;
+}
+
+.bfChipPos,
+.bfChipNeg {
+  font-weight: 700;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.bfChipPos {
+  color: #1fe0af;
+}
+
+.bfChipNeg {
+  color: #ff6588;
+}
+
+.ratioTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1080px;
+}
+
+.ratioTable th,
+.ratioTable td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.ratioTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #1d2324;
+  color: #dce5f1;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ratioTable th:nth-child(1),
+.ratioTable td:nth-child(1) {
+  width: 58px;
+}
+
+.ratioTable th:nth-child(2),
+.ratioTable td:nth-child(2),
+.ratioTable th:nth-child(6),
+.ratioTable td:nth-child(6) {
+  width: 84px;
+}
+
+.ratioTable th:nth-child(3),
+.ratioTable td:nth-child(3),
+.ratioTable th:nth-child(7),
+.ratioTable td:nth-child(7) {
+  width: 86px;
+}
+
+.ratioTable th:nth-child(4),
+.ratioTable td:nth-child(4),
+.ratioTable th:nth-child(5),
+.ratioTable td:nth-child(5),
+.ratioTable th:nth-child(8),
+.ratioTable td:nth-child(8),
+.ratioTable th:nth-child(9),
+.ratioTable td:nth-child(9) {
+  width: 70px;
+}
+
+.ratioTable th:nth-child(10),
+.ratioTable td:nth-child(10) {
+  width: 86px;
+}
+
+.ratioTable thead th:nth-child(2),
+.ratioTable thead th:nth-child(3),
+.ratioTable thead th:nth-child(4),
+.ratioTable thead th:nth-child(5) {
+  background: #1e2427;
+}
+
+.ratioTable thead th:nth-child(6),
+.ratioTable thead th:nth-child(7),
+.ratioTable thead th:nth-child(8),
+.ratioTable thead th:nth-child(9) {
+  background: #1e2427;
+}
+
+.ratioTable tbody td:nth-child(2),
+.ratioTable tbody td:nth-child(3),
+.ratioTable tbody td:nth-child(4),
+.ratioTable tbody td:nth-child(5) {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ratioTable tbody td:nth-child(6),
+.ratioTable tbody td:nth-child(7),
+.ratioTable tbody td:nth-child(8),
+.ratioTable tbody td:nth-child(9) {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ratioBuyStrike {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #dbe6fb;
+  font-weight: 700;
+}
+
+.ratioSellStrike {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #dbe6fb;
+  font-weight: 700;
+}
+
+.tradeBtn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(110, 142, 255, 0.45);
+  background: #4f6ef3;
+  color: #f4f7ff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tradeBtn:hover {
+  filter: brightness(1.08);
+}
+
+.strikeVal {
+  color: #d8deef;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.strikeValAtm {
+  color: #79b2ff;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 10px rgba(86, 146, 255, 0.35);
+}
+
+.atmPill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #79b2ff;
+  background: rgba(41, 98, 255, 0.15);
+  border: 1px solid rgba(89, 136, 255, 0.5);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+@media (max-width: 900px) {
+  .root {
+    padding: 10px;
+  }
+
+  .select {
+    min-width: 132px;
+  }
+
+  .expiryHeadRow th {
+    top: 74px;
+  }
+
+  .metricHeadRow th {
+    top: 114px;
+  }
+}

@@ -17,6 +17,9 @@ import NubraApiTester from './NubraApiTester';
 import Backtest from './Backtest';
 import HistoricalWorkspace from './HistoricalWorkspace';
 import HomeWorkspace from './HomeWorkspace';
+import SpreadAnalyzer from './SpreadAnalyzer';
+import MasterOptionChain from './MasterOptionChain';
+import CumulativeOiChain from './CumulativeOiChain';
 import { wsManager } from './lib/WebSocketManager';
 import { useWsConnected } from './hooks/useMarketData';
 import { cx } from './lib/utils';
@@ -53,7 +56,7 @@ function isMarketOpen(): boolean {
   return istMin >= 9 * 60 + 15 && istMin < 15 * 60 + 30;
 }
 
-type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home';
+type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home' | 'spread' | 'masterchain' | 'cumoi';
 type Tab = 'ALL' | 'Cash' | 'F&O' | 'Currency' | 'Commodity';
 
 const TABS: Tab[] = ['ALL', 'Cash', 'F&O', 'Currency', 'Commodity'];
@@ -2687,6 +2690,9 @@ export default function App() {
     { page: 'nubra',     label: 'Nubra IV',  icon: <IconFlask /> },
     { page: 'backtest',  label: 'Backtest',  icon: <IconClock /> },
     { page: 'historical', label: 'Historical', icon: <IconHistory /> },
+    { page: 'spread',     label: 'Spread Analyzer', icon: <IconLayers /> },
+    { page: 'masterchain', label: 'Master Option Chain', icon: <IconLayers /> },
+    { page: 'cumoi', label: 'Cumulative OI Chain', icon: <IconLayers /> },
   ];
 
   return (
@@ -2999,6 +3005,25 @@ export default function App() {
           {/* MTM Analyzer */}
           {(page === 'mtm' || visited.has('mtm')) && (
             <MtmLayout visible={page === 'mtm'} mtmResultsCbRef={mtmSearchResultsCallbackRef} mtmWorkerRef={mtmWorkerRef} mtmWorkerReady={mtmWorkerReady} instruments={instruments} nubraInstruments={nubraInstruments} onAddToBasket={handleAddToBasket} execBasketRef={execBasketRef} strategyInfoRef={strategyInfoRef} />
+          )}
+
+          {/* Spread Analyzer */}
+          {(page === 'spread' || visited.has('spread')) && (
+            <div className="absolute inset-0" style={{ visibility: page === 'spread' ? 'visible' : 'hidden', pointerEvents: page === 'spread' ? 'auto' : 'none', zIndex: page === 'spread' ? 1 : 0 }}>
+              <SpreadAnalyzer visible={page === 'spread'} />
+            </div>
+          )}
+
+          {(page === 'masterchain' || visited.has('masterchain')) && (
+            <div className="absolute inset-0" style={{ visibility: page === 'masterchain' ? 'visible' : 'hidden', pointerEvents: page === 'masterchain' ? 'auto' : 'none', zIndex: page === 'masterchain' ? 1 : 0 }}>
+              <MasterOptionChain visible={page === 'masterchain'} />
+            </div>
+          )}
+
+          {(page === 'cumoi' || visited.has('cumoi')) && (
+            <div className="absolute inset-0" style={{ visibility: page === 'cumoi' ? 'visible' : 'hidden', pointerEvents: page === 'cumoi' ? 'auto' : 'none', zIndex: page === 'cumoi' ? 1 : 0 }}>
+              <CumulativeOiChain visible={page === 'cumoi'} />
+            </div>
           )}
 
         </main>

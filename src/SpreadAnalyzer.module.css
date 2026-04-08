@@ -736,8 +736,6 @@
   scrollbar-width: thin;
   scrollbar-color: #252220 transparent;
   will-change: scroll-position;
-  transform: translateZ(0);
-  contain: strict;
   backface-visibility: hidden;
 }
 
@@ -780,6 +778,7 @@
   border-right-color: rgba(143, 159, 196, 0.35);
   min-width: 74px;
   padding: 6px 8px;
+  text-align: center;
 }
 
 .calendarTable .thCall {
@@ -812,6 +811,7 @@
 .calendarTable .tdStrike {
   color: var(--desk-strike);
   background: linear-gradient(180deg, rgba(39,46,64,0.94) 0%, rgba(24,29,42,0.98) 100%);
+  text-align: center;
 }
 
 .calendarTable .tdStrikeAtm {

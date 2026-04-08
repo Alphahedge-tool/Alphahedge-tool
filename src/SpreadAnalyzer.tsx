@@ -117,9 +117,37 @@ function parseRestOption(opt: Record<string, number>): OptionSide {
     theta: opt.theta ?? 0,
     gamma: opt.gamma ?? 0,
     vega: opt.vega ?? 0,
-    iv: opt.iv ?? 0,
+    iv: (opt.iv ?? 0) * 100,
     volume,
   };
+}
+
+function buildChainSnapshotWs(ceList: Record<string, number>[], peList: Record<string, number>[], atmRaw: number, spotRaw: number): ChainSnapshot {
+  const map = new Map<number, StrikeRow>();
+  const parseWsSide = (opt: Record<string, number>): OptionSide => {
+    const ltp = opt.last_traded_price ?? 0;
+    const chg = opt.last_traded_price_change ?? 0;
+    const curOi = opt.open_interest ?? 0; const prevOi = opt.previous_open_interest ?? 0;
+    const volume = opt.volume ?? opt.traded_volume ?? opt.total_traded_volume ?? 0;
+    return { ltp, cp: ltp - chg, oi: curOi, oiChgPct: curOi > 0 ? ((curOi - prevOi) / curOi) * 100 : 0, delta: opt.delta ?? 0, theta: opt.theta ?? 0, gamma: opt.gamma ?? 0, vega: opt.vega ?? 0, iv: (opt.iv ?? 0) * 100, volume };
+  };
+  for (const opt of ceList) {
+    const strike = opt.strike_price ?? 0;
+    if (!map.has(strike)) map.set(strike, { strike, ce: { ...EMPTY_SIDE }, pe: { ...EMPTY_SIDE }, isAtm: false });
+    map.get(strike)!.ce = parseWsSide(opt);
+  }
+  for (const opt of peList) {
+    const strike = opt.strike_price ?? 0;
+    if (!map.has(strike)) map.set(strike, { strike, ce: { ...EMPTY_SIDE }, pe: { ...EMPTY_SIDE }, isAtm: false });
+    map.get(strike)!.pe = parseWsSide(opt);
+  }
+  const rows = [...map.values()].sort((a, b) => a.strike - b.strike);
+  const spot = spotRaw;
+  const atm = atmRaw > 0 ? atmRaw : spot;
+  let atmIdx = 0; let minDiff = Infinity;
+  rows.forEach((r, i) => { const d = Math.abs(r.strike - atm); if (d < minDiff) { minDiff = d; atmIdx = i; } });
+  rows.forEach((r, i) => { r.isAtm = i === atmIdx; });
+  return { rows, spot, atm };
 }
 
 function buildChainSnapshot(ceList: Record<string, number>[], peList: Record<string, number>[], atmRaw: number, spotRaw: number): ChainSnapshot {
@@ -498,7 +526,7 @@ function StraddleTable({ ins }: { ins: Instrument }) {
     return {
       ltp, cp, oi: opt.oi ?? 0,
       oiChgPct: opt.prev_oi != null && opt.oi > 0 ? ((opt.oi - opt.prev_oi) / opt.oi) * 100 : 0,
-      delta: opt.delta ?? 0, theta: opt.theta ?? 0, gamma: opt.gamma ?? 0, vega: opt.vega ?? 0, iv: opt.iv ?? 0, volume,
+      delta: opt.delta ?? 0, theta: opt.theta ?? 0, gamma: opt.gamma ?? 0, vega: opt.vega ?? 0, iv: (opt.iv ?? 0) * 100, volume,
     };
   };
 
@@ -510,7 +538,7 @@ function StraddleTable({ ins }: { ins: Instrument }) {
     return {
       ltp, cp: ltp - chg, oi: curOi,
       oiChgPct: curOi > 0 ? ((curOi - prevOi) / curOi) * 100 : 0,
-      delta: opt.delta ?? 0, theta: opt.theta ?? 0, gamma: opt.gamma ?? 0, vega: opt.vega ?? 0, iv: opt.iv ?? 0, volume,
+      delta: opt.delta ?? 0, theta: opt.theta ?? 0, gamma: opt.gamma ?? 0, vega: opt.vega ?? 0, iv: (opt.iv ?? 0) * 100, volume,
     };
   };
 
@@ -742,40 +770,47 @@ function StraddleTable({ ins }: { ins: Instrument }) {
 
 function CalendarComparator({ ins }: { ins: Instrument }) {
   const session = getSession();
-  const [pickedExpiries, setPickedExpiries] = useState<string[]>(() => ins.selectedExpiry ? [ins.selectedExpiry] : []);
+  const [pickedExpiries, setPickedExpiries] = useState<string[]>(() => ins.expiries.slice(0, 2).filter(Boolean));
   const [buyExpiry, setBuyExpiry] = useState(ins.selectedExpiry ?? '');
   const [sellExpiry, setSellExpiry] = useState(ins.expiries[1] ?? ins.selectedExpiry ?? '');
   const [chains, setChains] = useState<Record<string, ChainSnapshot>>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const fetchedRef = useRef<Set<string>>(new Set());
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const base = ins.selectedExpiry ? [ins.selectedExpiry] : [];
+    const base = ins.expiries.slice(0, 2).filter(Boolean);
     setPickedExpiries(base);
-    setBuyExpiry(ins.selectedExpiry ?? '');
-    setSellExpiry(ins.expiries[1] ?? ins.selectedExpiry ?? '');
+    setBuyExpiry(ins.expiries[0] ?? '');
+    setSellExpiry(ins.expiries[1] ?? ins.expiries[0] ?? '');
     setChains({});
+    fetchedRef.current = new Set();
     setErr('');
-  }, [ins.id, ins.selectedExpiry, ins.expiries]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ins.id]);
 
   const compareExpiries = useMemo(() => {
     if (pickedExpiries.length > 0) return pickedExpiries;
-    if (ins.selectedExpiry) return [ins.selectedExpiry];
-    return [];
-  }, [pickedExpiries, ins.selectedExpiry]);
+    return ins.expiries.slice(0, 2).filter(Boolean);
+  }, [pickedExpiries, ins.expiries]);
 
   useEffect(() => {
     if (!compareExpiries.includes(buyExpiry)) setBuyExpiry(compareExpiries[0] ?? '');
     if (!compareExpiries.includes(sellExpiry)) setSellExpiry(compareExpiries[1] ?? compareExpiries[0] ?? '');
   }, [compareExpiries, buyExpiry, sellExpiry]);
 
+  // REST fetch for any new expiries not yet loaded
   useEffect(() => {
     if (!session || !ins.sym || compareExpiries.length === 0) {
       setChains({});
+      fetchedRef.current = new Set();
       return;
     }
-    const toFetch = compareExpiries.filter(e => e && !chains[e]);
+    const toFetch = compareExpiries.filter(e => e && !fetchedRef.current.has(e));
     if (toFetch.length === 0) return;
+
+    toFetch.forEach(e => fetchedRef.current.add(e));
 
     let cancelled = false;
     setLoading(true);
@@ -792,54 +827,109 @@ function CalendarComparator({ ins }: { ins: Instrument }) {
         });
       })
       .catch(e => {
+        toFetch.forEach(exp => fetchedRef.current.delete(exp));
         if (!cancelled) setErr(String(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
-    return () => { cancelled = true; };
-  }, [session, ins.sym, ins.exchange, compareExpiries, chains]);
+    return () => {
+      cancelled = true;
+      // Allow retry on next mount
+      toFetch.forEach(exp => fetchedRef.current.delete(exp));
+    };
+  }, [session, ins.sym, ins.exchange, compareExpiries]);
+
+  // WebSocket live updates for all selected expiries
+  const compareExpiriesKey = compareExpiries.slice().sort().join(',');
+  useEffect(() => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    const expList = compareExpiriesKey ? compareExpiriesKey.split(',') : [];
+    if (!session || !ins.sym || expList.length === 0 || !isMarketOpen()) return;
+
+    const ws = new WebSocket(BRIDGE);
+    wsRef.current = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        action: 'subscribe',
+        session_token: session,
+        data_type: 'option',
+        symbols: expList.map(exp => `${ins.sym}:${exp}`),
+        exchange: ins.exchange,
+      }));
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'option' && msg.data && msg.data.expiry) {
+          const expiry = String(msg.data.expiry);
+          const d = msg.data;
+          const snap = buildChainSnapshotWs(d.ce ?? [], d.pe ?? [], d.at_the_money_strike ?? 0, d.current_price ?? 0);
+          setChains(prev => prev[expiry] ? { ...prev, [expiry]: snap } : prev);
+        }
+      } catch { /* */ }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+    return () => { ws.close(); wsRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, ins.sym, ins.exchange, compareExpiriesKey]);
 
   const rows = useMemo(() => {
-    const buyRows = buyExpiry ? (chains[buyExpiry]?.rows ?? []) : [];
-    const sellRows = sellExpiry ? (chains[sellExpiry]?.rows ?? []) : [];
-    const buyAtm = chains[buyExpiry]?.atm ?? 0;
-    const sellAtm = chains[sellExpiry]?.atm ?? 0;
-    const strikes = new Set<number>();
-    buyRows.forEach(r => strikes.add(r.strike));
-    sellRows.forEach(r => strikes.add(r.strike));
+    // Always: nearExpiry = smaller date, farExpiry = larger date
+    const [nearExpiry, farExpiry] = buyExpiry <= sellExpiry
+      ? [buyExpiry, sellExpiry]
+      : [sellExpiry, buyExpiry];
 
-    const buyMap = new Map(buyRows.map(r => [r.strike, r]));
-    const sellMap = new Map(sellRows.map(r => [r.strike, r]));
+    const nearRows = nearExpiry ? (chains[nearExpiry]?.rows ?? []) : [];
+    const farRows  = farExpiry  ? (chains[farExpiry]?.rows  ?? []) : [];
+    const nearAtm  = chains[nearExpiry]?.atm ?? 0;
+    const farAtm   = chains[farExpiry]?.atm  ?? 0;
+    const strikes  = new Set<number>();
+    nearRows.forEach(r => strikes.add(r.strike));
+    farRows.forEach(r  => strikes.add(r.strike));
+
+    const nearMap = new Map(nearRows.map(r => [r.strike, r]));
+    const farMap  = new Map(farRows.map(r  => [r.strike, r]));
 
     return [...strikes].sort((a, b) => a - b).map(strike => {
-      const buy = buyMap.get(strike);
-      const sell = sellMap.get(strike);
-      const buyCe = buy?.ce.ltp ?? 0;
-      const buyPe = buy?.pe.ltp ?? 0;
-      const buyCeIv = buy?.ce.iv ?? 0;
-      const buyPeIv = buy?.pe.iv ?? 0;
-      const sellCe = sell?.ce.ltp ?? 0;
-      const sellPe = sell?.pe.ltp ?? 0;
-      const sellCeIv = sell?.ce.iv ?? 0;
-      const sellPeIv = sell?.pe.iv ?? 0;
+      const near = nearMap.get(strike);
+      const far  = farMap.get(strike);
+      const buyCe   = near?.ce.ltp    ?? 0;
+      const buyPe   = near?.pe.ltp    ?? 0;
+      const buyCeIv = near?.ce.iv     ?? 0;
+      const buyPeIv = near?.pe.iv     ?? 0;
+      const buyOi   = (near?.ce.oi ?? 0) + (near?.pe.oi ?? 0);
+      const buyVol  = (near?.ce.volume ?? 0) + (near?.pe.volume ?? 0);
+      const sellCe   = far?.ce.ltp    ?? 0;
+      const sellPe   = far?.pe.ltp    ?? 0;
+      const sellCeIv = far?.ce.iv     ?? 0;
+      const sellPeIv = far?.pe.iv     ?? 0;
+      const sellOi   = (far?.ce.oi ?? 0) + (far?.pe.oi ?? 0);
+      const sellVol  = (far?.ce.volume ?? 0) + (far?.pe.volume ?? 0);
       return {
         strike,
-        isAtm: (buyAtm > 0 && Math.abs(strike - buyAtm) < 0.5) || (sellAtm > 0 && Math.abs(strike - sellAtm) < 0.5),
-        buyCe,
-        buyPe,
-        buyCeIv,
-        buyPeIv,
-        sellCe,
-        sellPe,
-        sellCeIv,
-        sellPeIv,
+        isAtm: (nearAtm > 0 && Math.abs(strike - nearAtm) < 0.5) || (farAtm > 0 && Math.abs(strike - farAtm) < 0.5),
+        buyCe, buyPe, buyCeIv, buyPeIv, buyOi, buyVol,
+        sellCe, sellPe, sellCeIv, sellPeIv, sellOi, sellVol,
+        // Net = Far premium − Near premium (always)
         netCe: sellCe - buyCe,
         netPe: sellPe - buyPe,
+        totalOi: buyOi + sellOi,
+        totalVol: buyVol + sellVol,
       };
     });
   }, [chains, buyExpiry, sellExpiry]);
+
+  const maxTotalOi  = useMemo(() => Math.max(1, ...rows.map(r => r.totalOi)),  [rows]);
+  const maxTotalVol = useMemo(() => Math.max(1, ...rows.map(r => r.totalVol)), [rows]);
+
+  const atmRowRef = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (rows.length === 0) return;
+    requestAnimationFrame(() => atmRowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  }, [rows]);
 
   const togglePickedExpiry = (expiry: string) => {
     setPickedExpiries(prev => prev.includes(expiry) ? prev.filter(e => e !== expiry) : [...prev, expiry]);
@@ -850,16 +940,16 @@ function CalendarComparator({ ins }: { ins: Instrument }) {
       <div className={s.calendarControls}>
         <div className={s.calendarTopRow}>
           <div className={s.calendarPairSelect}>
-            <span className={s.ctrlLabel}>Buy Expiry</span>
-            <InlineSelect value={buyExpiry || null} options={compareExpiries} onChange={v => setBuyExpiry(String(v))} placeholder="Buy expiry" format={fmtExpiry} />
+            <span className={s.ctrlLabel}>Near Expiry</span>
+            <InlineSelect value={buyExpiry || null} options={compareExpiries} onChange={v => setBuyExpiry(String(v))} placeholder="Near expiry" format={fmtExpiry} />
           </div>
           <div className={s.calendarPairSelect}>
-            <span className={s.ctrlLabel}>Sell Expiry</span>
-            <InlineSelect value={sellExpiry || null} options={compareExpiries} onChange={v => setSellExpiry(String(v))} placeholder="Sell expiry" format={fmtExpiry} />
+            <span className={s.ctrlLabel}>Far Expiry</span>
+            <InlineSelect value={sellExpiry || null} options={compareExpiries} onChange={v => setSellExpiry(String(v))} placeholder="Far expiry" format={fmtExpiry} />
           </div>
           <div className={s.netCard}>
             <span className={s.ctrlLabel}>Formula</span>
-            <span className={s.netHint}>Net Premium = Sell LTP - Buy LTP</span>
+            <span className={s.netHint}>Net = Far LTP − Near LTP</span>
             <span className={s.netHint}>Per lot multiplier: {ins.lotSize}</span>
           </div>
         </div>
@@ -877,31 +967,48 @@ function CalendarComparator({ ins }: { ins: Instrument }) {
         <div className={s.calendarTableWrap}>
           <table className={s.calendarTable}>
             <thead>
-              <tr>
-                <th className={s.thStrike}>Strike</th>
-                <th className={s.thCall}>Buy CE LTP ({buyExpiry ? fmtExpiry(buyExpiry) : '—'})</th>
-                <th className={s.thCall}>Sell CE LTP ({sellExpiry ? fmtExpiry(sellExpiry) : '—'})</th>
-                <th className={s.thCall}>Buy CE IV ({buyExpiry ? fmtExpiry(buyExpiry) : '—'})</th>
-                <th className={s.thCall}>Sell CE IV ({sellExpiry ? fmtExpiry(sellExpiry) : '—'})</th>
-                <th className={s.thPut}>Buy PE LTP ({buyExpiry ? fmtExpiry(buyExpiry) : '—'})</th>
-                <th className={s.thPut}>Sell PE LTP ({sellExpiry ? fmtExpiry(sellExpiry) : '—'})</th>
-                <th className={s.thPut}>Buy PE IV ({buyExpiry ? fmtExpiry(buyExpiry) : '—'})</th>
-                <th className={s.thPut}>Sell PE IV ({sellExpiry ? fmtExpiry(sellExpiry) : '—'})</th>
-                <th className={s.thMid}>Net CE</th>
-                <th className={s.thMid}>Net PE</th>
-              </tr>
+              {(() => {
+                const nearExp = buyExpiry <= sellExpiry ? buyExpiry : sellExpiry;
+                const farExp  = buyExpiry <= sellExpiry ? sellExpiry : buyExpiry;
+                const nLabel = nearExp ? fmtExpiry(nearExp) : '—';
+                const fLabel = farExp  ? fmtExpiry(farExp)  : '—';
+                return (
+                <tr>
+                  <th className={s.thCall}>Near CE IV ({nLabel})</th>
+                  <th className={s.thCall}>Far CE IV ({fLabel})</th>
+                  <th className={s.thCall}>Near CE LTP ({nLabel})</th>
+                  <th className={s.thCall}>Far CE LTP ({fLabel})</th>
+                  <th className={s.thStrike}>Strike</th>
+                  <th className={s.thPut}>Near PE LTP ({nLabel})</th>
+                  <th className={s.thPut}>Far PE LTP ({fLabel})</th>
+                  <th className={s.thPut}>Near PE IV ({nLabel})</th>
+                  <th className={s.thPut}>Far PE IV ({fLabel})</th>
+                  <th className={s.thMid}>Net CE (Far−Near)</th>
+                  <th className={s.thMid}>Net PE (Far−Near)</th>
+                  <th className={s.thMid}>Straddle OI ({nLabel})</th>
+                  <th className={s.thMid}>Straddle OI ({fLabel})</th>
+                  <th className={s.thMid}>Total OI</th>
+                  <th className={s.thMid}>Straddle Vol ({nLabel})</th>
+                  <th className={s.thMid}>Straddle Vol ({fLabel})</th>
+                  <th className={s.thMid}>Total Vol</th>
+                </tr>
+                );
+              })()}
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.strike} className={s.tr}>
+              {rows.map(r => {
+                const totalOiPct  = (r.totalOi  / maxTotalOi)  * 100;
+                const totalVolPct = (r.totalVol / maxTotalVol) * 100;
+                return (
+                <tr key={r.strike} ref={r.isAtm ? atmRowRef : undefined} className={s.tr}>
+                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.ivVal}>{r.buyCeIv > 0 ? `${r.buyCeIv.toFixed(2)}%` : '—'}</span></td>
+                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.ivVal}>{r.sellCeIv > 0 ? `${r.sellCeIv.toFixed(2)}%` : '—'}</span></td>
+                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.priceCall}>{fmtPrice(r.buyCe)}</span></td>
+                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.priceCall}>{fmtPrice(r.sellCe)}</span></td>
                   <td className={`${s.tdStrike} ${r.isAtm ? s.tdStrikeAtm : ''}`}>
                     {r.isAtm && <span className={s.atmPill}>ATM</span>}
                     <span className={r.isAtm ? s.strikeValAtm : s.strikeVal}>{r.strike.toFixed(0)}</span>
                   </td>
-                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.priceCall}>{fmtPrice(r.buyCe)}</span></td>
-                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.priceCall}>{fmtPrice(r.sellCe)}</span></td>
-                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.ivVal}>{r.buyCeIv > 0 ? `${r.buyCeIv.toFixed(2)}%` : '—'}</span></td>
-                  <td className={`${s.tdCall} ${r.isAtm ? s.tdCallAtm : ''}`}><span className={s.ivVal}>{r.sellCeIv > 0 ? `${r.sellCeIv.toFixed(2)}%` : '—'}</span></td>
                   <td className={`${s.tdPut} ${r.isAtm ? s.tdPutAtm : ''}`}><span className={s.pricePut}>{fmtPrice(r.buyPe)}</span></td>
                   <td className={`${s.tdPut} ${r.isAtm ? s.tdPutAtm : ''}`}><span className={s.pricePut}>{fmtPrice(r.sellPe)}</span></td>
                   <td className={`${s.tdPut} ${r.isAtm ? s.tdPutAtm : ''}`}><span className={s.ivVal}>{r.buyPeIv > 0 ? `${r.buyPeIv.toFixed(2)}%` : '—'}</span></td>
@@ -912,8 +1019,23 @@ function CalendarComparator({ ins }: { ins: Instrument }) {
                   <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}>
                     <span className={`${s.netPremium} ${r.netPe >= 0 ? s.netPos : s.netNeg}`}>{fmtPrice(r.netPe)}</span>
                   </td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}><span className={s.oiVal}>{fmtOi(r.buyOi)}</span></td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}><span className={s.oiVal}>{fmtOi(r.sellOi)}</span></td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}>
+                    <div className={s.oiBar} style={{ backgroundImage: `linear-gradient(to left, rgba(255,152,0,0.25) ${totalOiPct.toFixed(1)}%, transparent ${totalOiPct.toFixed(1)}%)` }}>
+                      <span className={s.oiVal}>{fmtOi(r.totalOi)}</span>
+                    </div>
+                  </td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}><span className={s.greek}>{fmtOi(r.buyVol)}</span></td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}><span className={s.greek}>{fmtOi(r.sellVol)}</span></td>
+                  <td className={`${s.tdMid} ${r.isAtm ? s.tdMidAtm : ''}`}>
+                    <div className={s.oiBar} style={{ backgroundImage: `linear-gradient(to left, rgba(99,179,237,0.2) ${totalVolPct.toFixed(1)}%, transparent ${totalVolPct.toFixed(1)}%)` }}>
+                      <span className={s.oiVal}>{fmtOi(r.totalVol)}</span>
+                    </div>
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -924,9 +1046,9 @@ function CalendarComparator({ ins }: { ins: Instrument }) {
 
 function CombinedComparator({ ins }: { ins: Instrument }) {
   const session = getSession();
-  const [pickedExpiries, setPickedExpiries] = useState<string[]>(() => ins.selectedExpiry ? [ins.selectedExpiry] : []);
-  const [buyExpiry, setBuyExpiry] = useState(ins.selectedExpiry ?? '');
-  const [sellExpiry, setSellExpiry] = useState(ins.expiries[1] ?? ins.selectedExpiry ?? '');
+  const [pickedExpiries, setPickedExpiries] = useState<string[]>(() => ins.expiries.slice(0, 2).filter(Boolean));
+  const [buyExpiry, setBuyExpiry] = useState(ins.expiries[0] ?? '');
+  const [sellExpiry, setSellExpiry] = useState(ins.expiries[1] ?? ins.expiries[0] ?? '');
   const [chains, setChains] = useState<Record<string, ChainSnapshot>>({});
   const [visibleCols, setVisibleCols] = useState<string[]>(['baseCeLtp', 'basePeLtp', 'avgIv', 'delta', 'theta', 'vega', 'gamma', 'totalOi']);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -937,21 +1059,24 @@ function CombinedComparator({ ins }: { ins: Instrument }) {
   const dragKeyRef = useRef<string | null>(null);
   const dragRafRef = useRef<number | null>(null);
   const lastSwapTargetRef = useRef<string | null>(null);
+  const fetchedRef = useRef<Set<string>>(new Set());
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const base = ins.selectedExpiry ? [ins.selectedExpiry] : [];
+    const base = ins.expiries.slice(0, 2).filter(Boolean);
     setPickedExpiries(base);
-    setBuyExpiry(ins.selectedExpiry ?? '');
-    setSellExpiry(ins.expiries[1] ?? ins.selectedExpiry ?? '');
+    setBuyExpiry(ins.expiries[0] ?? '');
+    setSellExpiry(ins.expiries[1] ?? ins.expiries[0] ?? '');
     setChains({});
+    fetchedRef.current = new Set();
     setErr('');
-  }, [ins.id, ins.selectedExpiry, ins.expiries]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ins.id]);
 
   const compareExpiries = useMemo(() => {
     if (pickedExpiries.length > 0) return pickedExpiries;
-    if (ins.selectedExpiry) return [ins.selectedExpiry];
-    return [];
-  }, [pickedExpiries, ins.selectedExpiry]);
+    return ins.expiries.slice(0, 2).filter(Boolean);
+  }, [pickedExpiries, ins.expiries]);
   const selectedExpiries = useMemo(() => compareExpiries.length > 0 ? compareExpiries : (ins.selectedExpiry ? [ins.selectedExpiry] : []), [compareExpiries, ins.selectedExpiry]);
   const ivOptionExpiries = useMemo(
     () => Array.from(new Set([ins.selectedExpiry, buyExpiry, sellExpiry, ...selectedExpiries].filter(Boolean))),
@@ -977,12 +1102,15 @@ function CombinedComparator({ ins }: { ins: Instrument }) {
   useEffect(() => {
     if (!session || !ins.sym) {
       setChains({});
+      fetchedRef.current = new Set();
       return;
     }
     const needed = Array.from(new Set([ins.selectedExpiry, ...compareExpiries].filter(Boolean)));
     if (needed.length === 0) return;
-    const toFetch = needed.filter(e => !chains[e]);
+    const toFetch = needed.filter(e => !fetchedRef.current.has(e));
     if (toFetch.length === 0) return;
+
+    toFetch.forEach(e => fetchedRef.current.add(e));
 
     let cancelled = false;
     setLoading(true);
@@ -996,10 +1124,51 @@ function CombinedComparator({ ins }: { ins: Instrument }) {
           return next;
         });
       })
-      .catch(e => { if (!cancelled) setErr(String(e)); })
+      .catch(e => {
+        toFetch.forEach(exp => fetchedRef.current.delete(exp));
+        if (!cancelled) setErr(String(e));
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [session, ins.sym, ins.exchange, compareExpiries, ins.selectedExpiry, chains]);
+    return () => {
+      cancelled = true;
+      toFetch.forEach(exp => fetchedRef.current.delete(exp));
+    };
+  }, [session, ins.sym, ins.exchange, compareExpiries, ins.selectedExpiry]);
+
+  // WebSocket live updates for all selected expiries
+  const allExpiriesKey = Array.from(new Set([ins.selectedExpiry, ...compareExpiries].filter(Boolean))).sort().join(',');
+  useEffect(() => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    const allExpiries = allExpiriesKey ? allExpiriesKey.split(',') : [];
+    if (!session || !ins.sym || allExpiries.length === 0 || !isMarketOpen()) return;
+
+    const ws = new WebSocket(BRIDGE);
+    wsRef.current = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        action: 'subscribe',
+        session_token: session,
+        data_type: 'option',
+        symbols: allExpiries.map(exp => `${ins.sym}:${exp}`),
+        exchange: ins.exchange,
+      }));
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'option' && msg.data && msg.data.expiry) {
+          const expiry = String(msg.data.expiry);
+          const d = msg.data;
+          const snap = buildChainSnapshotWs(d.ce ?? [], d.pe ?? [], d.at_the_money_strike ?? 0, d.current_price ?? 0);
+          setChains(prev => prev[expiry] ? { ...prev, [expiry]: snap } : prev);
+        }
+      } catch { /* */ }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+    return () => { ws.close(); wsRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, ins.sym, ins.exchange, allExpiriesKey]);
 
   const rows = useMemo(() => {
     const baseRows = ins.selectedExpiry ? (chains[ins.selectedExpiry]?.rows ?? []) : [];
