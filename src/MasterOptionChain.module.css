@@ -330,18 +330,23 @@
   position: sticky;
   top: 0;
   z-index: 3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .expiryHeadRow th {
   position: sticky;
   top: 40px;
   z-index: 3;
+  border-top: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .metricHeadRow th {
   position: sticky;
   top: 80px;
   z-index: 3;
+  border-top: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .superCell {
@@ -356,26 +361,28 @@
   color: #2ce0af;
   background: #133f36;
   text-align: left;
-  padding-left: 14px;
+  padding-left: 30px;
 }
 
 .putsHead {
   color: #ff6b91;
   background: #4c2732;
   text-align: right;
-  padding-right: 14px;
+  padding-right: 30px;
 }
 
 .strikeHead {
   min-width: 70px;
   background: #242729;
   color: #cfd7e4;
+  position: relative;
 }
 
 .expiryHead,
 .metricHead {
   background: #202425;
   color: #cad0dc;
+  position: relative;
 }
 
 .expiryHead {
@@ -388,6 +395,38 @@
   height: 34px;
   font-size: 12px;
   font-weight: 400;
+}
+
+.groupStart {
+  position: relative;
+}
+
+.groupEnd {
+  position: relative;
+}
+
+.strikeHead::before,
+.strikeHead::after,
+.groupStart::before,
+.groupEnd::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.strikeHead::after,
+.groupEnd::after {
+  right: -1px;
+}
+
+.strikeHead::before,
+.groupStart::before {
+  left: -1px;
 }
 
 .callGroupHead0 {
@@ -462,58 +501,92 @@
 .priceMain {
   display: block;
   font-weight: 400;
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.priceMainUp {
+  color: #1fe0af;
+}
+
+.priceMainDown {
+  color: #ff6588;
 }
 
 .oiBar {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 42px;
-  padding: 6px 10px;
-  border-radius: 7px;
+  min-height: 46px;
+  padding: 5px 8px 11px;
+  border-radius: 0;
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background: rgba(255, 255, 255, 0.03);
+  border: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  backdrop-filter: none;
 }
 
 .oiBar::before {
   content: '';
   position: absolute;
-  inset: 0;
+  top: auto;
+  left: 0;
+  bottom: 0;
+  height: 5px;
   width: var(--oi-fill, 0%);
   z-index: -1;
-  transition: width 0.2s ease;
+  opacity: 1;
+  transition: width 0.22s ease;
+}
+
+.oiBar::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .oiBarCall {
-  box-shadow: inset 0 0 0 1px rgba(82, 168, 255, 0.14);
+  box-shadow: none;
 }
 
 .oiBarCall::before {
-  background: linear-gradient(90deg, rgba(82, 168, 255, 0.34), rgba(82, 168, 255, 0.14));
+  background: linear-gradient(90deg, #bf7f00, #f0b235);
 }
 
 .oiBarPut {
-  box-shadow: inset 0 0 0 1px rgba(255, 190, 92, 0.14);
+  box-shadow: none;
 }
 
 .oiBarPut::before {
-  background: linear-gradient(90deg, rgba(255, 190, 92, 0.32), rgba(255, 190, 92, 0.13));
+  background: linear-gradient(90deg, #c88800, #f3bc47);
 }
 
 .oiBarText {
   display: block;
-  font-weight: 400;
-  line-height: 1.05;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: #eef3fb;
+  text-align: center;
 }
 
 .oiBarSub {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0.92;
+  text-align: center;
 }
 
 .upText {
@@ -529,6 +602,13 @@
   display: block;
   font-size: 12px;
   margin-top: 2px;
+}
+
+.priceChangeText {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  color: #eef3fb;
 }
 
 .priceUp {

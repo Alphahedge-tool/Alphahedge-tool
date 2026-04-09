@@ -2093,6 +2093,8 @@ export default function MasterOptionChain({ visible }: Props) {
     return max;
   }, [visibleRows]);
 
+  const priceScale = perLot ? lotSize : 1;
+
   const handleExpiryChange = useCallback((index: number, nextExpiry: string) => {
     setSelectedExpiries(prev => prev.map((value, idx) => (idx === index ? nextExpiry : value)));
   }, []);
@@ -2134,7 +2136,6 @@ export default function MasterOptionChain({ visible }: Props) {
     });
   }, []);
 
-  const priceScale = perLot ? lotSize : 1;
   const activeSpot = (viewMode === 'straddle' ? straddleChain?.spot : primaryChain?.spot) ?? 0;
   const activeAtm = (viewMode === 'straddle' ? straddleChain?.atm : primaryChain?.atm) ?? activeSpot;
   const toolbarSpotLabel = activeSpot ? `${activeSpot.toFixed(2)} spot` : 'No live spot';
@@ -2336,18 +2337,40 @@ export default function MasterOptionChain({ visible }: Props) {
               </tr>
               <tr className={s.expiryHeadRow}>
                 {callExpiries.map((expiry, groupIdx) => (
-                  <th key={`ce-exp-${expiry}`} colSpan={callColumns.length} className={`${s.expiryHead} ${s[`callGroupHead${groupIdx % 3}`]}`}>{fmtExpiry(expiry)}</th>
+                  <th
+                    key={`ce-exp-${expiry}`}
+                    colSpan={callColumns.length}
+                    className={`${s.expiryHead} ${s[`callGroupHead${groupIdx % 3}`]} ${groupIdx === 0 ? s.groupStart : ''} ${groupIdx === callExpiries.length - 1 ? s.groupEnd : ''}`}
+                  >
+                    {fmtExpiry(expiry)}
+                  </th>
                 ))}
                 {putExpiries.map((expiry, groupIdx) => (
-                  <th key={`pe-exp-${expiry}`} colSpan={putColumns.length} className={`${s.expiryHead} ${s[`putGroupHead${groupIdx % 3}`]}`}>{fmtExpiry(expiry)}</th>
+                  <th
+                    key={`pe-exp-${expiry}`}
+                    colSpan={putColumns.length}
+                    className={`${s.expiryHead} ${s[`putGroupHead${groupIdx % 3}`]} ${groupIdx === 0 ? s.groupStart : ''} ${groupIdx === putExpiries.length - 1 ? s.groupEnd : ''}`}
+                  >
+                    {fmtExpiry(expiry)}
+                  </th>
                 ))}
               </tr>
               <tr className={s.metricHeadRow}>
-                {callExpiries.flatMap((expiry, groupIdx) => callColumns.map(col => (
-                  <th key={`ce-${col}-${expiry}`} className={`${s.metricHead} ${s[`callGroupHead${groupIdx % 3}`]}`}>{AVAILABLE_COLUMNS.find(item => item.key === col)?.label ?? col}</th>
+                {callExpiries.flatMap((expiry, groupIdx) => callColumns.map((col, colIdx) => (
+                  <th
+                    key={`ce-${col}-${expiry}`}
+                    className={`${s.metricHead} ${s[`callGroupHead${groupIdx % 3}`]} ${colIdx === 0 ? s.groupStart : ''} ${colIdx === callColumns.length - 1 ? s.groupEnd : ''}`}
+                  >
+                    {AVAILABLE_COLUMNS.find(item => item.key === col)?.label ?? col}
+                  </th>
                 )))}
-                {putExpiries.flatMap((expiry, groupIdx) => putColumns.map(col => (
-                  <th key={`pe-${col}-${expiry}`} className={`${s.metricHead} ${s[`putGroupHead${groupIdx % 3}`]}`}>{AVAILABLE_COLUMNS.find(item => item.key === col)?.label ?? col}</th>
+                {putExpiries.flatMap((expiry, groupIdx) => putColumns.map((col, colIdx) => (
+                  <th
+                    key={`pe-${col}-${expiry}`}
+                    className={`${s.metricHead} ${s[`putGroupHead${groupIdx % 3}`]} ${colIdx === 0 ? s.groupStart : ''} ${colIdx === putColumns.length - 1 ? s.groupEnd : ''}`}
+                  >
+                    {AVAILABLE_COLUMNS.find(item => item.key === col)?.label ?? col}
+                  </th>
                 )))}
               </tr>
             </thead>
@@ -2371,6 +2394,7 @@ export default function MasterOptionChain({ visible }: Props) {
                       };
                       const ceChange = entry.ce.cp > 0 ? ((entry.ce.ltp - entry.ce.cp) / entry.ce.cp) * 100 : 0;
                       const ceOiPct = Math.max(0, Math.min(100, (entry.ce.oi / maxCallOi) * 100));
+                      const ceLtpValue = entry.ce.ltp * priceScale;
                       return callColumns.map(col => {
                         if (col === 'oi') {
                           return (
@@ -2384,10 +2408,11 @@ export default function MasterOptionChain({ visible }: Props) {
                         }
                         if (col === 'iv') return <td key={`ce-i-${entry.expiry}-${row.strike}`} className={`${s.callCell} ${s[`callGroupCell${groupIdx % 3}`]}`}>{fmtIv(entry.ce.iv)}</td>;
                         if (col === 'ltp') {
+                          const ceChangeLabel = fmtChangePct(ceChange);
                           return (
                             <td key={`ce-l-${entry.expiry}-${row.strike}`} className={`${s.callCell} ${s[`callGroupCell${groupIdx % 3}`]} ${s.priceCell}`}>
-                              <span className={s.priceMain}>{fmtPrice(entry.ce.ltp * priceScale)}</span>
-                              {fmtChangePct(ceChange) && <span className={s.priceUp}>({fmtChangePct(ceChange)})</span>}
+                              <span className={`${s.priceMain} ${ceChangeLabel ? (ceChange >= 0 ? s.priceMainUp : s.priceMainDown) : ''}`}>{fmtPrice(ceLtpValue)}</span>
+                              {ceChangeLabel && <span className={s.priceChangeText}>({ceChangeLabel})</span>}
                             </td>
                           );
                         }
@@ -2412,12 +2437,14 @@ export default function MasterOptionChain({ visible }: Props) {
                       };
                       const peChange = entry.pe.cp > 0 ? ((entry.pe.ltp - entry.pe.cp) / entry.pe.cp) * 100 : 0;
                       const peOiPct = Math.max(0, Math.min(100, (entry.pe.oi / maxPutOi) * 100));
+                      const peLtpValue = entry.pe.ltp * priceScale;
                       return putColumns.map(col => {
                         if (col === 'ltp') {
+                          const peChangeLabel = fmtChangePct(peChange);
                           return (
                             <td key={`pe-l-${entry.expiry}-${row.strike}`} className={`${s.putCell} ${s[`putGroupCell${groupIdx % 3}`]} ${s.priceCell}`}>
-                              <span className={s.priceMain}>{fmtPrice(entry.pe.ltp * priceScale)}</span>
-                              {fmtChangePct(peChange) && <span className={s.priceDown}>({fmtChangePct(peChange)})</span>}
+                              <span className={`${s.priceMain} ${peChangeLabel ? (peChange >= 0 ? s.priceMainUp : s.priceMainDown) : ''}`}>{fmtPrice(peLtpValue)}</span>
+                              {peChangeLabel && <span className={s.priceChangeText}>({peChangeLabel})</span>}
                             </td>
                           );
                         }
