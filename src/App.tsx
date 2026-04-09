@@ -254,6 +254,7 @@ function WsStatus({ token }: { token: string }) {
 
 // ── Leg type ──────────────────────────────────────────────────────────────────
 interface Greeks { delta: number; theta: number; vega: number; gamma: number; iv: number; }
+type StopLossMode = 'points' | 'percent';
 interface Leg {
   id: number;
   refId?: number;
@@ -274,6 +275,94 @@ interface Leg {
   checked: boolean;    // include in MTM total
   entryGreeks: Greeks; // greeks at entry
   currGreeks: Greeks;  // live greeks
+  isSquaredOff?: boolean;
+  squareOffLtp?: number;
+  squareOffAt?: number;
+  squareOffReason?: 'manual' | 'sl';
+  slEnabled?: boolean;
+  slMode?: StopLossMode;
+  slValue?: number;
+}
+
+function getLegLiveLtp(leg: Leg): number {
+  return leg.currLtp > 0 ? leg.currLtp : leg.price;
+}
+
+function getLegEffectiveLtp(leg: Leg): number {
+  if (leg.isSquaredOff && (leg.squareOffLtp ?? 0) > 0) return leg.squareOffLtp!;
+  return getLegLiveLtp(leg);
+}
+
+function getLegMtm(leg: Leg): number {
+  const currLtp = getLegEffectiveLtp(leg);
+  return (leg.action === 'B' ? currLtp - leg.price : leg.price - currLtp) * leg.lots * (leg.lotSize || 1);
+}
+
+function getLegLossPoints(leg: Leg, ltp = getLegEffectiveLtp(leg)): number {
+  return leg.action === 'B' ? Math.max(0, leg.price - ltp) : Math.max(0, ltp - leg.price);
+}
+
+function getLegStopLossPoints(leg: Leg): number | null {
+  if (!leg.slEnabled) return null;
+  const raw = leg.slValue ?? 0;
+  if (!(raw > 0)) return null;
+  return leg.slMode === 'percent' ? (leg.price * raw) / 100 : raw;
+}
+
+function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' = 'manual'): Leg {
+  const exitLtp = (ltp ?? 0) > 0 ? ltp! : getLegLiveLtp(leg);
+  return {
+    ...leg,
+    isSquaredOff: true,
+    squareOffLtp: exitLtp,
+    squareOffAt: Math.floor(Date.now() / 1000),
+    squareOffReason: reason,
+    currLtp: exitLtp,
+  };
+}
+
+function revertSquareOffLeg(leg: Leg): Leg {
+  return {
+    ...leg,
+    isSquaredOff: false,
+    squareOffLtp: undefined,
+    squareOffAt: undefined,
+    squareOffReason: undefined,
+  };
+}
+
+function applyLegLiveUpdate(
+  leg: Leg,
+  nextLtp?: number | null,
+  nextGreeks?: Partial<Greeks> | null,
+): Leg {
+  if (leg.isSquaredOff) return leg;
+
+  const resolvedLtp = (nextLtp ?? 0) > 0 ? nextLtp! : getLegLiveLtp(leg);
+  const mergedGreeks: Greeks = {
+    delta: nextGreeks?.delta ?? leg.currGreeks.delta,
+    theta: nextGreeks?.theta ?? leg.currGreeks.theta,
+    vega: nextGreeks?.vega ?? leg.currGreeks.vega,
+    gamma: nextGreeks?.gamma ?? leg.currGreeks.gamma,
+    iv: nextGreeks?.iv ?? leg.currGreeks.iv,
+  };
+  const entryGreeks = leg.entryGreeks.delta === 0 && mergedGreeks.delta !== 0 ? mergedGreeks : leg.entryGreeks;
+  const updated = { ...leg, currLtp: resolvedLtp, currGreeks: mergedGreeks, entryGreeks };
+  const slPoints = getLegStopLossPoints(updated);
+  if (slPoints != null && getLegLossPoints(updated, resolvedLtp) >= slPoints - 1e-9) {
+    return squareOffLeg(updated, resolvedLtp, 'sl');
+  }
+  return updated;
+}
+
+function formatSquareOffTime(squareOffAt?: number): string {
+  if (!squareOffAt) return '';
+  return new Date(squareOffAt * 1000).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 }
 
 // ── MTM Analyzer layout (resizable 40/60 split) ──────────────────────────────
@@ -306,6 +395,201 @@ const greekItems: { key: keyof Greeks; label: string; name: string; color: strin
 ];
 
 // ── Theme 2: full flat TanStack table ─────────────────────────────────────────
+function StopLossEditor({ leg, updateLeg, compact = false }: { leg: Leg; updateLeg: (id: number, patch: Partial<Leg>) => void; compact?: boolean }) {
+  const thresholdPoints = getLegStopLossPoints(leg);
+  const activeMode = leg.slEnabled ? (leg.slMode ?? 'points') : null;
+  const buttonStyle = (active: boolean): React.CSSProperties => ({
+    minWidth: compact ? 26 : 34,
+    height: compact ? 20 : 22,
+    padding: compact ? '0 6px' : '0 8px',
+    borderRadius: 5,
+    border: `1px solid ${active ? 'rgba(129,140,248,0.52)' : 'rgba(255,255,255,0.10)'}`,
+    background: active ? 'rgba(129,140,248,0.16)' : 'rgba(255,255,255,0.04)',
+    color: active ? '#C7D2FE' : '#6B7280',
+    fontSize: compact ? 10 : 11,
+    fontWeight: 800,
+    cursor: 'pointer',
+    lineHeight: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: compact ? 116 : 146 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: false })} style={buttonStyle(activeMode === null)}>Off</button>
+        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: true, slMode: 'points' })} style={buttonStyle(activeMode === 'points')}>Pts</button>
+        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: true, slMode: 'percent' })} style={buttonStyle(activeMode === 'percent')}>%</button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          defaultValue={leg.slValue ?? ''}
+          placeholder={leg.slMode === 'percent' ? '1.00' : '10.00'}
+          onBlur={e => {
+            const raw = Number(e.target.value);
+            updateLeg(leg.id, {
+              slValue: Number.isFinite(raw) && raw > 0 ? Number(raw.toFixed(2)) : undefined,
+              slEnabled: Number.isFinite(raw) && raw > 0,
+            });
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          style={{
+            width: compact ? 58 : 72,
+            height: compact ? 22 : 24,
+            borderRadius: 5,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgba(255,255,255,0.04)',
+            color: '#E2E8F0',
+            fontSize: compact ? 11 : 12,
+            fontWeight: 700,
+            textAlign: 'center',
+            outline: 'none',
+            padding: '0 6px',
+          }}
+        />
+        <span style={{ fontSize: compact ? 10 : 11, color: thresholdPoints != null ? '#9CA3AF' : '#4B5563', fontWeight: 700, whiteSpace: 'nowrap' }}>
+          {thresholdPoints != null ? `${thresholdPoints.toFixed(2)} pts` : 'No SL'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SquareOffCell({ leg, updateLeg, removeLeg }: { leg: Leg; updateLeg: (id: number, patch: Partial<Leg>) => void; removeLeg?: (id: number) => void }) {
+  const iconBtnStyle: React.CSSProperties = {
+    width: 34,
+    height: 34,
+    padding: 0,
+    borderRadius: 999,
+    border: '1px solid rgba(129,140,248,0.34)',
+    background: 'rgba(255,255,255,0.94)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 8px 20px rgba(15,23,42,0.18)',
+    flexShrink: 0,
+  };
+
+  if (leg.isSquaredOff) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(148,163,184,0.14)', border: '1px solid rgba(148,163,184,0.28)', color: '#CBD5E1', fontSize: 11, fontWeight: 800, letterSpacing: '0.02em' }}>
+            {leg.squareOffReason === 'sl' ? 'SL Hit' : 'Squared Off'}
+          </span>
+          <button
+            type="button"
+            title="Revert square off"
+            onClick={() => updateLeg(leg.id, revertSquareOffLeg(leg))}
+            style={{
+              width: 24,
+              height: 24,
+              padding: 0,
+              borderRadius: 999,
+              border: '1px solid rgba(96,165,250,0.34)',
+              background: 'rgba(59,130,246,0.10)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#93C5FD',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7v6h6" />
+              <path d="M3 13a9 9 0 1 0 3-6.7L3 7" />
+            </svg>
+          </button>
+          {removeLeg && (
+            <button
+              type="button"
+              title="Delete position"
+              onClick={() => removeLeg(leg.id)}
+              style={{
+                width: 24,
+                height: 24,
+                padding: 0,
+                borderRadius: 999,
+                border: '1px solid rgba(248,113,113,0.30)',
+                background: 'rgba(248,113,113,0.10)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FCA5A5',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+          Exit {getLegEffectiveLtp(leg).toFixed(2)}{leg.squareOffAt ? ` • ${formatSquareOffTime(leg.squareOffAt)}` : ''}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: -44 }}>
+      <button
+        type="button"
+        title="Square off position"
+        onClick={() => updateLeg(leg.id, squareOffLeg(leg))}
+        style={iconBtnStyle}
+      >
+        <img
+          src="/alpha-watermark.png"
+          alt="Square off"
+          style={{ width: 20, height: 20, objectFit: 'contain', display: 'block' }}
+        />
+      </button>
+      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 800, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+        Exit
+      </span>
+      {removeLeg && (
+        <button
+          type="button"
+          title="Delete position"
+          onClick={() => removeLeg(leg.id)}
+          style={{
+            width: 24,
+            height: 24,
+            padding: 0,
+            borderRadius: 999,
+            border: '1px solid rgba(248,113,113,0.30)',
+            background: 'rgba(248,113,113,0.10)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#FCA5A5',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6M14 11v6" />
+            <path d="M9 6V4h6v2" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 const t2ColHelper = createColumnHelper<Leg>();
 
 
@@ -375,7 +659,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
       id: 'ltp', size: 72,
       header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>LTP</span>,
       cell: ({ row }) => {
-        const ltp = row.original.currLtp > 0 ? row.original.currLtp : row.original.price;
+        const ltp = getLegEffectiveLtp(row.original);
         const diff = ltp - row.original.price;
         const col = diff > 0 ? '#26a69a' : diff < 0 ? '#f23645' : '#E2E8F0';
         return <span style={{ fontSize: 15, fontWeight: 700, color: col, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{ltp.toFixed(2)}</span>;
@@ -407,8 +691,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
       header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>MTM</span>,
       cell: ({ row }) => {
         const leg = row.original;
-        const currLtp = leg.currLtp > 0 ? leg.currLtp : leg.price;
-        const mtm = (leg.action === 'B' ? currLtp - leg.price : leg.price - currLtp) * leg.lots * (leg.lotSize || 1);
+        const mtm = getLegMtm(leg);
         const pos = mtm >= 0;
         const fmt = fmtMtm(mtm);
         return (
@@ -419,6 +702,16 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
       },
     }),
     // ── Greeks: 3 columns per greek (Entry | Live | Chg) ────────────────────
+    t2ColHelper.display({
+      id: 'sl', size: 170,
+      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Stop Loss</span>,
+      cell: ({ row }) => <StopLossEditor leg={row.original} updateLeg={updateLeg} />,
+    }),
+    t2ColHelper.display({
+      id: 'manage', size: 118,
+      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Manage</span>,
+      cell: ({ row }) => <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />,
+    }),
     ...greekItems.flatMap((gk, gi) => {
       const isLast = gi === greekItems.length - 1;
       const groupBorder = !isLast ? '2px solid rgba(255,255,255,0.10)' : 'none';
@@ -509,15 +802,12 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
 
   const table = useReactTable({ data: legs, columns, getCoreRowModel: getCoreRowModel() });
 
-  const totalMtm = legs.filter(l => l.checked).reduce((sum, leg) => {
-    const currLtp = leg.currLtp > 0 ? leg.currLtp : leg.price;
-    return sum + (leg.action === 'B' ? currLtp - leg.price : leg.price - currLtp) * leg.lots * (leg.lotSize || 1);
-  }, 0);
+  const totalMtm = legs.filter(l => l.checked).reduce((sum, leg) => sum + getLegMtm(leg), 0);
   const totalColor = totalMtm >= 0 ? '#26a69a' : '#f23645';
 
   const allCols    = table.getAllColumns();
   const detailCols = allCols.filter(c => ['buy_action','lots','price','ltp'].includes(c.id));
-  const pnlCols    = allCols.filter(c => ['spot','time','entry_date','mtm','delete'].includes(c.id));
+  const pnlCols    = allCols.filter(c => ['spot','time','entry_date','mtm','sl','manage','delete'].includes(c.id));
   const greekCols  = allCols.filter(c => c.id.startsWith('greek_'));
 
   return (
@@ -694,9 +984,9 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
                     );
                     grp.rows.forEach(row => {
                       const ri = rowIndex++;
-                      const rowBg = ri % 2 === 0 ? '#1c1c1c' : '#171717';
+                      const rowBg = row.original.isSquaredOff ? '#14161a' : (ri % 2 === 0 ? '#1c1c1c' : '#171717');
                       result.push(
-                        <tr key={row.id} style={{ opacity: row.original.checked ? 1 : 0.38, transition: 'opacity 0.2s' }}>
+                        <tr key={row.id} style={{ opacity: row.original.isSquaredOff ? 0.48 : (row.original.checked ? 1 : 0.38), filter: row.original.isSquaredOff ? 'saturate(0.75)' : 'none', transition: 'opacity 0.2s, filter 0.2s' }}>
                           {row.getVisibleCells().map(cell => {
                             const id = cell.column.id;
                             const isSticky = STICKY_IDS.includes(id);
@@ -755,11 +1045,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
 }
 
 function MtmGroupTable({ group, showGreeks, columns }: { group: { symbol: string; legs: Leg[] }, showGreeks: boolean, columns: any }) {
-  const groupMtm = group.legs.filter(l => l.checked).reduce((sum, leg) => {
-    const currLtp = leg.currLtp > 0 ? leg.currLtp : leg.price;
-    const diff = currLtp - leg.price;
-    return sum + (leg.action === 'B' ? diff : -diff) * leg.lots * (leg.lotSize || 1);
-  }, 0);
+  const groupMtm = group.legs.filter(l => l.checked).reduce((sum, leg) => sum + getLegMtm(leg), 0);
   const mtmColor = groupMtm >= 0 ? '#26a69a' : '#f23645';
   const symbolColors: Record<string, { accent: string; bg: string }> = {
     NIFTY: { accent: '#60a5fa', bg: 'rgba(96,165,250,0.08)' },
@@ -790,7 +1076,7 @@ function MtmGroupTable({ group, showGreeks, columns }: { group: { symbol: string
       {showGreeks ? (
         <div className={mtm.groupBody}>
           {table.getRowModel().rows.map(row => (
-            <div key={row.id} style={{ display: 'flex', alignItems: 'stretch', opacity: row.original.checked ? 1 : 0.45, transition: 'opacity 0.2s', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div key={row.id} style={{ display: 'flex', alignItems: 'stretch', opacity: row.original.isSquaredOff ? 0.45 : (row.original.checked ? 1 : 0.45), filter: row.original.isSquaredOff ? 'saturate(0.75)' : 'none', transition: 'opacity 0.2s, filter 0.2s', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</React.Fragment>
               ))}
@@ -802,7 +1088,7 @@ function MtmGroupTable({ group, showGreeks, columns }: { group: { symbol: string
           <colgroup>{table.getAllColumns().map(col => <col key={col.id} style={{ width: col.getSize() }} />)}</colgroup>
           <tbody>
             {table.getRowModel().rows.map(row => (
-              <tr key={row.id} className={`${mtm.legRow} ${row.original.checked ? '' : mtm.legRowUnchecked} ${row.original.action === 'B' ? mtm.legRowBuy : mtm.legRowSell}`}>
+              <tr key={row.id} className={`${mtm.legRow} ${row.original.checked ? '' : mtm.legRowUnchecked} ${row.original.isSquaredOff ? mtm.legRowSquaredOff : ''} ${row.original.action === 'B' ? mtm.legRowBuy : mtm.legRowSell}`}>
                 {row.getVisibleCells().map((cell, ci) => (
                   <td key={cell.id} className={`${mtm.legCell} ${ci === 0 ? mtm.legCellFirst : ''} ${ci === row.getVisibleCells().length - 1 ? mtm.legCellLast : ''}`}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -958,6 +1244,13 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       entryTime:  l.entryTime,
       currLtp:    0,   // will be filled by orderbook fetch or live feed
       currGreeks: l.currGreeks ?? { delta: 0, theta: 0, vega: 0, gamma: 0, iv: 0 },
+      isSquaredOff: Boolean(l.isSquaredOff),
+      squareOffLtp: l.squareOffLtp,
+      squareOffAt: l.squareOffAt,
+      squareOffReason: l.squareOffReason,
+      slEnabled: Boolean(l.slEnabled),
+      slMode: l.slMode ?? 'points',
+      slValue: l.slValue,
     }));
     setStrategyLegs(prev => ({ ...prev, [activeStrategy]: incoming }));
     setLegs(incoming);
@@ -987,10 +1280,10 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               const ltp = data?.orderBook?.ltp;
               if (!ltp) return;
               const liveLtp = ltp / 100; // paisa → rupees
-              setLegs(prev => prev.map(l => l.id === leg.id ? { ...l, currLtp: liveLtp } : l));
+              setLegs(prev => prev.map(l => l.id === leg.id ? (l.isSquaredOff ? l : { ...l, currLtp: liveLtp }) : l));
               setStrategyLegs(prev => ({
                 ...prev,
-                [activeStrategy]: (prev[activeStrategy] ?? []).map(l => l.id === leg.id ? { ...l, currLtp: liveLtp } : l),
+                [activeStrategy]: (prev[activeStrategy] ?? []).map(l => l.id === leg.id ? (l.isSquaredOff ? l : { ...l, currLtp: liveLtp }) : l),
               }));
             })
             .catch(() => {/* silent */});
@@ -1070,6 +1363,9 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           checked: true,
           entryGreeks: bl.greeks ?? ZERO,
           currGreeks: bl.greeks ?? ZERO,
+          isSquaredOff: false,
+          slEnabled: false,
+          slMode: 'points' as StopLossMode,
         };
       });
 
@@ -1189,8 +1485,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                   gamma: d.gamma ?? leg.currGreeks.gamma,
                   iv: d.iv !== undefined && d.iv > 0 ? d.iv : leg.currGreeks.iv,
                 };
-                const entryGreeks = leg.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : leg.entryGreeks;
-                return { ...leg, currLtp: newLtp, currGreeks: newGreeks, entryGreeks };
+                return applyLegLiveUpdate(leg, newLtp, newGreeks);
               });
               return changed ? next : prev;
             });
@@ -1213,8 +1508,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                       gamma: d.gamma ?? leg.currGreeks.gamma,
                       iv: d.iv !== undefined && d.iv > 0 ? d.iv : leg.currGreeks.iv,
                     };
-                    const entryGreeks = leg.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : leg.entryGreeks;
-                    return { ...leg, currLtp: newLtpVal, currGreeks: newGreeks, entryGreeks };
+                    return applyLegLiveUpdate(leg, newLtpVal, newGreeks);
                   });
                   next[kn] = tabChanged ? updated : tabLegs;
                   if (tabChanged) anyChanged = true;
@@ -1266,8 +1560,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       const snap = wsManager.get(leg.instrumentKey);
       if (!snap?.ltp) return leg;
       const newGreeks = { delta: snap.delta ?? 0, theta: snap.theta ?? 0, vega: snap.vega ?? 0, gamma: snap.gamma ?? 0, iv: snap.iv ?? 0 };
-      const entryGreeks = leg.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : leg.entryGreeks;
-      return { ...leg, currLtp: snap.ltp, currGreeks: newGreeks, entryGreeks };
+      return applyLegLiveUpdate(leg, snap.ltp, newGreeks);
     }));
     const unsubs = mcxLegs.map(leg =>
       wsManager.subscribe(leg.instrumentKey!, md => {
@@ -1278,10 +1571,9 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           if (idx === -1) return prev;
           const cur = prev[idx];
           const newGreeks = { delta: md.delta ?? cur.currGreeks.delta, theta: md.theta ?? cur.currGreeks.theta, vega: md.vega ?? cur.currGreeks.vega, gamma: md.gamma ?? cur.currGreeks.gamma, iv: md.iv ?? cur.currGreeks.iv };
-          const entryGreeks = cur.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : cur.entryGreeks;
           if (cur.currLtp === md.ltp && cur.currGreeks.delta === newGreeks.delta) return prev;
           const next = [...prev];
-          next[idx] = { ...cur, currLtp: md.ltp, currGreeks: newGreeks, entryGreeks };
+          next[idx] = applyLegLiveUpdate(cur, md.ltp, newGreeks);
           return next;
         });
         // Update inactive tabs by instrumentKey
@@ -1296,8 +1588,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               if (l.instrumentKey !== leg.instrumentKey) return l;
               tabChanged = true;
               const newGreeks = { delta: md.delta ?? l.currGreeks.delta, theta: md.theta ?? l.currGreeks.theta, vega: md.vega ?? l.currGreeks.vega, gamma: md.gamma ?? l.currGreeks.gamma, iv: md.iv ?? l.currGreeks.iv };
-              const entryGreeks = l.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : l.entryGreeks;
-              return { ...l, currLtp: md.ltp, currGreeks: newGreeks, entryGreeks };
+              return applyLegLiveUpdate(l, md.ltp, newGreeks);
             });
             next[kn] = tabChanged ? updated : tabLegs;
             if (tabChanged) anyChanged = true;
@@ -1399,7 +1690,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>LTP</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{(row.original.currLtp > 0 ? row.original.currLtp : row.original.price).toFixed(2)}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{getLegEffectiveLtp(row.original).toFixed(2)}</span>
         </div>
       )
     }),
@@ -1426,8 +1717,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>MTM</span>,
       cell: ({ row }) => {
         const leg = row.original;
-        const currLtp = leg.currLtp > 0 ? leg.currLtp : leg.price;
-        const mtm = (leg.action === 'B' ? currLtp - leg.price : leg.price - currLtp) * leg.lots * (leg.lotSize || 1);
+        const mtm = getLegMtm(leg);
         const pos = mtm >= 0;
         return (
           <div style={{ height: 26, borderRadius: 5, background: pos ? 'rgba(38,166,154,0.1)' : 'rgba(242,54,69,0.1)', border: `1px solid ${pos ? 'rgba(38,166,154,0.25)' : 'rgba(242,54,69,0.25)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1435,6 +1725,16 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           </div>
         );
       }
+    }),
+    columnHelper.display({
+      id: 'sl', size: 170,
+      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Stop Loss</span>,
+      cell: ({ row }) => <StopLossEditor leg={row.original} updateLeg={updateLeg} compact />,
+    }),
+    columnHelper.display({
+      id: 'manage', size: 112,
+      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Manage</span>,
+      cell: ({ row }) => <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />,
     }),
     columnHelper.display({
       id: 'delete', size: 32,
@@ -1490,8 +1790,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       if (!entry) return leg;
       const newLtp = leg.type === 'CE' ? entry.ce : entry.pe;
       const newGreeks = leg.type === 'CE' ? entry.ceGreeks : entry.peGreeks;
-      const entryGreeks = leg.entryGreeks.delta === 0 && newGreeks.delta !== 0 ? newGreeks : leg.entryGreeks;
-      return { ...leg, currLtp: newLtp, currGreeks: newGreeks, entryGreeks };
+      return applyLegLiveUpdate(leg, newLtp, newGreeks);
     }));
   }, []);
 
@@ -1961,10 +2260,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               const isActive = activeStrategy === n;
               const tabLegs = isActive ? legs : (strategyLegs[n] ?? []);
               const legCount = tabLegs.length;
-              const totalPnl = tabLegs.filter(l => l.checked).reduce((sum, leg) => {
-                const ltp = leg.currLtp > 0 ? leg.currLtp : leg.price;
-                return sum + (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
-              }, 0);
+              const totalPnl = tabLegs.filter(l => l.checked).reduce((sum, leg) => sum + getLegMtm(leg), 0);
               const hasPnl = legCount > 0;
               const pnlColor = totalPnl > 0 ? '#26a69a' : totalPnl < 0 ? '#f23645' : '#9CA3AF';
               const canDelete = strategyCount > 1;
@@ -2166,14 +2462,14 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               setLegs(prev => prev.map(leg => {
                 const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
                 const ltp = snap.get(key);
-                return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
+                return ltp != null && ltp > 0 ? applyLegLiveUpdate(leg, ltp, null) : leg;
               }));
               setStrategyLegs(prev => ({
                 ...prev,
                 [activeStrategy]: (prev[activeStrategy] ?? []).map(leg => {
                   const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
                   const ltp = snap.get(key);
-                  return ltp != null && ltp > 0 ? { ...leg, currLtp: ltp } : leg;
+                  return ltp != null && ltp > 0 ? applyLegLiveUpdate(leg, ltp, null) : leg;
                 }),
               }));
             }}

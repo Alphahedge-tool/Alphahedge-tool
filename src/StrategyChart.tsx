@@ -35,6 +35,9 @@ export interface StrategyLeg {
   entryTime?: string; // HH:MM:SS when user entered the leg (IST)
   entryDate?: string; // YYYY-MM-DD date of entry (IST)
   currLtp?: number;   // live LTP from parent (App) — used to keep chart MTM in sync
+  isSquaredOff?: boolean;
+  squareOffLtp?: number;
+  squareOffAt?: number;
 }
 
 interface StrategyChartProps {
@@ -139,6 +142,19 @@ function legEntryUnix(leg: { entryDate?: string; entryTime?: string }): number {
   const [yr, mo, dy] = leg.entryDate.split('-').map(Number);
   const midnightUtc = Date.UTC(yr, mo - 1, dy) / 1000;
   return midnightUtc + hh * 3600 + mm * 60 - 5.5 * 3600;
+}
+
+function getLegLiveLtp(leg: StrategyLeg): number {
+  return (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+}
+
+function getLegEffectiveLtp(leg: StrategyLeg): number {
+  if (leg.isSquaredOff && (leg.squareOffLtp ?? 0) > 0) return leg.squareOffLtp!;
+  return getLegLiveLtp(leg);
+}
+
+function getLegExitUnix(leg: StrategyLeg): number {
+  return leg.isSquaredOff && (leg.squareOffAt ?? 0) > 0 ? leg.squareOffAt! : 0;
 }
 
 // ── Nubra helpers ─────────────────────────────────────────────────────────────
@@ -366,9 +382,11 @@ function computeMtmFromOptions(
   optionsMap: Map<string, LineData[]>,
 ): BaselineData[] {
   const entryCutoff = new Map<string, number>();
+  const exitCutoff = new Map<string, number>();
   for (const { key } of legInfos) {
     const leg = uniqueLegs.find(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}` === key);
     entryCutoff.set(key, leg ? legEntryUnix(leg) : 0);
+    exitCutoff.set(key, leg ? getLegExitUnix(leg) : 0);
   }
 
   // Build lookup maps for O(1) access: key → Map<timestamp, value>
@@ -386,6 +404,8 @@ function computeMtmFromOptions(
       const cut = entryCutoff.get(key) ?? 0;
       if (cut === 0 || t >= cut) tsSet.add(t);
     }
+    const exit = exitCutoff.get(key) ?? 0;
+    if (exit > 0) tsSet.add(exit);
   }
   const timestamps = [...tsSet].sort((a, b) => a - b);
 
@@ -397,7 +417,10 @@ function computeMtmFromOptions(
       if (!leg) continue;
       const cut = entryCutoff.get(key) ?? 0;
       if (cut !== 0 && t < cut) continue;
-      const currLtp = optMaps.get(key)?.get(t) ?? 0;
+      const exit = exitCutoff.get(key) ?? 0;
+      const currLtp = exit !== 0 && t >= exit
+        ? (leg.squareOffLtp ?? getLegEffectiveLtp(leg))
+        : (optMaps.get(key)?.get(t) ?? 0);
       total += (leg.action === 'B' ? currLtp - leg.price : leg.price - currLtp) * leg.lots * (leg.lotSize || 1);
     }
     return { time: t as Time, value: total };
@@ -1599,7 +1622,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   ), [legs]);
 
   const mtmKey = useMemo(() => (
-    legs.map(l => `${l.symbol}:${l.strike}${l.type}${l.expiry}:${l.action}:${l.price}:${l.lots}:${l.lotSize}:${l.entryDate ?? ''}:${l.entryTime ?? ''}`).join(',')
+    legs.map(l => `${l.symbol}:${l.strike}${l.type}${l.expiry}:${l.action}:${l.price}:${l.lots}:${l.lotSize}:${l.entryDate ?? ''}:${l.entryTime ?? ''}:${l.isSquaredOff ? 1 : 0}:${l.squareOffAt ?? 0}:${l.squareOffLtp ?? 0}`).join(',')
   ), [legs]);
 
 
@@ -1629,7 +1652,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
     let total = 0;
     for (const leg of uniqueLegs) {
-      const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+      const ltp = getLegEffectiveLtp(leg);
       total += (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
     }
 
@@ -1640,11 +1663,15 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     const last = acc.mtm[acc.mtm.length - 1];
     if (last && (last.time as number) === nowUnix) acc.mtm[acc.mtm.length - 1] = mtmPt;
     else acc.mtm.push(mtmPt);
-    ss.mtm?.update(mtmPt);
+    try {
+      ss.mtm?.update(mtmPt);
+    } catch {
+      try { ss.mtm?.setData(acc.mtm); } catch { /* lwc guard */ }
+    }
 
     // Also update acc.options so per-underlying MTM is consistent
     for (const leg of uniqueLegs) {
-      const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+      const ltp = getLegEffectiveLtp(leg);
       const key = `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
       const optPts = acc.options.get(key) ?? [];
       const lastOpt = optPts[optPts.length - 1];
@@ -1652,7 +1679,12 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       if (lastOpt && (lastOpt.time as number) === nowUnix) optPts[optPts.length - 1] = pt;
       else optPts.push(pt);
       acc.options.set(key, optPts);
-      ss.options.get(key)?.update(pt);
+      const optSeries = ss.options.get(key);
+      try {
+        optSeries?.update(pt);
+      } catch {
+        try { optSeries?.setData(optPts); } catch { /* lwc guard */ }
+      }
     }
 
     // Per-underlying MTM lines
@@ -1662,7 +1694,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         const symLegs = uniqueLegs.filter(l => l.symbol === sym);
         let symTotal = 0;
         for (const leg of symLegs) {
-          const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+          const ltp = getLegEffectiveLtp(leg);
           symTotal += (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
         }
         const symPt: LineData = { time: t, value: symTotal };
@@ -1671,10 +1703,15 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         if (lastSym && (lastSym.time as number) === nowUnix) symPts[symPts.length - 1] = symPt;
         else symPts.push(symPt);
         acc.mtmPerUnderlying.set(sym, symPts);
-        ss.mtmPerUnderlying.get(sym)?.update(symPt);
+        const symSeries = ss.mtmPerUnderlying.get(sym);
+        try {
+          symSeries?.update(symPt);
+        } catch {
+          try { symSeries?.setData(symPts); } catch { /* lwc guard */ }
+        }
       }
     }
-  }, [legs.map(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}:${(l.currLtp ?? 0).toFixed(2)}`).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [legs.map(l => `${l.symbol}:${l.strike}${l.type}:${l.expiry}:${(l.currLtp ?? 0).toFixed(2)}:${l.isSquaredOff ? 1 : 0}:${(l.squareOffLtp ?? 0).toFixed(2)}`).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fetch when legs / symbol / mode change ──────────────────────────────
   useEffect(() => {
@@ -1797,12 +1834,25 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       }
     };
 
+    const safeSeriesUpdate = <T extends LineData | BaselineData>(
+      series: ISeriesApi<'Line'> | ISeriesApi<'Baseline'> | null | undefined,
+      arr: T[],
+      pt: T,
+    ) => {
+      if (!series) return;
+      try {
+        series.update(pt as any);
+      } catch {
+        try { series.setData(arr as any); } catch { /* lwc guard */ }
+      }
+    };
+
     // Helper: upsert into accum array and call series.update()
     const upsert = (arr: LineData[], series: ISeriesApi<'Line'> | null, pt: LineData) => {
       const last = arr[arr.length - 1];
       if (last && (last.time as number) === (pt.time as number)) arr[arr.length - 1] = pt;
       else arr.push(pt);
-      series?.update(pt);
+      safeSeriesUpdate(series, arr, pt);
     };
 
     // greeks tick → update LTP/delta/IV by refId match (no symbol guessing)
@@ -2655,7 +2705,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           {/* ── Header bar: total P&L ── */}
           {(() => {
             const total = uniqueLegs.reduce((sum, leg) => {
-              const ltp = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+              const ltp = getLegEffectiveLtp(leg);
               return sum + (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
             }, 0);
             const isPos = total >= 0;
@@ -2696,7 +2746,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           {/* ── Rows ── */}
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
             {uniqueLegs.map((leg, i) => {
-              const ltp   = (leg.currLtp ?? 0) > 0 ? leg.currLtp! : leg.price;
+              const ltp   = getLegEffectiveLtp(leg);
               const pnl   = (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
               const isPos = pnl >= 0;
               const isBuy = leg.action === 'B';
@@ -2707,7 +2757,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                   alignItems: 'center',
                   padding: '8px 16px',
                   borderBottom: '1px solid rgba(255,255,255,0.04)',
-                  background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                  background: leg.isSquaredOff ? 'rgba(148,163,184,0.06)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'),
+                  opacity: leg.isSquaredOff ? 0.58 : 1,
                 }}>
 
                   {/* B/S badge */}

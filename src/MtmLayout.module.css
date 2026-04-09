@@ -406,6 +406,10 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .legRowUnchecked { opacity: 0.38; }
+.legRowSquaredOff {
+  opacity: 0.48;
+  filter: saturate(0.75);
+}
 .legRowBuy { background: rgba(38, 166, 154, 0.03); }
 .legRowSell { background: rgba(242, 54, 69, 0.03); }
 .legCell {
