@@ -2878,6 +2878,31 @@ export default function App() {
 
           {/* Navbar links */}
           <div className="flex items-center gap-1 ml-auto">
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 'clamp(42px, 3vw, 64px)',
+                padding: 0,
+                marginRight: 10,
+                flexShrink: 0,
+              }}
+              title="AlphaHedge"
+            >
+              <img
+                src="/alpha-logo-white.jpg"
+                alt="AlphaHedge"
+                style={{
+                  height: 'clamp(30px, 2vw, 50px)',
+                  width: 'auto',
+                  maxWidth: 'clamp(160px, 14vw, 280px)',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
+            </div>
+
             {/* Basket icon button */}
             <button
               ref={basketBtnRef}

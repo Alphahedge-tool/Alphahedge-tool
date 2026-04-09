@@ -35,7 +35,7 @@
   background: rgba(19, 21, 26, 0.95);
   color: #b9c2d1;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -184,7 +184,7 @@
 
 .searchOptionMain {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   color: #e8eef8;
 }
 
@@ -255,6 +255,38 @@
   box-shadow: 0 0 0 4px rgba(76, 134, 255, 0.12);
 }
 
+.straddleMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(17, 20, 26, 0.9);
+  color: #cfd9ee;
+  font-size: 13px;
+}
+
+.straddleMetaItem {
+  color: #c4cee0;
+}
+
+.straddleMetaValue {
+  color: #f0f4fd;
+}
+
+.straddleInfoBtn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d9e4fb;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .bannerError,
 .bannerInfo {
   padding: 10px 12px;
@@ -315,7 +347,7 @@
 .superCell {
   height: 46px;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.06em;
   background: #222726;
 }
@@ -349,13 +381,13 @@
 .expiryHead {
   height: 42px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .metricHead {
   height: 34px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .callGroupHead0 {
@@ -429,7 +461,7 @@
 
 .priceMain {
   display: block;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .oiBar {
@@ -474,7 +506,7 @@
 
 .oiBarText {
   display: block;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.05;
 }
 
@@ -512,7 +544,7 @@
   text-align: center;
   background: linear-gradient(180deg, rgba(24, 27, 37, 0.96) 0%, rgba(12, 14, 21, 0.98) 100%);
   color: #d8deef;
-  font-weight: 800;
+  font-weight: 400;
   font-size: 12.5px;
   min-width: 86px;
   border-top: 1px solid rgba(122, 137, 184, 0.3);
@@ -560,6 +592,65 @@
   min-width: 1220px;
 }
 
+.bfChartCard {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(8, 12, 18, 0.92);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.bfChartHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bfChartTitle {
+  font-size: 13px;
+  color: #e5ecf9;
+}
+
+.bfChartSub {
+  font-size: 12px;
+  color: #afbdd4;
+}
+
+.bfChartLegend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 0;
+  color: #b9c6da;
+  font-size: 12px;
+}
+
+.bfLegendNet,
+.bfLegendSpot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.bfLegendNet {
+  background: #f7b84b;
+}
+
+.bfLegendSpot {
+  background: #4ea1ff;
+}
+
+.bfChartCanvas {
+  width: 100%;
+  height: 240px;
+  padding: 8px 10px 10px;
+  box-sizing: border-box;
+}
+
 .bfTable th,
 .bfTable td {
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -574,12 +665,12 @@
   z-index: 2;
   background: #1d2324;
   color: #dce5f1;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .bfLegBuy,
 .bfLegSell {
-  font-weight: 700;
+  font-weight: 400;
   color: #dbe6fb;
 }
 
@@ -599,17 +690,17 @@
 
 .bfPos {
   color: #1fe0af;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .bfNeg {
   color: #ff6588;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .bfChipPos,
 .bfChipNeg {
-  font-weight: 700;
+  font-weight: 400;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
 }
@@ -622,10 +713,412 @@
   color: #ff6588;
 }
 
+.bfMetricBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.bfMetricBoxPos {
+  color: #1fe0af;
+  border: 1px solid rgba(31, 224, 175, 0.45);
+  background: rgba(31, 224, 175, 0.1);
+}
+
+.bfMetricBoxNeg {
+  color: #ff6588;
+  border: 1px solid rgba(255, 101, 136, 0.45);
+  background: rgba(255, 101, 136, 0.1);
+}
+
 .ratioTable {
   width: 100%;
   border-collapse: collapse;
   min-width: 1080px;
+}
+
+.straddleTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1420px;
+}
+
+.straddleTable th,
+.straddleTable td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.straddleTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #202628;
+  color: #dce5f1;
+}
+
+.straddleTable tbody td {
+  background: rgba(10, 12, 16, 0.78);
+  color: #d7e1f3;
+}
+
+.straddleTable tbody tr.straddleAtmRow td {
+  background: linear-gradient(180deg, rgba(89, 73, 33, 0.36) 0%, rgba(62, 51, 26, 0.34) 100%);
+  box-shadow: inset 0 1px 0 rgba(208, 170, 86, 0.26), inset 0 -1px 0 rgba(138, 112, 54, 0.28);
+}
+
+.straddleStrike {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #e5ebfa;
+}
+
+.straddleStrikeAtm {
+  background: linear-gradient(180deg, rgba(70, 58, 28, 0.84) 0%, rgba(55, 45, 23, 0.84) 100%) !important;
+  color: #efd9a1;
+  border-left: 1px solid rgba(208, 170, 86, 0.35);
+  border-right: 1px solid rgba(208, 170, 86, 0.35);
+}
+
+.straddlePriceChg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.straddleChartBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #8fb7ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.straddleChartBtn:hover {
+  color: #a8c8ff;
+  border-color: rgba(143, 183, 255, 0.55);
+  background: rgba(96, 141, 255, 0.14);
+}
+
+.straddleChartBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.straddleTable tbody td.straddlePricePos {
+  color: #00d8a0;
+}
+
+.straddleTable tbody td.straddlePriceNeg {
+  color: #ff5d86;
+}
+
+.straddlePct {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.straddlePctUp {
+  color: #00e0a8;
+  border-color: rgba(0, 224, 168, 0.45);
+  background: rgba(0, 224, 168, 0.12);
+}
+
+.straddlePctDown {
+  color: #ff5e87;
+  border-color: rgba(255, 94, 135, 0.45);
+  background: rgba(255, 94, 135, 0.12);
+}
+
+.straddleGreekDelta {
+  font-size: 14px;
+}
+
+.straddleTable tbody td.straddleGreekPos {
+  color: #00d8a0;
+}
+
+.straddleTable tbody td.straddleGreekNeg {
+  color: #ff5d86;
+}
+
+.straddleTable tbody td.straddleGreekTheta {
+  color: #00e0b2;
+}
+
+.straddleTable tbody td.straddleGreekGamma {
+  color: #d7ebff;
+}
+
+.straddleTable tbody td.straddleGreekVega {
+  color: #d7ebff;
+}
+
+.straddleActionCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.straddleIconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: #bed0ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.straddleTradeBtn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(96, 130, 255, 0.65);
+  background: #4f6ef3;
+  color: #f4f7ff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.straddleTradeBtn:hover,
+.straddleIconBtn:hover,
+.straddleInfoBtn:hover {
+  filter: brightness(1.08);
+}
+
+.straddleChartOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(2, 5, 11, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.straddleChartModal {
+  width: min(1080px, 96vw);
+  height: min(680px, 88vh);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0b0f15;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.straddleChartHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(26, 34, 46, 0.9) 0%, rgba(15, 21, 31, 0.9) 100%);
+}
+
+.straddleChartHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.straddleChartTitle {
+  color: #e8eefb;
+  font-size: 15px;
+}
+
+.straddleChartSub {
+  color: #a3b1c7;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.straddleChartClose {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d8e3f7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.straddleChartHeaderMark {
+  width: clamp(38px, 2.7vw, 54px);
+  height: clamp(38px, 2.7vw, 54px);
+  object-fit: contain;
+  opacity: 0.72;
+  filter: saturate(0.92) brightness(0.98);
+  user-select: none;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: 0 6px 16px rgba(255, 255, 255, 0.05);
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.straddleChartLegend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px 8px;
+  color: #b7c3d7;
+  font-size: 12px;
+}
+
+.legendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legendDotStraddle {
+  background: #f7b84b;
+}
+
+.legendDotSpot {
+  background: #4ea1ff;
+}
+
+.legendDotIv {
+  background: #d083ff;
+}
+
+.legendDotCall {
+  background: #48d6bb;
+}
+
+.legendDotPut {
+  background: #ff6b91;
+}
+
+.legendDotPcr {
+  background: #ff8a5b;
+}
+
+.legendDotOi {
+  background: #54d18f;
+}
+
+.straddleSeriesToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 8px;
+}
+
+.straddleSeriesToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c8d3e6;
+  font-size: 12px;
+}
+
+.straddleSeriesToggle input {
+  accent-color: #5f8fff;
+}
+
+.straddleChartBody {
+  flex: 1;
+  min-height: 0;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+
+.straddleChartCanvasWrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.straddleChartPaneMain {
+  flex: 1;
+  min-height: 0;
+}
+
+.straddleChartPaneIv {
+  height: 190px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.straddleChartIvTitle {
+  font-size: 12px;
+  color: #d9b5ff;
+  padding-left: 4px;
+}
+
+.straddleChartOverlayState {
+  position: absolute;
+  inset: 0 12px 12px 12px;
+  pointer-events: none;
+}
+
+.straddleChartCanvas {
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.straddleChartState,
+.straddleChartStateError {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a8b5ca;
+  font-size: 13px;
+  background: rgba(7, 10, 15, 0.72);
+  border-radius: 10px;
+}
+
+.straddleChartStateError {
+  color: #ff879f;
 }
 
 .ratioTable th,
@@ -642,7 +1135,7 @@
   z-index: 2;
   background: #1d2324;
   color: #dce5f1;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 14px;
 }
 
@@ -681,6 +1174,13 @@
   width: 86px;
 }
 
+.ratioTable th:nth-child(11),
+.ratioTable td:nth-child(11) {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+}
+
 .ratioTable thead th:nth-child(2),
 .ratioTable thead th:nth-child(3),
 .ratioTable thead th:nth-child(4),
@@ -712,13 +1212,13 @@
 .ratioBuyStrike {
   background: rgba(255, 255, 255, 0.09) !important;
   color: #dbe6fb;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .ratioSellStrike {
   background: rgba(255, 255, 255, 0.09) !important;
   color: #dbe6fb;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .tradeBtn {
@@ -729,7 +1229,7 @@
   background: #4f6ef3;
   color: #f4f7ff;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -739,13 +1239,13 @@
 
 .strikeVal {
   color: #d8deef;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.01em;
 }
 
 .strikeValAtm {
   color: #79b2ff;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.01em;
   text-shadow: 0 0 10px rgba(86, 146, 255, 0.35);
 }
@@ -753,7 +1253,7 @@
 .atmPill {
   display: inline-block;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.06em;
   color: #79b2ff;
   background: rgba(41, 98, 255, 0.15);
@@ -762,6 +1262,78 @@
   padding: 1px 4px;
   margin-right: 5px;
   vertical-align: middle;
+}
+
+@media (min-width: 2560px) {
+  .root {
+    gap: 18px;
+    padding: 22px;
+  }
+
+  .toolbar {
+    gap: 14px;
+  }
+
+  .controlLabel {
+    font-size: 13px;
+  }
+
+  .viewTab,
+  .select,
+  .searchInput,
+  .selectButton,
+  .infoChip,
+  .straddleMeta {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .table {
+    min-width: 1620px;
+  }
+
+  .superCell {
+    height: 56px;
+    font-size: 18px;
+  }
+
+  .expiryHead {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .metricHead {
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .callCell,
+  .putCell,
+  .strikeCell {
+    height: 54px;
+    font-size: 16px;
+  }
+
+  .priceMain,
+  .oiBarText {
+    font-size: 16px;
+  }
+
+  .priceUp,
+  .priceDown,
+  .oiBarSub {
+    font-size: 13px;
+  }
+
+  .bfTable th,
+  .bfTable td,
+  .straddleTable th,
+  .straddleTable td,
+  .ratioTable th,
+  .ratioTable td {
+    font-size: 15px;
+    padding: 10px 12px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -781,3 +1353,4 @@
     top: 114px;
   }
 }
+

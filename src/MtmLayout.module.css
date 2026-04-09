@@ -2,14 +2,19 @@
 
 /* ── Root container ──────────────────────────────────────────────────────── */
 .root {
-  padding: 8px;
-  gap: 4px;
-  background: var(--bg-base);
+  padding: 14px;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 82, 82, 0.08), transparent 30%),
+    radial-gradient(circle at top left, rgba(0, 224, 170, 0.09), transparent 28%),
+    #111315;
+  color: #e7edf6;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   align-items: stretch;
+  box-sizing: border-box;
 }
 
 /* ── Left panel ──────────────────────────────────────────────────────────── */
@@ -21,27 +26,27 @@
   position: relative;
   overflow: hidden;
   min-height: 0;
-  background: #111318;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(7, 8, 10, 0.75);
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   gap: 0;
 }
 .leftPanelHistorical {
-  background: rgba(255, 152, 0, 0.04);
-  border-color: rgba(255, 152, 0, 0.35);
-  box-shadow: 0 0 30px rgba(255, 152, 0, 0.07) inset;
+  background: linear-gradient(180deg, rgba(255, 152, 0, 0.05) 0%, rgba(7, 8, 10, 0.82) 100%);
+  border-color: rgba(255, 169, 77, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(255, 169, 77, 0.12);
 }
 
 /* ── Top header container (search + toggles + actions) ───────────────────── */
 .headerBar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 10px 12px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px 12px 0 0;
+  background: #202425;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
 }
 
 /* ── Search box ──────────────────────────────────────────────────────────── */
@@ -54,25 +59,25 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 30px;
+  height: 38px;
   padding: 0 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
+  background: rgba(19, 21, 26, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
   width: 100%;
   box-sizing: border-box;
   transition: border-color 0.15s;
 }
 .searchBox:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(84, 154, 255, 0.45);
 }
 .searchInput {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  font-size: 12px;
-  color: #D1D4DC;
+  font-size: 14px;
+  color: #f2f5fb;
   caret-color: #818cf8;
   font-weight: 600;
   min-width: 0;
@@ -91,8 +96,8 @@
 /* ── Divider between sections ────────────────────────────────────────────── */
 .headerDivider {
   width: 1px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.07);
+  height: 24px;
+  background: rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
 }
 
@@ -104,7 +109,7 @@
   flex-shrink: 0;
 }
 .toggleLabel {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
   user-select: none;
@@ -117,10 +122,10 @@
   left: 0;
   right: 0;
   z-index: 999;
-  background: #0F1117;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: #171a1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -180,9 +185,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: #202425;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Individual tab card */
@@ -190,7 +196,7 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: 160px;
-  height: 56px;
+  height: 50px;
   border-radius: 8px;
   position: relative;
   display: flex;
@@ -201,17 +207,16 @@
   padding: 0 26px 0 10px;
 }
 .tabCardActive {
-  background: rgba(255, 255, 255, 0.09);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: rgba(78, 126, 255, 0.18);
+  border: 1px solid rgba(97, 150, 255, 0.45);
+  box-shadow: none;
 }
 .tabCardInactive {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(19, 21, 26, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .tabCardInactive:hover {
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.10);
+  border-color: rgba(84, 154, 255, 0.45);
 }
 .tabAccentBar {
   position: absolute;
@@ -275,10 +280,10 @@
 .tabAddBtn {
   flex-shrink: 0;
   width: 34px;
-  height: 56px;
+  height: 50px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(19, 21, 26, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
   color: #4B5563;
   display: flex;
@@ -287,15 +292,14 @@
   transition: all 0.12s;
 }
 .tabAddBtn:hover {
-  color: #D1D4DC;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
+  color: #dce8ff;
+  border-color: rgba(84, 154, 255, 0.45);
 }
 
 /* ── Legs scroll area ────────────────────────────────────────────────────── */
 .legsScroll {
   flex: 1;
-  padding: 8px 8px 12px 8px;
+  padding: 10px 10px 12px 10px;
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -318,8 +322,9 @@
 .groupBlock {
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 8, 10, 0.7);
   overflow: hidden;
 }
 
@@ -328,9 +333,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 9px 12px;
+  background: #202425;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
 .groupAccentBar {
@@ -601,23 +606,23 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #111318;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(7, 8, 10, 0.75);
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   position: relative;
 }
 
 /* ── Split divider ───────────────────────────────────────────────────────── */
 .divider {
-  width: 4px;
+  width: 6px;
   cursor: col-resize;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: background 0.15s;
 }
-.divider:hover { background: rgba(255, 255, 255, 0.07); }
+.divider:hover { background: rgba(255, 255, 255, 0.22); }
 
 /* ── colHeader (legacy, keep for Greeks flex mode) ───────────────────────── */
 .colHeader {

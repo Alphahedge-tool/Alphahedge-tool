@@ -142,7 +142,7 @@
 
 .searchOptionMain {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   color: #e8eef8;
 }
 
@@ -244,7 +244,7 @@
   color: #d9e2ef;
   height: 42px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .expiryHead {
@@ -267,6 +267,7 @@
   height: 34px;
   background: #1e2323;
   font-size: 12.5px;
+  font-weight: 400;
 }
 
 .ceCell,
@@ -293,7 +294,7 @@
 .chgCell {
   background: #191c20;
   color: #d7deea;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .totalCeCell {
@@ -314,7 +315,7 @@
   text-align: center;
   background: linear-gradient(180deg, rgba(24, 27, 37, 0.96) 0%, rgba(12, 14, 21, 0.98) 100%);
   color: #d8deef;
-  font-weight: 800;
+  font-weight: 400;
   font-size: 13.5px;
   min-width: 78px;
   border-top: 1px solid rgba(122, 137, 184, 0.3);
@@ -344,19 +345,19 @@
 
 .strikeVal {
   color: #d8deef;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .strikeValAtm {
   color: #79b2ff;
-  font-weight: 800;
+  font-weight: 400;
   text-shadow: 0 0 10px rgba(86, 146, 255, 0.35);
 }
 
 .atmPill {
   display: inline-block;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.06em;
   color: #79b2ff;
   background: rgba(41, 98, 255, 0.15);
@@ -401,7 +402,7 @@
 }
 
 .oiBarText {
-  font-weight: 700;
+  font-weight: 400;
   font-size: 14px;
 }
 
@@ -441,3 +442,65 @@
   font-size: 14px;
   background: rgba(255, 255, 255, 0.02);
 }
+
+@media (min-width: 2560px) {
+  .root {
+    gap: 18px;
+    padding: 22px;
+  }
+
+  .toolbar {
+    gap: 14px;
+  }
+
+  .controlLabel {
+    font-size: 13px;
+  }
+
+  .select,
+  .searchInput,
+  .multiBtn,
+  .infoChip {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .table {
+    min-width: 1460px;
+  }
+
+  .strikeHead,
+  .expiryHead,
+  .totalCeHead,
+  .totalPeHead,
+  .totalOiHead,
+  .metricHead {
+    font-size: 15px;
+    height: 48px;
+  }
+
+  .ceCell,
+  .peCell,
+  .chgCell,
+  .totalCeCell,
+  .totalPeCell,
+  .totalOiCell,
+  .strikeCell {
+    height: 54px;
+    font-size: 16px;
+  }
+
+  .oiBar {
+    min-height: 42px;
+    padding: 0 10px;
+  }
+
+  .oiBarText {
+    font-size: 16px;
+  }
+
+  .oiBarSub {
+    font-size: 13px;
+  }
+}
+
