@@ -278,10 +278,13 @@ interface Leg {
   isSquaredOff?: boolean;
   squareOffLtp?: number;
   squareOffAt?: number;
-  squareOffReason?: 'manual' | 'sl';
+  squareOffReason?: 'manual' | 'sl' | 'tp';
   slEnabled?: boolean;
   slMode?: StopLossMode;
   slValue?: number;
+  tpEnabled?: boolean;
+  tpMode?: StopLossMode;
+  tpValue?: number;
 }
 
 function getLegLiveLtp(leg: Leg): number {
@@ -307,6 +310,17 @@ function getLegStopLossPoints(leg: Leg): number | null {
   const raw = leg.slValue ?? 0;
   if (!(raw > 0)) return null;
   return leg.slMode === 'percent' ? (leg.price * raw) / 100 : raw;
+}
+
+function getLegTargetPoints(leg: Leg): number | null {
+  if (!leg.tpEnabled) return null;
+  const raw = leg.tpValue ?? 0;
+  if (!(raw > 0)) return null;
+  return leg.tpMode === 'percent' ? (leg.price * raw) / 100 : raw;
+}
+
+function getLegProfitPoints(leg: Leg, ltp = getLegEffectiveLtp(leg)): number {
+  return leg.action === 'B' ? Math.max(0, ltp - leg.price) : Math.max(0, leg.price - ltp);
 }
 
 function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' = 'manual'): Leg {
@@ -351,6 +365,10 @@ function applyLegLiveUpdate(
   const slPoints = getLegStopLossPoints(updated);
   if (slPoints != null && getLegLossPoints(updated, resolvedLtp) >= slPoints - 1e-9) {
     return squareOffLeg(updated, resolvedLtp, 'sl');
+  }
+  const tpPoints = getLegTargetPoints(updated);
+  if (tpPoints != null && getLegProfitPoints(updated, resolvedLtp) >= tpPoints - 1e-9) {
+    return squareOffLeg(updated, resolvedLtp, 'tp');
   }
   return updated;
 }
@@ -397,37 +415,51 @@ const greekItems: { key: keyof Greeks; label: string; name: string; color: strin
 // ── Theme 2: full flat TanStack table ─────────────────────────────────────────
 function StopLossEditor({ leg, updateLeg, compact = false }: { leg: Leg; updateLeg: (id: number, patch: Partial<Leg>) => void; compact?: boolean }) {
   const thresholdPoints = getLegStopLossPoints(leg);
-  const activeMode = leg.slEnabled ? (leg.slMode ?? 'points') : null;
-  const buttonStyle = (active: boolean): React.CSSProperties => ({
-    minWidth: compact ? 26 : 34,
-    height: compact ? 20 : 22,
-    padding: compact ? '0 6px' : '0 8px',
+  const activeMode = leg.slEnabled ? (leg.slMode ?? 'points') : 'off';
+  const h = compact ? 22 : 26;
+  const fs = compact ? 10 : 11;
+  const selectStyle: React.CSSProperties = {
+    height: h,
     borderRadius: 5,
-    border: `1px solid ${active ? 'rgba(129,140,248,0.52)' : 'rgba(255,255,255,0.10)'}`,
-    background: active ? 'rgba(129,140,248,0.16)' : 'rgba(255,255,255,0.04)',
-    color: active ? '#C7D2FE' : '#6B7280',
-    fontSize: compact ? 10 : 11,
-    fontWeight: 800,
+    border: `1px solid ${activeMode !== 'off' ? 'rgba(129,140,248,0.45)' : 'rgba(255,255,255,0.10)'}`,
+    background: activeMode !== 'off' ? 'rgba(129,140,248,0.10)' : 'rgba(255,255,255,0.04)',
+    color: activeMode !== 'off' ? '#C7D2FE' : '#6B7280',
+    fontSize: fs,
+    fontWeight: 700,
     cursor: 'pointer',
-    lineHeight: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  });
+    outline: 'none',
+    padding: '0 4px',
+    appearance: 'none' as any,
+    WebkitAppearance: 'none' as any,
+    paddingRight: 18,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 4px center',
+    minWidth: 62,
+    colorScheme: 'dark',
+  };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: compact ? 116 : 146 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: false })} style={buttonStyle(activeMode === null)}>Off</button>
-        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: true, slMode: 'points' })} style={buttonStyle(activeMode === 'points')}>Pts</button>
-        <button type="button" onClick={() => updateLeg(leg.id, { slEnabled: true, slMode: 'percent' })} style={buttonStyle(activeMode === 'percent')}>%</button>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <select
+        value={activeMode}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === 'off') updateLeg(leg.id, { slEnabled: false });
+          else updateLeg(leg.id, { slEnabled: true, slMode: v as 'points' | 'percent' });
+        }}
+        style={selectStyle}
+      >
+        <option value="off" style={{ background: '#1a1c20', color: '#9CA3AF' }}>Off</option>
+        <option value="points" style={{ background: '#1a1c20', color: '#C7D2FE' }}>Points</option>
+        <option value="percent" style={{ background: '#1a1c20', color: '#C7D2FE' }}>Percent</option>
+      </select>
+      {activeMode !== 'off' && (
         <input
           type="number"
           min={0}
           step="0.01"
           defaultValue={leg.slValue ?? ''}
-          placeholder={leg.slMode === 'percent' ? '1.00' : '10.00'}
+          placeholder={activeMode === 'percent' ? '1.0' : '10.0'}
           onBlur={e => {
             const raw = Number(e.target.value);
             updateLeg(leg.id, {
@@ -436,154 +468,109 @@ function StopLossEditor({ leg, updateLeg, compact = false }: { leg: Leg; updateL
             });
           }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          style={{
-            width: compact ? 58 : 72,
-            height: compact ? 22 : 24,
-            borderRadius: 5,
-            border: '1px solid rgba(255,255,255,0.10)',
-            background: 'rgba(255,255,255,0.04)',
-            color: '#E2E8F0',
-            fontSize: compact ? 11 : 12,
-            fontWeight: 700,
-            textAlign: 'center',
-            outline: 'none',
-            padding: '0 6px',
-          }}
+          style={{ width: compact ? 48 : 58, height: h, borderRadius: 5, border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#E2E8F0', fontSize: fs, fontWeight: 700, textAlign: 'center', outline: 'none', padding: '0 4px' }}
         />
-        <span style={{ fontSize: compact ? 10 : 11, color: thresholdPoints != null ? '#9CA3AF' : '#4B5563', fontWeight: 700, whiteSpace: 'nowrap' }}>
-          {thresholdPoints != null ? `${thresholdPoints.toFixed(2)} pts` : 'No SL'}
+      )}
+      {activeMode !== 'off' && thresholdPoints != null && (
+        <span style={{ fontSize: fs, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {thresholdPoints.toFixed(1)}p
         </span>
-      </div>
+      )}
+    </div>
+  );
+}
+
+function TargetEditor({ leg, updateLeg, compact = false }: { leg: Leg; updateLeg: (id: number, patch: Partial<Leg>) => void; compact?: boolean }) {
+  const targetPoints = getLegTargetPoints(leg);
+  const activeMode = leg.tpEnabled ? (leg.tpMode ?? 'points') : 'off';
+  const h = compact ? 22 : 26;
+  const fs = compact ? 10 : 11;
+  const selectStyle: React.CSSProperties = {
+    height: h, borderRadius: 5,
+    border: `1px solid ${activeMode !== 'off' ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.10)'}`,
+    background: activeMode !== 'off' ? 'rgba(52,211,153,0.08)' : 'rgba(255,255,255,0.04)',
+    color: activeMode !== 'off' ? '#6ee7b7' : '#6B7280',
+    fontSize: fs, fontWeight: 700, cursor: 'pointer', outline: 'none',
+    padding: '0 4px', appearance: 'none' as any, WebkitAppearance: 'none' as any,
+    paddingRight: 18,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center',
+    minWidth: 62, colorScheme: 'dark',
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <select value={activeMode} onChange={e => {
+        const v = e.target.value;
+        if (v === 'off') updateLeg(leg.id, { tpEnabled: false });
+        else updateLeg(leg.id, { tpEnabled: true, tpMode: v as 'points' | 'percent' });
+      }} style={selectStyle}>
+        <option value="off" style={{ background: '#1a1c20', color: '#9CA3AF' }}>Off</option>
+        <option value="points" style={{ background: '#1a1c20', color: '#6ee7b7' }}>Points</option>
+        <option value="percent" style={{ background: '#1a1c20', color: '#6ee7b7' }}>Percent</option>
+      </select>
+      {activeMode !== 'off' && (
+        <input type="number" min={0} step="0.01" defaultValue={leg.tpValue ?? ''}
+          placeholder={activeMode === 'percent' ? '1.0' : '10.0'}
+          onBlur={e => {
+            const raw = Number(e.target.value);
+            updateLeg(leg.id, { tpValue: Number.isFinite(raw) && raw > 0 ? Number(raw.toFixed(2)) : undefined, tpEnabled: Number.isFinite(raw) && raw > 0 });
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          style={{ width: compact ? 48 : 58, height: h, borderRadius: 5, border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#E2E8F0', fontSize: fs, fontWeight: 700, textAlign: 'center', outline: 'none', padding: '0 4px' }}
+        />
+      )}
+      {activeMode !== 'off' && targetPoints != null && (
+        <span style={{ fontSize: fs, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{targetPoints.toFixed(1)}p</span>
+      )}
     </div>
   );
 }
 
 function SquareOffCell({ leg, updateLeg, removeLeg }: { leg: Leg; updateLeg: (id: number, patch: Partial<Leg>) => void; removeLeg?: (id: number) => void }) {
-  const iconBtnStyle: React.CSSProperties = {
-    width: 34,
-    height: 34,
-    padding: 0,
-    borderRadius: 999,
-    border: '1px solid rgba(129,140,248,0.34)',
-    background: 'rgba(255,255,255,0.94)',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(15,23,42,0.18)',
-    flexShrink: 0,
-  };
-
   if (leg.isSquaredOff) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(148,163,184,0.14)', border: '1px solid rgba(148,163,184,0.28)', color: '#CBD5E1', fontSize: 11, fontWeight: 800, letterSpacing: '0.02em' }}>
-            {leg.squareOffReason === 'sl' ? 'SL Hit' : 'Squared Off'}
-          </span>
-          <button
-            type="button"
-            title="Revert square off"
-            onClick={() => updateLeg(leg.id, revertSquareOffLeg(leg))}
-            style={{
-              width: 24,
-              height: 24,
-              padding: 0,
-              borderRadius: 999,
-              border: '1px solid rgba(96,165,250,0.34)',
-              background: 'rgba(59,130,246,0.10)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#93C5FD',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7v6h6" />
-              <path d="M3 13a9 9 0 1 0 3-6.7L3 7" />
-            </svg>
-          </button>
-          {removeLeg && (
-            <button
-              type="button"
-              title="Delete position"
-              onClick={() => removeLeg(leg.id)}
-              style={{
-                width: 24,
-                height: 24,
-                padding: 0,
-                borderRadius: 999,
-                border: '1px solid rgba(248,113,113,0.30)',
-                background: 'rgba(248,113,113,0.10)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FCA5A5',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14H6L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4h6v2" />
-              </svg>
-            </button>
-          )}
-        </div>
-        <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>
-          Exit {getLegEffectiveLtp(leg).toFixed(2)}{leg.squareOffAt ? ` • ${formatSquareOffTime(leg.squareOffAt)}` : ''}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ padding: '2px 7px', borderRadius: 4, background: leg.squareOffReason === 'sl' ? 'rgba(242,54,69,0.12)' : leg.squareOffReason === 'tp' ? 'rgba(38,166,154,0.12)' : 'rgba(148,163,184,0.10)', border: `1px solid ${leg.squareOffReason === 'sl' ? 'rgba(242,54,69,0.28)' : leg.squareOffReason === 'tp' ? 'rgba(38,166,154,0.28)' : 'rgba(148,163,184,0.22)'}`, color: leg.squareOffReason === 'sl' ? '#f87171' : leg.squareOffReason === 'tp' ? '#34d399' : '#94A3B8', fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+          {leg.squareOffReason === 'sl' ? 'SL HIT' : leg.squareOffReason === 'tp' ? 'TARGET' : 'EXITED'}
         </span>
+        <span style={{ fontSize: 10, color: '#64748B', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {getLegEffectiveLtp(leg).toFixed(2)}{leg.squareOffAt ? ` · ${formatSquareOffTime(leg.squareOffAt)}` : ''}
+        </span>
+        <button
+          type="button"
+          title="Revert square off"
+          onClick={() => updateLeg(leg.id, revertSquareOffLeg(leg))}
+          style={{ width: 20, height: 20, padding: 0, borderRadius: 4, border: '1px solid rgba(96,165,250,0.28)', background: 'rgba(59,130,246,0.08)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#93C5FD', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 3-6.7L3 7" /></svg>
+        </button>
+        {removeLeg && (
+          <button type="button" title="Delete" onClick={() => removeLeg(leg.id)} style={{ width: 20, height: 20, padding: 0, borderRadius: 4, border: '1px solid rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#FCA5A5', cursor: 'pointer', flexShrink: 0 }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        )}
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: -44 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
       <button
         type="button"
         title="Square off position"
         onClick={() => updateLeg(leg.id, squareOffLeg(leg))}
-        style={iconBtnStyle}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 5, border: '1px solid rgba(242,54,69,0.35)', background: 'rgba(242,54,69,0.08)', cursor: 'pointer', color: '#f87171', fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', whiteSpace: 'nowrap', flexShrink: 0 }}
       >
-        <img
-          src="/alpha-watermark.png"
-          alt="Square off"
-          style={{ width: 20, height: 20, objectFit: 'contain', display: 'block' }}
-        />
-      </button>
-      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 800, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
         Exit
-      </span>
+      </button>
       {removeLeg && (
-        <button
-          type="button"
-          title="Delete position"
-          onClick={() => removeLeg(leg.id)}
-          style={{
-            width: 24,
-            height: 24,
-            padding: 0,
-            borderRadius: 999,
-            border: '1px solid rgba(248,113,113,0.30)',
-            background: 'rgba(248,113,113,0.10)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#FCA5A5',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14H6L5 6" />
-            <path d="M10 11v6M14 11v6" />
-            <path d="M9 6V4h6v2" />
-          </svg>
+        <button type="button" title="Delete" onClick={() => removeLeg(leg.id)} style={{ width: 20, height: 20, padding: 0, borderRadius: 4, border: '1px solid rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.08)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#FCA5A5', cursor: 'pointer', flexShrink: 0 }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
       )}
     </div>
@@ -708,9 +695,14 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
       cell: ({ row }) => <StopLossEditor leg={row.original} updateLeg={updateLeg} />,
     }),
     t2ColHelper.display({
-      id: 'manage', size: 118,
+      id: 'manage', size: 220,
       header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Manage</span>,
-      cell: ({ row }) => <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />,
+      cell: ({ row }) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />
+          {!row.original.isSquaredOff && <TargetEditor leg={row.original} updateLeg={updateLeg} />}
+        </div>
+      ),
     }),
     ...greekItems.flatMap((gk, gi) => {
       const isLast = gi === greekItems.length - 1;
@@ -790,10 +782,11 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
 
   // Greeks mode: show only check + symbol/expiry/strike/type + greeks + delete
   // Normal mode: show everything except greek_ columns
-  const GREEK_VISIBLE_IDS = new Set(['symbol', 'expiry', 'strike', 'type', 'delete']);
+  const GREEK_VISIBLE_IDS = new Set(['expiry', 'strike', 'type', 'delete']);
   const columns = useMemo(
     () => allDefinedColumns.filter(c => {
       const id = (c as any).id as string;
+      if (id === 'symbol') return false; // symbol shown in group header row
       if (showGreeks) return GREEK_VISIBLE_IDS.has(id) || id.startsWith('greek_');
       return !id.startsWith('greek_');
     }),
@@ -820,10 +813,10 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
         </div>
       )}
       {/* sticky cols: check=30, symbol=80, expiry=76, strike=64, type=44 → cumulative lefts */}
-      <div style={{ flexShrink: 0, overflowX: 'auto', overflowY: 'visible', scrollbarWidth: 'thin', scrollbarColor: '#4F8EF7 #1a1a1a', padding: '8px 10px' }}>
+      <div style={{ flexShrink: 0, overflowX: 'hidden', overflowY: 'visible', padding: '8px 10px' }}>
       {(() => {
-        const STICKY_IDS = ['symbol','expiry','strike','type'];
-        const STICKY_SIZES: Record<string,number> = { symbol:80, expiry:76, strike:64, type:44 };
+        const STICKY_IDS = ['expiry','strike','type'];
+        const STICKY_SIZES: Record<string,number> = { expiry:76, strike:64, type:44 };
         // build cumulative left offsets
         const stickyLeft: Record<string,number> = {};
         let acc = 0;
@@ -849,7 +842,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
 
         return (
           <div style={{ display: 'contents' }}>
-            <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: 'max-content' }}>
+            <table style={{ borderCollapse: 'collapse', tableLayout: 'auto', width: '100%' }}>
               <colgroup>
                 {allCols.map(col => (
                   <col key={col.id} style={{ width: STICKY_IDS.includes(col.id) ? STICKY_SIZES[col.id] : col.getSize() }} />
@@ -1155,7 +1148,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const [cloudName, setCloudName] = useState('');
   const [toastOpen, setToastOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [layoutTheme, setLayoutTheme] = useState<'theme1' | 'theme2'>('theme1');
+  const layoutTheme = 'theme2';
   const [rightView, setRightView] = useState<'chart' | 'payoff'>('chart');
   const [currentSpot, setCurrentSpot] = useState(0);
   const [isHistoricalMode, setIsHistoricalMode] = useState(false);
@@ -2145,15 +2138,6 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
 
           {/* Action buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-            {/* Layout toggle */}
-            {([
-              { t: 'theme1' as const, label: 'Cards', icon: (<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="9" y="1" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="1" y="9" width="6" height="6" rx="1.5" opacity="0.9"/><rect x="9" y="9" width="6" height="6" rx="1.5" opacity="0.9"/></svg>) },
-              { t: 'theme2' as const, label: 'Table', icon: (<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="14" height="3.5" rx="1.5" opacity="0.9"/><rect x="1" y="6.25" width="14" height="3.5" rx="1.5" opacity="0.7"/><rect x="1" y="11.5" width="14" height="3.5" rx="1.5" opacity="0.5"/></svg>) },
-            ]).map(({ t, label, icon }) => (
-              <button key={t} onClick={() => setLayoutTheme(t)} title={label} style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s', background: layoutTheme === t ? 'rgba(79,142,247,0.15)' : 'rgba(255,255,255,0.03)', color: layoutTheme === t ? '#4F8EF7' : '#4B5563', borderColor: layoutTheme === t ? 'rgba(79,142,247,0.3)' : 'rgba(255,255,255,0.07)' }}>
-                {icon}
-              </button>
-            ))}
             {/* Option chain */}
             <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} style={{ width: 26, height: 26, borderRadius: 5, border: `1px solid ${ocOpen ? 'rgba(255,152,0,0.4)' : 'rgba(255,255,255,0.07)'}`, background: ocOpen ? 'rgba(255,152,0,0.12)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="9 10 20 17.6">
