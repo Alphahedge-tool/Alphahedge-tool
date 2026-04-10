@@ -170,6 +170,60 @@
   font-size: 13px;
 }
 
+.toggleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(90, 132, 255, 0.24);
+  background: rgba(38, 49, 79, 0.32);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggleInput {
+  display: none;
+}
+
+.toggleTrack {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggleTrackOn {
+  background: rgba(76,134,255,0.7);
+  border-color: rgba(76,134,255,0.5);
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.toggleTrackOn .toggleThumb {
+  transform: translateX(14px);
+}
+
+.toggleLabel {
+  font-size: 12px;
+  color: #c7d4f2;
+  white-space: nowrap;
+}
+
 .infoDot {
   width: 8px;
   height: 8px;
@@ -413,6 +467,72 @@
   margin-top: 3px;
 }
 
+.barCell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.barTrackCe,
+.barTrackPe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.35s ease;
+  z-index: 0;
+}
+
+.barTrackCe {
+  background: linear-gradient(90deg, rgba(90, 167, 255, 0.38), rgba(90, 167, 255, 0.12));
+}
+
+.barTrackPe {
+  background: linear-gradient(90deg, rgba(255, 190, 92, 0.38), rgba(255, 190, 92, 0.12));
+}
+
+.barLabel {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metricCellButton {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.metricCellValue {
+  font-weight: 400;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.cellSparkline {
+  width: 42px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
 .ceCell,
 .peCell {
   min-width: 86px;
@@ -441,6 +561,281 @@
   color: #8b96a7;
   font-size: 14px;
   background: rgba(255, 255, 255, 0.02);
+}
+
+.historyPanel {
+  flex-shrink: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background:
+    radial-gradient(circle at top right, rgba(56,212,200,0.08), transparent 24%),
+    radial-gradient(circle at top left, rgba(245,158,11,0.08), transparent 24%),
+    linear-gradient(180deg, rgba(12,16,24,0.98), rgba(8,11,17,0.98));
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.historyToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.historyToolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.historyToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.historyDateLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.historyDateText {
+  font-size: 10px;
+  color: #8896a8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.historyDateInput {
+  background: rgba(19,25,35,0.95);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: #e7edf6;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.historyLegendChip {
+  font-size: 10px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+}
+
+.historyLoading {
+  font-size: 10px;
+  color: #8896a8;
+  animation: pulse 1s infinite;
+}
+
+.historyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.historyCard {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
+  background:
+    linear-gradient(180deg, rgba(17,22,31,0.96), rgba(9,12,18,0.96));
+  position: relative;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.24);
+}
+
+.historyCardAtm {
+  border-color: rgba(251,191,36,0.34);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.3), 0 0 0 1px rgba(251,191,36,0.14);
+}
+
+.historyCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px 0;
+}
+
+.historyCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.historyStrikeText {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dce7f8;
+  letter-spacing: 0.01em;
+}
+
+.historyStrikeTextAtm {
+  color: #fbbf24;
+}
+
+.historyAtmBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.32);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+.historyCardLegend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.historyMiniLegend {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.historyCardAction {
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 3px 5px;
+  cursor: pointer;
+  color: #97a5ba;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.historyChartFrame {
+  height: 140px;
+  padding: 4px 8px 8px;
+}
+
+.popupOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4,7,12,0.78);
+  backdrop-filter: blur(12px);
+}
+
+.popupShell {
+  width: 82vw;
+  height: 80vh;
+  background:
+    radial-gradient(circle at top right, rgba(56,212,200,0.08), transparent 22%),
+    linear-gradient(180deg, rgba(13,17,23,0.99), rgba(9,12,18,0.99));
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.46);
+}
+
+.popupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.popupHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.popupTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #edf3fb;
+  letter-spacing: 0.01em;
+}
+
+.popupTitleAtm {
+  color: #fbbf24;
+}
+
+.popupBadges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.popupBadge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid;
+}
+
+.popupClose {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #94a3b8;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.popupBody {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+}
+
+.popupPane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(12,16,23,0.94), rgba(8,11,17,0.94));
+}
+
+.popupPaneLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8896a8;
+}
+
+.popupChartFrame {
+  flex: 1;
+  min-height: 120px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 @media (min-width: 2560px) {
@@ -503,4 +898,3 @@
     font-size: 13px;
   }
 }
-
