@@ -56,6 +56,7 @@ function isMarketOpen(): boolean {
   return istMin >= 9 * 60 + 15 && istMin < 15 * 60 + 30;
 }
 
+
 type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home' | 'spread' | 'masterchain' | 'cumoi';
 type Tab = 'ALL' | 'Cash' | 'F&O' | 'Currency' | 'Commodity';
 
@@ -2469,14 +2470,51 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   );
 }
 
+// ── Nav index strip ───────────────────────────────────────────────────────────
+const NAV_INDEX_LABELS = ['NIFTY', 'BANKNIFTY', 'INDIA VIX', 'SENSEX'] as const;
+
+function NavIndexStrip({ data }: { data: Map<string, { ltp: number; changePct: number; pointChange: number }> }) {
+  return (
+    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginBottom: 4 }}>
+      {NAV_INDEX_LABELS.map(label => {
+        const d = data.get(label);
+        const ltp = d?.ltp ?? 0;
+        const changePct = d?.changePct ?? 0;
+        const pointChange = d?.pointChange ?? 0;
+        const isUp = pointChange > 0;
+        const isDown = pointChange < 0;
+        const tone = isUp ? '#22c55e' : isDown ? '#f43f5e' : '#94a3b8';
+        const fmtPrice = ltp > 0 ? ltp.toFixed(ltp >= 100 ? 2 : 3) : '--';
+        return (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 6px', borderRadius: 4 }}>
+            <span style={{ fontSize: 10, color: '#8896a8', fontWeight: 600, letterSpacing: '0.03em', minWidth: 70 }}>{label}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+              <span style={{ fontSize: 11, color: isDown ? '#f43f5e' : '#38d4c8', fontWeight: 700, lineHeight: 1 }}>{fmtPrice}</span>
+              {ltp > 0 && (
+                <span style={{ fontSize: 9.5, color: tone, fontWeight: 600, lineHeight: 1 }}>
+                  {pointChange >= 0 ? '+' : ''}{pointChange.toFixed(2)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const { googleUser, signOut } = useGoogleAuth();
   const { instruments, status } = useInstruments();
+  // Nubra session token — declared early so index feed effects can depend on it
+  const [nubraSession, setNubraSession] = useState(() => localStorage.getItem('nubra_session_token') ?? '');
 
   // Nubra instruments loaded from IndexedDB — shared across MTM + StrategyChart
   // Auto-refreshes daily: if cached date != today (IST), clears and re-fetches silently
   const [nubraInstruments, setNubraInstruments] = useState<NubraInstrument[]>([]);
+
+
   useEffect(() => {
     const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const cacheKey = `prod:${todayIST}`;
@@ -2537,6 +2575,101 @@ export default function App() {
       }
     });
   }, []);
+
+  // ── Nav index strip (NIFTY / BANKNIFTY / INDIA VIX / SENSEX) ────────────────
+  // Shape: label → { ltp, changePct, pointChange }
+  const [nubraNavIndex, setNubraNavIndex] = useState<Map<string, { ltp: number; changePct: number; pointChange: number }>>(new Map());
+  const nubraNavWsRef = useRef<WebSocket | null>(null);
+
+  // Derive the 4 subscription targets from nubraInstruments once loaded
+  const nubraNavTargets = useMemo(() => {
+    const TARGETS = [
+      { label: 'NIFTY',     keys: ['NIFTY 50', 'NIFTY50', 'NIFTY', 'CNX NIFTY'],      exchange: 'NSE' },
+      { label: 'BANKNIFTY', keys: ['NIFTY BANK', 'BANKNIFTY', 'BANK NIFTY'],           exchange: 'NSE' },
+      { label: 'INDIA VIX', keys: ['INDIA VIX', 'INDIAVIX', 'VIX'],                    exchange: 'NSE' },
+      { label: 'SENSEX',    keys: ['SENSEX', 'BSE SENSEX', 'S&P BSE SENSEX'],          exchange: 'BSE' },
+    ];
+    return TARGETS.map(({ label, keys, exchange }) => {
+      const match = nubraInstruments.find(i =>
+        i.option_type === 'N/A' &&
+        keys.some(k =>
+          (i.stock_name ?? '').toUpperCase() === k.toUpperCase() ||
+          (i.nubra_name ?? '').toUpperCase() === k.toUpperCase()
+        )
+      );
+      // nubra_name is the zanskar symbol used for WS/REST; fall back to well-known name
+      const symbol = match?.nubra_name || match?.stock_name || label;
+      return { label, symbol, exchange };
+    });
+  }, [nubraInstruments]);
+  const nubraNavTargetsRef = useRef(nubraNavTargets);
+  nubraNavTargetsRef.current = nubraNavTargets;
+
+  // Label map for incoming WS ticks (indexname → our label)
+  const NAV_LABEL_MAP: Record<string, string> = {
+    'NIFTY': 'NIFTY', 'NIFTY 50': 'NIFTY', 'CNX NIFTY': 'NIFTY', 'NIFTY50': 'NIFTY',
+    'BANKNIFTY': 'BANKNIFTY', 'NIFTY BANK': 'BANKNIFTY', 'BANK NIFTY': 'BANKNIFTY',
+    'INDIA VIX': 'INDIA VIX', 'INDIAVIX': 'INDIA VIX', 'VIX': 'INDIA VIX',
+    'SENSEX': 'SENSEX', 'BSE SENSEX': 'SENSEX', 'S&P BSE SENSEX': 'SENSEX',
+  };
+
+  // (Re)connect WS + fire REST snapshot whenever session token or symbols change.
+  // nubraSession is declared below — read from localStorage inside the effect so
+  // the closure is always fresh; effect re-runs via nubraNavTargetsKey change.
+  const nubraNavTargetsKey = nubraNavTargets.map(t => t.symbol).join(',');
+  const nubraNavSessionRef = useRef('');
+
+  useEffect(() => {
+    const sessionToken = nubraSession;
+    nubraNavSessionRef.current = sessionToken;
+    if (!sessionToken) return;
+
+    let destroyed = false;
+
+    // ── WebSocket only — index feed ticks every second, no REST needed ─────────
+    if (nubraNavWsRef.current) {
+      nubraNavWsRef.current.close();
+      nubraNavWsRef.current = null;
+    }
+
+    const ws = new WebSocket('ws://localhost:8765');
+    nubraNavWsRef.current = ws;
+
+    const sendSubs = () => {
+      if (destroyed || ws.readyState !== WebSocket.OPEN) return;
+      const tgts = nubraNavTargetsRef.current;
+      const tok = nubraNavSessionRef.current;
+      const nse = tgts.filter(t => t.exchange === 'NSE').map(t => t.symbol);
+      const bse = tgts.filter(t => t.exchange === 'BSE').map(t => t.symbol);
+      if (nse.length) ws.send(JSON.stringify({ action: 'subscribe', session_token: tok, data_type: 'index', symbols: nse, exchange: 'NSE' }));
+      if (bse.length) ws.send(JSON.stringify({ action: 'subscribe', session_token: tok, data_type: 'index', symbols: bse, exchange: 'BSE' }));
+    };
+
+    ws.onopen = () => {};
+    ws.onmessage = (e) => {
+      if (destroyed) return;
+      try {
+        const msg = JSON.parse(e.data as string);
+        if (msg.type === 'connected') { sendSubs(); return; }
+        if (msg.type !== 'index') return;
+        const d = msg.data;
+        const label = NAV_LABEL_MAP[(d?.indexname ?? '').toUpperCase()];
+        if (!label) return;
+        const ltp = (d.index_value ?? 0) / 100;
+        if (ltp <= 0) return;
+        // changepercent comes directly from Nubra — use it for change display
+        const changePct = d.changepercent ?? 0;
+        const pointChange = ltp * changePct / (100 + changePct);
+        setNubraNavIndex(prev => { const next = new Map(prev); next.set(label, { ltp, changePct, pointChange }); return next; });
+      } catch { /* silent */ }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+
+    return () => { destroyed = true; ws.close(); nubraNavWsRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nubraNavTargetsKey, nubraSession]);
+
   const [page, setPage] = useState<Page>('chart');
   // Tracks which pages have been visited — lazy-mount keep-alive pattern.
   // Once a page is visited it is never unmounted (state + WS survive tab switches).
@@ -2575,7 +2708,6 @@ export default function App() {
   const [nubraPhone, setNubraPhone] = useState(() => localStorage.getItem('nubra_phone') ?? '');
   const [nubraMpin, setNubraMpin] = useState(() => localStorage.getItem('nubra_mpin') ?? '');
   const [nubraTotpSecret, setNubraTotpSecret] = useState(() => localStorage.getItem('nubra_totp_secret') ?? '');
-  const [nubraSession, setNubraSession] = useState(() => localStorage.getItem('nubra_session_token') ?? '');
   const [nubraLogging, setNubraLogging] = useState(false);
   const [nubraError, setNubraError] = useState('');
   const [setupStep, setSetupStep] = useState<'phone' | 'otp' | 'done'>('phone');
@@ -3010,6 +3142,8 @@ export default function App() {
         {/* Footer — connection status */}
         <SidebarFooter>
           <div className="space-y-1.5">
+            {/* Index prices */}
+            <NavIndexStrip data={nubraNavIndex} />
             {/* Upstox WS */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -3157,7 +3291,7 @@ export default function App() {
           )}
 
           {/* Navbar links */}
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-1 shrink-0">
             <div
               style={{
                 display: 'flex',

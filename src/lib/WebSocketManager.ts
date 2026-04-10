@@ -378,12 +378,23 @@ class WebSocketManager {
 
   private _sendSubscribe(keys: string[]): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || keys.length === 0) return;
-    const msg = {
-      guid: 'sub_' + Date.now(),
-      method: 'sub',
-      data: { mode: 'full', instrumentKeys: keys },
-    };
-    this.ws.send(Buffer.from(JSON.stringify(msg)));
+    // MCX_FO (CRUDEOIL futures) use ltpc mode; everything else uses full
+    const ltpcKeys = keys.filter(k => k.startsWith('MCX_FO|'));
+    const fullKeys = keys.filter(k => !k.startsWith('MCX_FO|'));
+    if (fullKeys.length > 0) {
+      this.ws.send(Buffer.from(JSON.stringify({
+        guid: 'sub_' + Date.now(),
+        method: 'sub',
+        data: { mode: 'full', instrumentKeys: fullKeys },
+      })));
+    }
+    if (ltpcKeys.length > 0) {
+      this.ws.send(Buffer.from(JSON.stringify({
+        guid: 'sub_ltpc_' + Date.now(),
+        method: 'sub',
+        data: { mode: 'ltpc', instrumentKeys: ltpcKeys },
+      })));
+    }
   }
 
   private _processFeed(feeds: Record<string, any>): void {
@@ -447,6 +458,20 @@ class WebSocketManager {
             vol: c.vol?.toString() || '',
             ts: c.ts?.toString() || '',
           })),
+        };
+      } else if (feed.ltpc) {
+        // ltpc-only mode (used for BSE_INDEX instruments)
+        const ltpc = feed.ltpc;
+        const prev = this.data.get(key);
+        parsed = {
+          ltp: ltpc.ltp || 0,
+          ltt: ltpc.ltt?.toString() || '',
+          ltq: ltpc.ltq?.toString() || '',
+          cp: ltpc.cp || 0,
+          delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0,
+          iv: 0, oi: 0, atp: 0, vtt: '',
+          bidAskQuote: [],
+          ohlc: prev?.ohlc ?? [],
         };
       }
 

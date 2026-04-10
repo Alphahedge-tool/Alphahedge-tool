@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as am5 from '@amcharts/amcharts5';
+import * as am5percent from '@amcharts/amcharts5/percent';
 import {
   createChart,
   LineSeries,
@@ -30,6 +32,7 @@ interface OptionSide {
   cp: number;
   iv: number;
   oi: number;
+  volume: number;
   oiChgPct: number;
   delta: number;
   theta: number;
@@ -54,6 +57,7 @@ const EMPTY_SIDE: OptionSide = {
   cp: 0,
   iv: 0,
   oi: 0,
+  volume: 0,
   oiChgPct: 0,
   delta: 0,
   theta: 0,
@@ -241,6 +245,17 @@ function fmtOi(n: number) {
   return n.toLocaleString('en-IN');
 }
 
+function fmtRatio(n: number) {
+  if (!isFinite(n)) return 'â€”';
+  return n.toFixed(2);
+}
+
+function fmtMetricCompact(n: number) {
+  if (!n) return '0';
+  if (Math.abs(n) >= 1000) return fmtOi(Math.abs(n));
+  return Math.abs(n).toFixed(2);
+}
+
 function fmtOiChgPct(n: number) {
   if (!isFinite(n) || n === 0) return '—';
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
@@ -250,11 +265,13 @@ function parseRestOption(opt: Record<string, number>): OptionSide {
   const ltp = (opt.ltp ?? 0) / 100;
   const ltpchg = opt.ltpchg ?? 0;
   const cp = ltpchg !== -100 ? ltp / (1 + ltpchg / 100) : 0;
+  const volume = opt.volume ?? opt.vol ?? opt.total_volume ?? 0;
   return {
     ltp,
     cp,
     iv: (opt.iv ?? 0) * 100,
     oi: opt.oi ?? 0,
+    volume,
     oiChgPct: opt.prev_oi != null && (opt.oi ?? 0) > 0 ? (((opt.oi ?? 0) - opt.prev_oi) / (opt.oi ?? 0)) * 100 : 0,
     delta: opt.delta ?? 0,
     theta: opt.theta ?? 0,
@@ -266,11 +283,13 @@ function parseRestOption(opt: Record<string, number>): OptionSide {
 function parseWsOption(opt: Record<string, number>): OptionSide {
   const ltp = opt.last_traded_price ?? 0;
   const chg = opt.last_traded_price_change ?? 0;
+  const volume = opt.volume ?? opt.traded_volume ?? opt.total_traded_volume ?? 0;
   return {
     ltp,
     cp: ltp - chg,
     iv: (opt.iv ?? 0) * 100,
     oi: opt.open_interest ?? 0,
+    volume,
     oiChgPct: (opt.open_interest ?? 0) > 0
       ? (((opt.open_interest ?? 0) - (opt.previous_open_interest ?? 0)) / (opt.open_interest ?? 0)) * 100
       : 0,
@@ -334,6 +353,7 @@ function mergeOptionSide(base: OptionSide | undefined, live: OptionSide | undefi
     cp: base?.cp ?? live?.cp ?? 0,
     iv: live?.iv ?? base?.iv ?? 0,
     oi: live?.oi ?? base?.oi ?? 0,
+    volume: live?.volume ?? base?.volume ?? 0,
     oiChgPct: live?.oiChgPct ?? base?.oiChgPct ?? 0,
     delta: live?.delta ?? base?.delta ?? 0,
     theta: live?.theta ?? base?.theta ?? 0,
@@ -468,6 +488,10 @@ function buildNubraOptionName(symbol: string, expiry: string, strike: number, si
   return `${symbol}${yy}${m}${dd}${Number(strike.toFixed(0))}${side}`;
 }
 
+function buildNubraChainValue(symbol: string, expiry: string) {
+  return `${symbol}_${expiry}`;
+}
+
 async function fetchNubraFieldSeries(
   exchange: string,
   type: 'OPT' | 'STOCK' | 'INDEX',
@@ -578,6 +602,75 @@ async function fetchNubraMultiSeries(
   }
 
   return out;
+}
+
+async function fetchNubraChainOiHistory(
+  exchange: string,
+  chainValues: string[],
+  startDate: string,
+  endDate: string,
+): Promise<SummaryTrendPoint[]> {
+  const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+  const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
+  if (!sessionToken || chainValues.length === 0) return [];
+
+  const res = await fetch('/api/nubra-timeseries', {
+    method: 'POST',
+    headers: {
+      'x-session-token': sessionToken,
+      'x-device-id': deviceId,
+      'x-raw-cookie': rawCookie,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      chart: 'Put_Call_Ratio',
+      query: [
+        {
+          exchange,
+          type: 'CHAIN',
+          values: chainValues,
+          fields: ['cumulative_call_oi', 'cumulative_put_oi'],
+          startDate,
+          endDate,
+          interval: '1m',
+          intraDay: false,
+          realTime: false,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  const totals = new Map<number, SummaryTrendPoint>();
+
+  for (const entry of json?.result ?? []) {
+    for (const valObj of entry?.values ?? []) {
+      for (const chainValue of chainValues) {
+        const chainData = valObj?.[chainValue];
+        if (!chainData) continue;
+        const callOi: Array<{ ts: number; v: number }> = chainData.cumulative_call_oi ?? [];
+        const putOi: Array<{ ts: number; v: number }> = chainData.cumulative_put_oi ?? [];
+
+        for (const point of callOi) {
+          const ts = Math.floor((point.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.call += point.v ?? 0;
+          totals.set(ts, row);
+        }
+
+        for (const point of putOi) {
+          const ts = Math.floor((point.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.put += point.v ?? 0;
+          totals.set(ts, row);
+        }
+      }
+    }
+  }
+
+  return [...totals.values()].sort((a, b) => a.ts - b.ts);
 }
 
 function toSpotLine(points: Array<{ ts: number; v: number }>): LineData[] {
@@ -816,6 +909,398 @@ function estimateExtremesAndBreakevens(legs: ButterflyLeg[], optionType: 'CE' | 
   };
 }
 
+interface SummaryMetricCardProps {
+  title: string;
+  subtitle: string;
+  callValue: number;
+  putValue: number;
+  pcr: number;
+  formatValue: (value: number) => string;
+  ringMode?: 'standard' | 'signed';
+  trendHistory?: SummaryTrendPoint[];
+}
+
+interface SummaryTrendPoint {
+  ts: number;
+  call: number;
+  put: number;
+}
+
+function normalizeSummaryTrendHistory(points: SummaryTrendPoint[], maxPoints = 480): SummaryTrendPoint[] {
+  const byMinute = new Map<number, SummaryTrendPoint>();
+  for (const point of points) {
+    const ts = Math.floor((point.ts ?? 0) / 60000) * 60000;
+    byMinute.set(ts, {
+      ts,
+      call: point.call ?? 0,
+      put: point.put ?? 0,
+    });
+  }
+  const normalized = [...byMinute.values()].sort((a, b) => a.ts - b.ts);
+  return normalized.length > maxPoints ? normalized.slice(normalized.length - maxPoints) : normalized;
+}
+
+function resolveIntradayTradingDate(now = new Date()) {
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(f.formatToParts(now).map(part => [part.type, part.value]));
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const hh = Number(parts.hour ?? '0');
+  const mm = Number(parts.minute ?? '0');
+  const isWeekend = parts.weekday === 'Sun' || parts.weekday === 'Sat';
+  if (isWeekend || hh < 9 || (hh === 9 && mm < 15)) return prevTradingDate(date);
+  return date;
+}
+
+function appendSummaryTrendPoint(
+  prev: SummaryTrendPoint[],
+  callValue: number,
+  putValue: number,
+  maxPoints = 480,
+): SummaryTrendPoint[] {
+  const ts = Math.floor(Date.now() / 60000) * 60000;
+  const next = normalizeSummaryTrendHistory(prev, maxPoints);
+  const last = next[next.length - 1];
+  if (last && last.ts === ts) {
+    next[next.length - 1] = { ts, call: callValue, put: putValue };
+  } else {
+    next.push({ ts, call: callValue, put: putValue });
+  }
+  return normalizeSummaryTrendHistory(next, maxPoints);
+}
+
+function formatSummaryTrendTimestamp(tsSec: number | null) {
+  if (!tsSec) return '--';
+  return new Date(tsSec * 1000).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function toSummaryTrendTsSec(value: Time | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'object' && 'year' in value && 'month' in value && 'day' in value) {
+    return Math.floor(Date.UTC(value.year, value.month - 1, value.day) / 1000);
+  }
+  return null;
+}
+
+function SummaryMetricTrend({
+  callValue,
+  putValue,
+  formatValue,
+  initialHistory,
+}: {
+  callValue: number;
+  putValue: number;
+  formatValue: (value: number) => string;
+  initialHistory?: SummaryTrendPoint[];
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const callSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+  const [history, setHistory] = useState<SummaryTrendPoint[]>(
+    initialHistory && initialHistory.length > 0
+      ? appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialHistory), callValue, putValue)
+      : [{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }],
+  );
+
+  useEffect(() => {
+    if (initialHistory && initialHistory.length > 0) {
+      setHistory(appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialHistory), callValue, putValue));
+      return;
+    }
+    setHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }]);
+  }, [initialHistory]);
+
+  useEffect(() => {
+    setHistory(prev => appendSummaryTrendPoint(prev, callValue, putValue));
+  }, [callValue, putValue]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const chart = createChart(host, {
+      width: Math.max(host.clientWidth, 120),
+      height: 88,
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#8ea2c3',
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.05)' },
+      },
+      rightPriceScale: {
+        visible: false,
+        borderVisible: false,
+      },
+      leftPriceScale: {
+        visible: false,
+        borderVisible: false,
+      },
+      timeScale: {
+        visible: false,
+        borderVisible: false,
+        secondsVisible: false,
+        timeVisible: true,
+      },
+      crosshair: {
+        vertLine: {
+          visible: true,
+          labelVisible: false,
+          color: 'rgba(201, 214, 255, 0.32)',
+          width: 1,
+          style: 2,
+        },
+        horzLine: {
+          visible: true,
+          labelVisible: false,
+          color: 'rgba(201, 214, 255, 0.18)',
+          width: 1,
+          style: 2,
+        },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+
+    const callSeries = chart.addSeries(LineSeries, {
+      color: '#1fe0af',
+      lineWidth: 3,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
+    const putSeries = chart.addSeries(LineSeries, {
+      color: '#ff6f91',
+      lineWidth: 3,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
+    callSeries.priceScale().applyOptions({ scaleMargins: { top: 0.18, bottom: 0.14 } });
+    putSeries.priceScale().applyOptions({ scaleMargins: { top: 0.18, bottom: 0.14 } });
+
+    chartRef.current = chart;
+    callSeriesRef.current = callSeries;
+    putSeriesRef.current = putSeries;
+
+    chart.subscribeCrosshairMove(param => {
+      const directTime = toSummaryTrendTsSec(param.time);
+      if (directTime != null) {
+        setHoveredTime(directTime);
+        return;
+      }
+      if (param.point) {
+        const coordinateTime = toSummaryTrendTsSec(chart.timeScale().coordinateToTime(param.point.x));
+        if (coordinateTime != null) {
+          setHoveredTime(coordinateTime);
+          return;
+        }
+      }
+      setHoveredTime(null);
+    });
+
+    const resizeObserver = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (!entry) return;
+      chart.applyOptions({ width: Math.max(Math.floor(entry.contentRect.width), 120) });
+      chart.timeScale().fitContent();
+    });
+    resizeObserver.observe(host);
+
+    return () => {
+      resizeObserver.disconnect();
+      callSeriesRef.current = null;
+      putSeriesRef.current = null;
+      chartRef.current?.remove();
+      chartRef.current = null;
+    };
+  }, []);
+
+  const chartData = useMemo(() => {
+    const normalized = normalizeSummaryTrendHistory(history);
+    return {
+      call: normalized.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.call })),
+      put: normalized.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.put })),
+    };
+  }, [history]);
+
+  const displayTime = hoveredTime ?? ((chartData.call[chartData.call.length - 1]?.time as number | undefined) ?? null);
+
+  useEffect(() => {
+    callSeriesRef.current?.setData(chartData.call);
+    putSeriesRef.current?.setData(chartData.put);
+    chartRef.current?.timeScale().fitContent();
+  }, [chartData]);
+
+  return (
+    <div className={s.summaryTrendInline}>
+      <div className={s.summaryTrendChartWrap}>
+        <div ref={hostRef} className={s.summaryTrendChart} aria-hidden="true" />
+      </div>
+      <div className={s.summaryTrendInlineMeta}>
+        <span className={s.summaryTrendCaption}>{history.length > 2 ? 'Day trend' : 'Live trend'}</span>
+        <span className={s.summaryTrendTime}>{formatSummaryTrendTimestamp(displayTime)}</span>
+        <span className={s.summaryTrendLive}>LIVE</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryMetricPie({
+  callValue,
+  putValue,
+  ringMode,
+}: {
+  callValue: number;
+  putValue: number;
+  ringMode: 'standard' | 'signed';
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const call = ringMode === 'signed' ? Math.abs(callValue) : Math.max(callValue, 0);
+    const put = ringMode === 'signed' ? Math.abs(putValue) : Math.max(putValue, 0);
+    const data = [
+      { category: 'Call', value: call, color: am5.color(0x1fe0af) },
+      { category: 'Put', value: put, color: am5.color(0xff6f91) },
+    ];
+
+    const root = am5.Root.new(host);
+
+    const chart = root.container.children.push(
+      am5percent.PieChart.new(root, {
+        layout: root.verticalLayout,
+        innerRadius: am5.percent(68),
+        startAngle: -90,
+        endAngle: 270,
+      }),
+    );
+
+    const series = chart.series.push(
+      am5percent.PieSeries.new(root, {
+        valueField: 'value',
+        categoryField: 'category',
+        alignLabels: false,
+        startAngle: -90,
+        endAngle: 270,
+      }),
+    );
+
+    series.slices.template.setAll({
+      strokeOpacity: 0,
+      cornerRadius: 6,
+      shadowColor: am5.color(0x000000),
+      shadowBlur: 10,
+      shadowOffsetX: 0,
+      shadowOffsetY: 2,
+      shadowOpacity: 0.18,
+    });
+    series.slices.template.adapters.add('fill', (_, target) => (
+      (target.dataItem?.dataContext as { color?: am5.Color } | undefined)?.color ?? am5.color(0x516079)
+    ));
+    series.slices.template.adapters.add('stroke', (_, target) => (
+      (target.dataItem?.dataContext as { color?: am5.Color } | undefined)?.color ?? am5.color(0x516079)
+    ));
+    series.labels.template.setAll({ forceHidden: true });
+    series.ticks.template.setAll({ forceHidden: true });
+
+    series.data.setAll(data);
+
+    return () => {
+      root.dispose();
+    };
+  }, [callValue, putValue, ringMode]);
+
+  return <div ref={hostRef} className={s.summaryPieHost} aria-hidden="true" />;
+}
+
+function SummaryMetricCard({
+  title,
+  subtitle,
+  callValue,
+  putValue,
+  pcr,
+  formatValue,
+  ringMode = 'standard',
+  trendHistory,
+}: SummaryMetricCardProps) {
+  const ringCallValue = ringMode === 'signed' ? Math.abs(callValue) : Math.max(callValue, 0);
+  const ringPutValue = ringMode === 'signed' ? Math.abs(putValue) : Math.max(putValue, 0);
+  const totalLabel = formatValue(callValue + putValue);
+  const centerScale = totalLabel.length > 10 ? 0.72 : totalLabel.length > 8 ? 0.82 : totalLabel.length > 6 ? 0.92 : 1;
+
+  return (
+    <article className={s.summaryCard}>
+      <div className={s.summaryCardTop}>
+        <div>
+          <div className={s.summaryCardTitle}>{title}</div>
+          <div className={s.summaryCardSubtitle}>{subtitle}</div>
+        </div>
+        <div className={s.summaryPcrChip}>PCR {fmtRatio(pcr)}</div>
+      </div>
+
+      <div className={`${s.summaryCardBody} ${trendHistory ? s.summaryCardBodyWithTrend : ''}`}>
+        <div className={s.summaryDonutWrap}>
+          <SummaryMetricPie callValue={ringCallValue} putValue={ringPutValue} ringMode={ringMode} />
+          <div className={s.summaryDonutCenter}>
+            <span className={s.summaryDonutCenterLabel}>Total</span>
+            <strong
+              className={s.summaryDonutCenterValue}
+              style={{ transform: `scale(${centerScale})` }}
+            >
+              {totalLabel}
+            </strong>
+          </div>
+        </div>
+
+        <div className={s.summaryLegend}>
+          <div className={s.summaryLegendItem}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotCall}`} />
+            <div>
+              <div className={s.summaryLegendLabel}>Call</div>
+              <div className={s.summaryLegendValue}>{formatValue(callValue)}</div>
+            </div>
+          </div>
+          <div className={s.summaryLegendItem}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotPut}`} />
+            <div>
+              <div className={s.summaryLegendLabel}>Put</div>
+              <div className={s.summaryLegendValue}>{formatValue(putValue)}</div>
+            </div>
+          </div>
+        </div>
+
+        {trendHistory && (
+          <SummaryMetricTrend callValue={callValue} putValue={putValue} formatValue={formatValue} initialHistory={trendHistory} />
+        )}
+      </div>
+    </article>
+  );
+}
+
 function SelectControl({
   label,
   value,
@@ -1049,10 +1534,12 @@ export default function MasterOptionChain({ visible }: Props) {
   const [butterflyChartData, setButterflyChartData] = useState<{ net: LineData[]; spot: LineData[] }>({ net: [], spot: [] });
   const [butterflyChartLoading, setButterflyChartLoading] = useState(false);
   const [butterflyChartError, setButterflyChartError] = useState('');
+  const [summaryOiTrendHistory, setSummaryOiTrendHistory] = useState<SummaryTrendPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const straddleHistoryCacheRef = useRef(new Map<string, { straddle: LineData[]; call: LineData[]; put: LineData[]; spot: LineData[]; iv: LineData[]; oi: LineData[]; pcr: LineData[] }>());
   const butterflyHistoryCacheRef = useRef(new Map<string, { net: LineData[]; spot: LineData[] }>());
   const ratioHistoryCacheRef = useRef(new Map<string, { pd: LineData[]; spot: LineData[] }>());
+  const summaryOiHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
   const straddleChartHostRef = useRef<HTMLDivElement | null>(null);
   const straddleChartRef = useRef<IChartApi | null>(null);
   const straddlePremiumSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -2010,6 +2497,53 @@ export default function MasterOptionChain({ visible }: Props) {
   }, [ratioChartOpen, ratioLivePoint, viewMode]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const resolved = resolveNubra(symbol, nubraInstruments);
+    const scopeExpiries = viewMode === 'chain'
+      ? pickedExpiries
+      : [viewMode === 'straddle' ? straddleExpiry : viewMode === 'butterfly' ? butterflyExpiry : ratioExpiry].filter(Boolean);
+
+    const loadSummaryOiHistory = async () => {
+      if (!resolved.nubraSym || !resolved.exchange || scopeExpiries.length === 0) {
+        setSummaryOiTrendHistory([]);
+        return;
+      }
+      const chainValues = scopeExpiries.map(expiry => buildNubraChainValue(resolved.nubraSym, expiry));
+
+      const now = toIstDateTime();
+      const tradingDate = resolveIntradayTradingDate();
+      const startDate = istToUtcIso(tradingDate, '09:15');
+      const endDate = istToUtcIso(now.date, now.time);
+      const cacheKey = [
+        resolved.nubraSym,
+        resolved.exchange,
+        viewMode,
+        scopeExpiries.join(','),
+        tradingDate,
+      ].join('|');
+
+      const cached = summaryOiHistoryCacheRef.current.get(cacheKey);
+      if (cached) {
+        setSummaryOiTrendHistory(cached);
+        return;
+      }
+
+      try {
+        const merged = await fetchNubraChainOiHistory(resolved.exchange, chainValues, startDate, endDate);
+        if (cancelled) return;
+        summaryOiHistoryCacheRef.current.set(cacheKey, merged);
+        setSummaryOiTrendHistory(merged);
+      } catch {
+        if (!cancelled) setSummaryOiTrendHistory([]);
+      }
+    };
+
+    loadSummaryOiHistory();
+    return () => { cancelled = true; };
+  }, [butterflyExpiry, nubraInstruments, pickedExpiries, ratioExpiry, straddleExpiry, symbol, viewMode]);
+
+  useEffect(() => {
     if (!ratioChartOpen || !ratioChartHostRef.current) return;
     const chart = createChart(ratioChartHostRef.current, {
       autoSize: true,
@@ -2092,6 +2626,64 @@ export default function MasterOptionChain({ visible }: Props) {
     }
     return max;
   }, [visibleRows]);
+
+  const summaryCards = useMemo(() => {
+    const scopeChains = viewMode === 'chain'
+      ? pickedExpiries.map(expiry => chains[expiry]).filter((chain): chain is ChainSnapshot => Boolean(chain))
+      : [viewMode === 'straddle' ? straddleChain : viewMode === 'butterfly' ? butterflyChain : ratioChain]
+        .filter((chain): chain is ChainSnapshot => Boolean(chain));
+
+    let callOi = 0;
+    let putOi = 0;
+    let callVolume = 0;
+    let putVolume = 0;
+    let callDelta = 0;
+    let putDelta = 0;
+
+    for (const chain of scopeChains) {
+      for (const row of chain.rows) {
+        callOi += row.ce.oi || 0;
+        putOi += row.pe.oi || 0;
+        callVolume += row.ce.volume || 0;
+        putVolume += row.pe.volume || 0;
+        callDelta += Math.abs((row.ce.delta || 0) * (row.ce.oi || 0));
+        putDelta += Math.abs((row.pe.delta || 0) * (row.pe.oi || 0));
+      }
+    }
+
+    return [
+      {
+        key: 'oi',
+        title: 'Open Interest',
+        subtitle: viewMode === 'chain' ? 'Total CE OI vs PE OI' : 'Selected expiry total OI',
+        callValue: callOi,
+        putValue: putOi,
+        pcr: callOi > 0 ? putOi / callOi : 0,
+        formatValue: fmtOi,
+        ringMode: 'standard' as const,
+      },
+      {
+        key: 'volume',
+        title: 'Volume',
+        subtitle: viewMode === 'chain' ? 'Total CE volume vs PE volume' : 'Selected expiry traded volume',
+        callValue: callVolume,
+        putValue: putVolume,
+        pcr: callVolume > 0 ? putVolume / callVolume : 0,
+        formatValue: fmtOi,
+        ringMode: 'standard' as const,
+      },
+      {
+        key: 'delta',
+        title: 'Delta OI',
+        subtitle: 'Absolute delta exposure from OI',
+        callValue: callDelta,
+        putValue: putDelta,
+        pcr: callDelta > 0 ? putDelta / callDelta : 0,
+        formatValue: fmtMetricCompact,
+        ringMode: 'standard' as const,
+      },
+    ];
+  }, [butterflyChain, chains, pickedExpiries, ratioChain, straddleChain, viewMode]);
 
   const priceScale = perLot ? lotSize : 1;
 
@@ -2326,13 +2918,36 @@ export default function MasterOptionChain({ visible }: Props) {
       {!error && loading && <div className={s.bannerInfo}>Loading option chain...</div>}
       {!loading && !error && pickedExpiries.length === 0 && <div className={s.bannerInfo}>Select at least one expiry</div>}
 
+      {summaryCards.length > 0 && (
+        <section className={s.summarySection}>
+          {summaryCards.map(card => (
+            <SummaryMetricCard
+              key={card.key}
+              title={card.title}
+              subtitle={card.subtitle}
+              callValue={card.callValue}
+              putValue={card.putValue}
+              pcr={card.pcr}
+              formatValue={card.formatValue}
+              ringMode={card.ringMode}
+              trendHistory={card.key === 'oi' ? summaryOiTrendHistory : undefined}
+            />
+          ))}
+        </section>
+      )}
+
       <div className={s.tableWrap}>
         {viewMode === 'chain' ? (
           <table className={s.table}>
             <thead>
               <tr className={s.superHead}>
                 <th colSpan={callExpiries.length * callColumns.length} className={`${s.superCell} ${s.callsHead}`}>CALLS</th>
-                <th rowSpan={3} className={`${s.superCell} ${s.strikeHead}`}>Strike</th>
+                <th rowSpan={3} className={`${s.superCell} ${s.strikeHead}`}>
+                  <div className={s.strikeHeadInner}>
+                    <img src="/verticle logo.jpg.jpeg" alt="AlphaHedge" className={s.strikeHeadLogo} />
+                    <span className={s.strikeHeadText}>Strike</span>
+                  </div>
+                </th>
                 <th colSpan={putExpiries.length * putColumns.length} className={`${s.superCell} ${s.putsHead}`}>PUTS</th>
               </tr>
               <tr className={s.expiryHeadRow}>

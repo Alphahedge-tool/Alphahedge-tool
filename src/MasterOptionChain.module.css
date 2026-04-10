@@ -306,6 +306,232 @@
   color: #aeb8c9;
 }
 
+.summarySection {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summaryCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top right, rgba(82, 143, 255, 0.16), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(22, 215, 170, 0.1), transparent 36%),
+    linear-gradient(180deg, rgba(15, 18, 25, 0.96), rgba(8, 11, 16, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 10px;
+}
+
+.summaryCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summaryCardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #edf3ff;
+  line-height: 1.15;
+}
+
+.summaryCardSubtitle {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #95a3bc;
+}
+
+.summaryPcrChip {
+  flex-shrink: 0;
+  min-width: 72px;
+  text-align: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(101, 147, 255, 0.26);
+  background: rgba(63, 92, 158, 0.24);
+  color: #dce8ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.summaryCardBody {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.summaryCardBodyWithTrend {
+  grid-template-columns: 96px minmax(96px, 1fr) minmax(0, 1.9fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.summaryDonutWrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18));
+}
+
+.summaryPieHost {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(9, 13, 19, 0.98) 0 48%, transparent 49%),
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.12), transparent 34%);
+}
+
+.summaryDonutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.summaryDonutCenterLabel {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8392ad;
+}
+
+.summaryDonutCenterValue {
+  max-width: 72px;
+  font-size: 15px;
+  line-height: 1.1;
+  color: #f3f7ff;
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+.summaryLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  justify-content: center;
+}
+
+.summaryLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summaryLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.summaryLegendDotCall {
+  background: #1fe0af;
+  box-shadow: 0 0 0 4px rgba(31, 224, 175, 0.12);
+}
+
+.summaryLegendDotPut {
+  background: #ff6f91;
+  box-shadow: 0 0 0 4px rgba(255, 111, 145, 0.12);
+}
+
+.summaryLegendLabel {
+  font-size: 11px;
+  color: #8f9cb4;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summaryLegendValue {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #eef4ff;
+}
+
+.summaryTrendInline {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.summaryTrendLive {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(31, 224, 175, 0.12);
+  border: 1px solid rgba(31, 224, 175, 0.24);
+  color: #8ff1d5;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.summaryTrendChartWrap {
+  margin-top: 0;
+  height: 88px;
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(31, 224, 175, 0.08), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(255, 111, 145, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.04) 0,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 30px
+    );
+}
+
+.summaryTrendChart {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.summaryTrendInlineMeta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.summaryTrendCaption {
+  font-size: 10px;
+  color: #8ea2c3;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summaryTrendTime {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  color: #d7e1f5;
+  letter-spacing: 0.03em;
+}
+
 .tableWrap {
   flex: 1;
   min-height: 0;
@@ -318,6 +544,27 @@
   width: 100%;
   border-collapse: collapse;
   min-width: 1240px;
+}
+
+@media (max-width: 1180px) {
+  .summarySection {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .summaryCardBody {
+    grid-template-columns: 1fr;
+  }
+
+  .summaryCardBodyWithTrend {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .summaryLegend {
+    width: 100%;
+  }
 }
 
 .table th,
@@ -376,6 +623,42 @@
   background: #242729;
   color: #cfd7e4;
   position: relative;
+  padding: 0 !important;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.strikeHeadInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.strikeHeadLogo {
+  width: 96px;
+  height: 116px;
+  display: block;
+  object-fit: cover;
+  object-position: center center;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
+.strikeHeadText {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #a8b8d0;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 3px 0 2px;
+  width: 100%;
+  background: #242729;
 }
 
 .expiryHead,
@@ -569,8 +852,8 @@
 
 .oiBarText {
   display: block;
-  font-weight: 600;
-  font-size: 12px;
+  font-weight: 400;
+  font-size: 13px;
   line-height: 1.1;
   letter-spacing: 0.01em;
   color: #eef3fb;
