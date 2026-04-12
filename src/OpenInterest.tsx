@@ -8,6 +8,7 @@ import s from './OpenInterest.module.css';
 
 interface Props {
   nubraInstruments: NubraInstrument[];
+  initialSymbol?: string;
 }
 
 type OptionType = 'CE' | 'PE' | 'BOTH';
@@ -88,16 +89,18 @@ function resolveNubra(
   nubraInstruments: NubraInstrument[],
 ): { nubraSym: string; exchange: string; nubraType: 'INDEX' | 'STOCK' } {
   const upper = sym.toUpperCase();
+  // Exact match first (asset/nubra_name/stock_name), options only
   const found = nubraInstruments.find(i =>
     (i.option_type === 'CE' || i.option_type === 'PE') &&
     (i.asset?.toUpperCase() === upper ||
      i.nubra_name?.toUpperCase() === upper ||
-     i.stock_name?.toUpperCase().startsWith(upper))
+     i.stock_name?.toUpperCase() === upper)
   );
   if (found?.asset) {
     const isIndex = (found.asset_type ?? '').includes('INDEX');
     return { nubraSym: found.asset, exchange: found.exchange ?? 'NSE', nubraType: isIndex ? 'INDEX' : 'STOCK' };
   }
+  // Fallback: exact match across all rows
   const fallback = nubraInstruments.find(i =>
     i.asset?.toUpperCase() === upper ||
     i.nubra_name?.toUpperCase() === upper ||
@@ -148,7 +151,7 @@ async function getECharts() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function OpenInterest({ nubraInstruments }: Props) {
+export default function OpenInterest({ nubraInstruments, initialSymbol }: Props) {
   // Close range dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -474,6 +477,14 @@ export default function OpenInterest({ nubraInstruments }: Props) {
     setBars([]);
     fetchExpiries(resolved.nubraSym, resolved.exchange);
   }, [nubraInstruments, fetchExpiries]);
+
+  // ── Auto-load initialSymbol on mount ────────────────────────────────────────
+  const initialSymbolLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!initialSymbol || initialSymbolLoadedRef.current || nubraInstruments.length === 0) return;
+    initialSymbolLoadedRef.current = true;
+    handleSymbolSelect(initialSymbol, 'NSE');
+  }, [initialSymbol, nubraInstruments, handleSymbolSelect]);
 
   // ── Auto-load when expiry/range/customTime changes ─────────────────────────
 

@@ -77,12 +77,14 @@ interface OIRow {
   putIV: number;
   callGamma: number;
   putGamma: number;
+  callDelta: number;
+  putDelta: number;
   lotSize: number;
   callKey: string;
   putKey: string;
 }
 
-type OIMode = 'oi' | 'volume' | 'iv' | 'gex_raw' | 'gex_spot';
+type OIMode = 'oi' | 'volume' | 'iv' | 'gex_raw' | 'gex_spot' | 'dex';
 
 
 interface OITooltip {
@@ -124,8 +126,8 @@ function drawOIBars(
   rows: OIRow[],
   hoveredStrike: number | null,
   mode: OIMode = 'oi',
-  callColor = '#f23645',
-  putColor = '#2ebd85',
+  callColor = '#2ebd85',
+  putColor = '#f23645',
   opacity = 75,
   spot = 0,
 ) {
@@ -148,6 +150,7 @@ function drawOIBars(
   const alphaHover = Math.min(1, alpha + 0.2);
 
   const isGex = mode === 'gex_raw' || mode === 'gex_spot';
+  const isDex = mode === 'dex';
 
   let callVals: number[], putVals: number[], maxVal: number;
   let callRgb: string, putRgb: string;
@@ -163,6 +166,13 @@ function drawOIBars(
     maxVal = Math.max(...callVals, ...putVals, 1);
     callRgb = '129,140,248'; // indigo
     putRgb = '255,152,0';   // orange
+  } else if (isDex) {
+    // DEX = delta × OI × lotSize; put delta is negative so use abs
+    callVals = rows.map(r => Math.abs(r.callDelta) * r.callOI * r.lotSize);
+    putVals  = rows.map(r => Math.abs(r.putDelta)  * r.putOI  * r.lotSize);
+    maxVal = Math.max(...callVals, ...putVals, 1);
+    callRgb = '56,212,200';  // teal
+    putRgb = '248,113,113';  // red
   } else {
     callVals = rows.map(r => mode === 'volume' ? r.callVol : mode === 'iv' ? r.callIV : r.callOI);
     putVals = rows.map(r => mode === 'volume' ? r.putVol : mode === 'iv' ? r.putIV : r.putOI);
@@ -717,10 +727,14 @@ function OptionChainPanel({
 type Interval = { label: string; value: string; minutes: number };
 
 const INTERVALS: Interval[] = [
-  { label: '1m', value: 'I1', minutes: 1 },
-  { label: '5m', value: 'I5', minutes: 5 },
-  { label: '15m', value: 'I15', minutes: 15 },
-  { label: '30m', value: 'I30', minutes: 30 },
+  { label: '1m',  value: 'I1',   minutes: 1    },
+  { label: '5m',  value: 'I5',   minutes: 5    },
+  { label: '15m', value: 'I15',  minutes: 15   },
+  { label: '30m', value: 'I30',  minutes: 30   },
+  { label: '1h',  value: 'I60',  minutes: 60   },
+  { label: '1D',  value: 'I1D',  minutes: 1440 },
+  { label: '1W',  value: 'I1W',  minutes: 10080 },
+  { label: '1M',  value: 'I1Mo', minutes: 43200 },
 ];
 
 interface FetchResult {
@@ -1098,6 +1112,10 @@ function OISettingsModal({
       hasChildren: true,
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>,
     },
+    {
+      id: 'dex', label: 'Delta Exposure', sub: '|δ| · OI · Lot per strike',
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20 L12 4 L21 20 Z" /></svg>,
+    },
   ];
 
   const isGexActive = mode === 'gex_raw' || mode === 'gex_spot';
@@ -1435,8 +1453,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const oiTooltipVisRef = useRef(false);
   const [oiSettingsOpen, setOiSettingsOpen] = useState(false);
   const [oiMode, setOiMode] = useState<OIMode>('oi');
-  const [oiCallColor, setOiCallColor] = useState('#f23645');
-  const [oiPutColor, setOiPutColor] = useState('#2ebd85');
+  const [oiCallColor, setOiCallColor] = useState('#2ebd85');
+  const [oiPutColor, setOiPutColor] = useState('#f23645');
   const [oiOpacity, setOiOpacity] = useState(75);
   const [oiExpiry, setOiExpiry] = useState<number | null>(null);
   const oiSettingsBtnRef = useRef<HTMLButtonElement>(null);
@@ -1497,8 +1515,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
   // Keep refs in sync so boot-effect closures can read latest values
   const oiModeRef = useRef<OIMode>('oi');
-  const oiCallColorRef = useRef('#f23645');
-  const oiPutColorRef = useRef('#2ebd85');
+  const oiCallColorRef = useRef('#2ebd85');
+  const oiPutColorRef = useRef('#f23645');
   const oiOpacityRef = useRef(75);
   const oiSpotRef = useRef(0);
   const oiExpiryRef = useRef<number | null>(null);
@@ -1586,27 +1604,17 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       },
       timeScale: {
         borderColor: '#2a2a2a',
-        timeVisible: true,
+        timeVisible: intervalRef.current.value !== 'I1D',
         secondsVisible: false,
         rightOffset: 8,
-        tickMarkFormatter: (ts: number) =>
-          new Date(ts * 1000).toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
+        tickMarkFormatter: intervalRef.current.value === 'I1D'
+          ? (ts: number) => new Date(ts * 1000).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
+          : (ts: number) => new Date(ts * 1000).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }),
       },
       localization: {
-        timeFormatter: (ts: number) =>
-          new Date(ts * 1000).toLocaleString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
+        timeFormatter: intervalRef.current.value === 'I1D'
+          ? (ts: number) => new Date(ts * 1000).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
+          : (ts: number) => new Date(ts * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }),
       },
       handleScroll: {
         mouseWheel: true,
@@ -1772,7 +1780,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       if (rafId) cancelAnimationFrame(rafId);
       chartCleanup?.();
     };
-  }, []);
+  }, [interval.value === 'I1D']);  // recreate chart when switching daily ↔ intraday so localization applies
 
   // ── OI redraw callback ─────────────────────────────────────────────────────
   const redrawOI = useCallback(() => {
@@ -1931,6 +1939,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             putVol: peSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
             callIV: ceSnap?.iv ?? 0, putIV: peSnap?.iv ?? 0,
             callGamma: ceSnap?.gamma ?? 0, putGamma: peSnap?.gamma ?? 0,
+            callDelta: ceSnap?.delta ?? 0, putDelta: peSnap?.delta ?? 0,
           };
         });
 
@@ -1949,8 +1958,8 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           const row = oiRowsRef.current.find(r => r.callKey === key || r.putKey === key);
           if (!row) return;
           const vol = md.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0;
-          if (row.callKey === key) { row.callOI = md.oi || 0; row.callVol = vol; row.callIV = md.iv || 0; row.callGamma = md.gamma || 0; }
-          else { row.putOI = md.oi || 0; row.putVol = vol; row.putIV = md.iv || 0; row.putGamma = md.gamma || 0; }
+          if (row.callKey === key) { row.callOI = md.oi || 0; row.callVol = vol; row.callIV = md.iv || 0; row.callGamma = md.gamma || 0; row.callDelta = md.delta || 0; }
+          else { row.putOI = md.oi || 0; row.putVol = vol; row.putIV = md.iv || 0; row.putGamma = md.gamma || 0; row.putDelta = md.delta || 0; }
           scheduleRedraw();
         })
       );
@@ -2006,9 +2015,37 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     const spacing = Math.max(4, Math.floor(containerWidth / visible));
     programmaticScrollRef.current = true;
     ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
-    ts.scrollToRealTime();
-    requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+    // fitContent first so LW knows the full data range, then snap to right
+    ts.fitContent();
+    requestAnimationFrame(() => {
+      ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
+      ts.scrollToRealTime();
+      requestAnimationFrame(() => { programmaticScrollRef.current = false; });
+    });
   }, []);
+
+  // ── Update time scale format when interval changes ────────────────────────
+  useEffect(() => {
+    if (!chartReady || !chartRef.current) return;
+    const isDaily = interval.value === 'I1D';
+    const dateOnlyFmt = (ts: number) => {
+      const d = new Date(ts * 1000);
+      return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
+    };
+    const dateTimeFmt = (ts: number) => new Date(ts * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    chartRef.current.applyOptions({
+      localization: { timeFormatter: isDaily ? dateOnlyFmt : dateTimeFmt },
+    });
+    chartRef.current.timeScale().applyOptions({
+      timeVisible: !isDaily,
+      secondsVisible: false,
+    } as any);
+    if (isDaily) {
+      (chartRef.current.timeScale() as any).applyOptions({ tickMarkFormatter: dateOnlyFmt });
+    } else {
+      (chartRef.current.timeScale() as any).applyOptions({ tickMarkFormatter: (ts: number) => new Date(ts * 1000).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) });
+    }
+  }, [chartReady, interval.value]);
 
   // ── Load fresh candles whenever instrument OR interval changes ─────────────
   useEffect(() => {
@@ -2924,6 +2961,19 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                 if (abs >= 1e3) return (v / 1e3).toFixed(2) + 'K';
                 return v.toFixed(2);
               };
+            } else if (oiMode === 'dex') {
+              callVal = liveRow ? Math.abs(liveRow.callDelta) * liveRow.callOI * liveRow.lotSize : 0;
+              putVal  = liveRow ? Math.abs(liveRow.putDelta)  * liveRow.putOI  * liveRow.lotSize : 0;
+              modeLabel = 'DEX'; ratioLabel = 'NET DEX';
+              callColor = '#38d4c8'; putColor = '#f87171';
+              fmtVal = (v: number) => {
+                if (v === 0) return '—';
+                const abs = Math.abs(v);
+                if (abs >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+                if (abs >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+                if (abs >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+                return v.toFixed(2);
+              };
             } else if (oiMode === 'iv') {
               callVal = liveRow?.callIV ?? 0;
               putVal = liveRow?.putIV ?? 0;
@@ -2937,7 +2987,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               callVal = liveRow?.callOI ?? 0;
               putVal = liveRow?.putOI ?? 0;
             }
-            const ratio = isGexMode
+            const ratio = (isGexMode || oiMode === 'dex')
               ? fmtVal(callVal - putVal)
               : callVal > 0 ? (putVal / callVal).toFixed(2) : '—';
             return (

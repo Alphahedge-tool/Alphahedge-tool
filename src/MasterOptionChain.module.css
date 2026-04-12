@@ -472,45 +472,58 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 6px;
 }
 
 .summaryTrendLive {
-  padding: 1px 5px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: rgba(31, 224, 175, 0.12);
-  border: 1px solid rgba(31, 224, 175, 0.24);
+  border: 1px solid rgba(31, 224, 175, 0.26);
   color: #8ff1d5;
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .summaryTrendChartWrap {
   margin-top: 0;
-  height: 88px;
-  border-radius: 8px;
+  height: 96px;
+  border-radius: 12px;
   overflow: hidden;
+  border: 1px solid rgba(142, 162, 195, 0.18);
   background:
-    radial-gradient(circle at top left, rgba(31, 224, 175, 0.08), transparent 38%),
-    radial-gradient(circle at bottom right, rgba(255, 111, 145, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
-    repeating-linear-gradient(
-      to right,
-      rgba(255, 255, 255, 0.04) 0,
-      rgba(255, 255, 255, 0.04) 1px,
-      transparent 1px,
-      transparent 30px
-    );
+    linear-gradient(180deg, rgba(14, 19, 27, 0.94), rgba(9, 13, 19, 0.96)),
+    radial-gradient(circle at top left, rgba(31, 224, 175, 0.12), transparent 42%),
+    radial-gradient(circle at bottom right, rgba(255, 111, 145, 0.12), transparent 36%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -18px 32px rgba(6, 10, 17, 0.42),
+    0 10px 22px rgba(0, 0, 0, 0.22);
+  position: relative;
+}
+
+.summaryTrendChartWrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 30px 100%, 100% 24px;
+  opacity: 0.34;
+  pointer-events: none;
 }
 
 .summaryTrendChart {
   width: 100%;
   height: 100%;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 .summaryTrendInlineMeta {
-  margin-top: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -530,6 +543,33 @@
   font-size: 10px;
   color: #d7e1f5;
   letter-spacing: 0.03em;
+}
+
+.summaryTrendValues {
+  display: flex;
+  gap: 8px;
+}
+
+.summaryTrendValuePill {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(142, 162, 195, 0.16);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.summaryTrendValueCall {
+  color: #98f0d8;
+  box-shadow: inset 0 0 0 1px rgba(31, 224, 175, 0.08);
+}
+
+.summaryTrendValuePut {
+  color: #ff9bb3;
+  box-shadow: inset 0 0 0 1px rgba(255, 111, 145, 0.08);
 }
 
 .tableWrap {
@@ -1382,6 +1422,10 @@
 
 .legendDotPut {
   background: #ff6b91;
+}
+
+.legendDotRv {
+  background: #f97316;
 }
 
 .legendDotPcr {

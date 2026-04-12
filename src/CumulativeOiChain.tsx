@@ -59,7 +59,6 @@ const EMPTY_SIDE: OptionSide = {
 const BRIDGE = 'ws://localhost:8765';
 const DEFAULT_SCRIP = 'NIFTY';
 const STRIKE_WINDOW_OPTIONS = [5, 10, 15, 20];
-const HISTORY_BATCH_SIZE = 5;
 const METRIC_OPTIONS = ['oi', 'iv', 'delta', 'theta', 'vega', 'gamma'] as const;
 type MetricKey = typeof METRIC_OPTIONS[number];
 type StrikeViewMode = 'atm' | 'custom';
@@ -124,7 +123,7 @@ function metricLabel(metric: MetricKey) {
   return 'Gamma';
 }
 
-function formatMetric(metric: MetricKey, value: number, oiChgPct = 0) {
+function formatMetric(metric: MetricKey, value: number) {
   if (metric === 'oi') {
     return { main: fmtOi(value), sub: null };
   }
@@ -467,11 +466,65 @@ function todayIst(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
-function istToUtcIso(date: string, hhmm: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  const [hh, mm] = hhmm.split(':').map(Number);
-  const msUtc = Date.UTC(y, m - 1, d, hh - 5, mm - 30, 0, 0);
-  return new Date(msUtc).toISOString();
+// Returns the IST day's session boundaries in UTC.
+// IST day YYYY-MM-DD starts at 09:15 IST = prev UTC day 03:45Z
+// and ends at 15:30 IST = same UTC day 10:00Z.
+// For the historical API Nubra uses startDate = YYYY-MM-DDT18:30:00.000Z (prev UTC day midnight IST)
+// and endDate = YYYY-MM-DDT18:29:59.999Z (next UTC day midnight IST).
+function istDayToUtcRange(istDate: string): { startDate: string; endDate: string } {
+  const [y, m, d] = istDate.split('-').map(Number);
+  // IST midnight = UTC prev day 18:30:00
+  const startMs = Date.UTC(y, m - 1, d - 1, 18, 30, 0, 0);
+  // IST next midnight - 1ms = UTC that day 18:29:59.999
+  const endMs   = Date.UTC(y, m - 1, d, 18, 29, 59, 999);
+  return {
+    startDate: new Date(startMs).toISOString(),
+    endDate:   new Date(endMs).toISOString(),
+  };
+}
+
+
+interface MarketSchedule {
+  is_trading_on_today_nse: boolean;
+  exchange_calendar_info: {
+    NSE: {
+      is_trading_on_now: boolean;
+      previous_trading_day_slot: Array<{ StartTime: string; EndTime: string }>;
+    };
+  };
+}
+
+// Returns the last completed or currently active trading date (YYYY-MM-DD IST).
+// - If today is a trading day and market is open now → today (live mode)
+// - If today is a trading day and market has ended    → today (replay mode)
+// - Otherwise                                         → previous trading day from API
+async function fetchLastTradingDate(): Promise<{ date: string; isLive: boolean; isToday: boolean }> {
+  const headers = nubraHeaders();
+  try {
+    const res = await fetch('/api/nubra-market-schedule', { headers });
+    if (!res.ok) throw new Error('non-200');
+    const json: MarketSchedule = await res.json();
+    const nse = json.exchange_calendar_info?.NSE;
+    const isTradingToday = json.is_trading_on_today_nse;
+    const isNowLive = nse?.is_trading_on_now ?? false;
+
+    if (isTradingToday) {
+      return { date: todayIst(), isLive: isNowLive, isToday: true };
+    }
+
+    // Not a trading day — derive date from previous_trading_day_slot
+    const prevSlot = nse?.previous_trading_day_slot?.[0];
+    if (prevSlot?.StartTime) {
+      // StartTime is UTC, convert to IST date
+      const prevDate = new Date(prevSlot.StartTime)
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      return { date: prevDate, isLive: false, isToday: false };
+    }
+  } catch {
+    // fall back silently
+  }
+  // Fallback: use today IST
+  return { date: todayIst(), isLive: false, isToday: true };
 }
 
 
@@ -518,21 +571,26 @@ function findOptStockName(
 async function fetchStrikeSeries(
   exchange: string,
   stockName: string,   // exact ins.stock_name e.g. "NIFTY2641724000CE"
-  date: string,        // YYYY-MM-DD
+  date: string,        // YYYY-MM-DD IST
+  isLive = false,      // true when market is currently open
 ): Promise<{ oi: TsPoint[]; delta: TsPoint[] }> {
   const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
   const authToken = localStorage.getItem('nubra_auth_token') ?? '';
   const deviceId = localStorage.getItem('nubra_device_id') ?? '';
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
 
-  const isToday = date === todayIst();
-  const nowIst = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).slice(0, 5);
-  const startDate = istToUtcIso(date, '09:15');
-  const endDate   = istToUtcIso(date, isToday ? nowIst : '15:30');
+  // Full IST-day UTC boundaries (18:30Z prev day → 18:29:59.999Z that day)
+  const { startDate, endDate: fullEndDate } = istDayToUtcRange(date);
+  // For live market, cap endDate at current moment
+  const endDate = isLive
+    ? new Date().toISOString()
+    : fullEndDate;
 
   const body = {
     session_token: sessionToken,
     auth_token: authToken,
     device_id: deviceId,
+    raw_cookie: rawCookie,
     exchange,
     type: 'OPT',
     values: [stockName],
@@ -541,11 +599,17 @@ async function fetchStrikeSeries(
     endDate,
     interval: '1m',
     intraDay: false,
+    realTime: isLive,
   };
 
   const res = await fetch('/api/nubra-historical', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-session-token': sessionToken,
+      'x-device-id': deviceId,
+      'x-raw-cookie': rawCookie,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) return { oi: [], delta: [] };
@@ -559,13 +623,22 @@ async function fetchStrikeSeries(
   }
   if (!chartData) return { oi: [], delta: [] };
 
-  const parse = (arr: any[]): TsPoint[] =>
-    (Array.isArray(arr) ? arr : [])
+  const parse = (arr: any[]): TsPoint[] => {
+    const raw = (Array.isArray(arr) ? arr : [])
       .map((p: any) => ({
         ts: Math.round(Number(p.ts ?? p.timestamp ?? 0) / 1e6),  // ns → ms
         v: Number(p.v ?? p.value ?? 0),
       }))
-      .filter((p: TsPoint) => p.ts > 0 && isFinite(p.v));
+      .filter((p: TsPoint) => p.ts > 0 && isFinite(p.v))
+      .sort((a, b) => a.ts - b.ts);
+    // Deduplicate by minute-level timestamp (floor to 60s) — keep last value per minute
+    const byMinute = new Map<number, TsPoint>();
+    for (const p of raw) {
+      const minKey = Math.floor(p.ts / 60000) * 60000;
+      byMinute.set(minKey, { ts: minKey, v: p.v });
+    }
+    return [...byMinute.values()].sort((a, b) => a.ts - b.ts);
+  };
 
   return {
     oi:    parse(chartData.cumulative_oi ?? []),
@@ -586,11 +659,18 @@ function buildStrikeHistorySeries(result: { oi: TsPoint[]; delta: TsPoint[] }): 
   };
 }
 
-// ── Per-strike historical line chart (canvas) ─────────────────────────────────
-interface StrikeHistData {
-  // key = `${expiry}:CE` or `${expiry}:PE`
-  [key: string]: TsPoint[];  // deltaOi = delta × oi computed here
+// Sum multiple TsPoint series into one, aligning on timestamp (minute-level)
+function sumTsPointSeries(seriesList: TsPoint[][]): TsPoint[] {
+  const totals = new Map<number, number>();
+  for (const series of seriesList) {
+    for (const p of series) {
+      totals.set(p.ts, (totals.get(p.ts) ?? 0) + p.v);
+    }
+  }
+  return [...totals.entries()].map(([ts, v]) => ({ ts, v })).sort((a, b) => a.ts - b.ts);
 }
+
+// ── Per-strike historical line chart (canvas) ─────────────────────────────────
 
 function buildSparklinePath(points: TsPoint[], width: number, height: number): string {
   if (points.length === 0) return '';
@@ -648,145 +728,6 @@ function CellSparkline({
   );
 }
 
-function drawLineChart(
-  ctx: CanvasRenderingContext2D,
-  W: number, H: number,
-  series: Array<{ label: string; color: string; points: TsPoint[] }>,
-  strike: number,
-  isAtm: boolean,
-) {
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0d1117';
-  ctx.fillRect(0, 0, W, H);
-
-  const PAD = { t: 18, b: 22, l: 52, r: 8 };
-  const plotW = W - PAD.l - PAD.r;
-  const plotH = H - PAD.t - PAD.b;
-
-  // strike label
-  ctx.fillStyle = isAtm ? '#fbbf24' : '#8896a8';
-  ctx.font = isAtm ? 'bold 10px sans-serif' : '10px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(`${strike.toFixed(0)}${isAtm ? ' ⚡ATM' : ''}`, 4, 13);
-
-  const allPts = series.flatMap(s => s.points);
-  if (allPts.length === 0) {
-    ctx.fillStyle = '#445';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No data', W / 2, H / 2);
-    return;
-  }
-
-  const minTs = Math.min(...allPts.map(p => p.ts));
-  const maxTs = Math.max(...allPts.map(p => p.ts));
-  const minV  = Math.min(...allPts.map(p => p.v));
-  const maxV  = Math.max(...allPts.map(p => p.v));
-  const rangeTs = maxTs - minTs || 1;
-  const rangeV  = maxV - minV || 1;
-
-  const tx = (ts: number) => PAD.l + ((ts - minTs) / rangeTs) * plotW;
-  const ty = (v: number) => PAD.t + plotH - ((v - minV) / rangeV) * plotH;
-
-  // grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = PAD.t + (i / 4) * plotH;
-    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(W - PAD.r, y); ctx.stroke();
-    const val = maxV - (i / 4) * rangeV;
-    ctx.fillStyle = '#556'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right';
-    ctx.fillText(fmtOi(val), PAD.l - 2, y + 3);
-  }
-
-  // time labels
-  ctx.fillStyle = '#556'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
-  const tFmt = (ms: number) => {
-    const d = new Date(ms);
-    const h = d.getUTCHours() + 5;
-    const m = d.getUTCMinutes() + 30;
-    return `${String(h + Math.floor(m / 60)).padStart(2,'0')}:${String(m % 60).padStart(2,'0')}`;
-  };
-  [minTs, (minTs + maxTs) / 2, maxTs].forEach(t => {
-    ctx.fillText(tFmt(t), tx(t), H - 4);
-  });
-
-  // lines
-  for (const s of series) {
-    if (s.points.length < 2) continue;
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    s.points.forEach((p, i) => {
-      const x = tx(p.ts), y = ty(p.v);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-
-  // legend
-  let lx = PAD.l;
-  for (const s of series) {
-    ctx.fillStyle = s.color;
-    ctx.fillRect(lx, PAD.t - 13, 8, 5);
-    ctx.fillStyle = '#8896a8';
-    ctx.font = '8px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(s.label, lx + 10, PAD.t - 9);
-    lx += ctx.measureText(s.label).width + 20;
-  }
-}
-
-function StrikeHistChart({
-  strike, isAtm, data, expiryColors,
-}: {
-  strike: number;
-  isAtm: boolean;
-  data: StrikeHistData;
-  expiryColors: Record<string, string>;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.clientWidth;
-    const H = canvas.clientHeight;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    ctx.scale(dpr, dpr);
-
-    const series = Object.entries(data).map(([key, pts]) => {
-      const [expiry, side] = key.split(':');
-      const color = side === 'CE'
-        ? (expiryColors[expiry] ?? '#22c55e')
-        : shadeColor(expiryColors[expiry] ?? '#f43f5e', -30);
-      return { label: `${expiry.slice(4)}-${side}`, color, points: pts };
-    });
-
-    drawLineChart(ctx, W, H, series, strike, isAtm);
-  }, [data, strike, isAtm, expiryColors]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block' }}
-    />
-  );
-}
-
-function shadeColor(hex: string, pct: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = Math.min(255, Math.max(0, ((n >> 16) & 0xff) + pct));
-  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + pct));
-  const b = Math.min(255, Math.max(0, (n & 0xff) + pct));
-  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-}
 
 // ── Strike popup — TradingView-style chart ────────────────────────────────────
 interface PopupSeries { label: string; color: string; points: TsPoint[] }
@@ -865,7 +806,7 @@ function PopupMetricChart({
       if (!line) {
         line = chart.addSeries(LineSeries, {
           color: item.color,
-          lineWidth: 2.25,
+          lineWidth: 2,
           title: item.label,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -895,148 +836,6 @@ function PopupMetricChart({
   );
 }
 
-function StrikePopup({
-  strike, isAtm, series, expiryColors, onClose,
-}: {
-  strike: number;
-  isAtm: boolean;
-  series: PopupSeries[];
-  expiryColors: Record<string, string>;
-  onClose: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  // Map label → series ref so we can update data without recreating the chart
-  const lineMapRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
-
-  // Create chart once on mount
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const chart = createChart(el, {
-      autoSize: true,
-      layout: {
-        background: { color: '#0a0d12' },
-        textColor: '#b6c2d9',
-        panes: {
-          separatorColor: 'rgba(255,255,255,0.08)',
-          separatorHoverColor: 'rgba(255,255,255,0.22)',
-          enableResize: true,
-        },
-      },
-      grid: { vertLines: { color: '#242a34' }, horzLines: { color: '#242a34' } },
-      rightPriceScale: { visible: true, borderColor: '#2d3643' },
-      timeScale: {
-        borderColor: '#2d3643',
-        timeVisible: true,
-        secondsVisible: false,
-        tickMarkFormatter: (ts: number) =>
-          new Date(ts * 1000).toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
-          }),
-      },
-      localization: {
-        timeFormatter: (ts: number) =>
-          new Date(ts * 1000).toLocaleString('en-IN', {
-            timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-          }),
-      },
-      crosshair: { mode: 1 },
-      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
-      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
-    });
-    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.08 } });
-    chartRef.current = chart;
-    lineMapRef.current = new Map();
-
-    return () => {
-      lineMapRef.current.clear();
-      chartRef.current = null;
-      chart.remove();
-    };
-  }, []);
-
-  // Sync series lines whenever series prop changes (data arrives or labels change)
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    const lineMap = lineMapRef.current;
-    const currentLabels = new Set(series.map(s => s.label));
-
-    // Remove lines that are no longer in series
-    for (const [label, line] of lineMap.entries()) {
-      if (!currentLabels.has(label)) {
-        try { chart.removeSeries(line); } catch {}
-        lineMap.delete(label);
-      }
-    }
-
-    // Add or update lines
-    series.forEach(s => {
-      let line = lineMap.get(s.label);
-      if (!line) {
-        line = chart.addSeries(LineSeries, {
-          color: s.color,
-          lineWidth: 2,
-          title: s.label,
-          priceLineVisible: false,
-          priceFormat: { type: 'custom', formatter: (v: number) => fmtOi(v), minMove: 1 } as any,
-        });
-        lineMap.set(s.label, line);
-      }
-      if (s.points.length > 0) {
-        const data: LineData[] = s.points
-          .map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.v }))
-          .sort((a, b) => (a.time as number) - (b.time as number));
-        line.setData(data);
-      }
-    });
-
-    if (series.some(s => s.points.length > 0)) {
-      chart.timeScale().fitContent();
-    }
-  }, [series]);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.72)' }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{ width: '80vw', height: '70vh', background: '#0d1117', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: isAtm ? '#fbbf24' : '#e7edf6' }}>
-              {strike.toFixed(0)}{isAtm ? ' ⚡ ATM' : ''} — Delta × OI
-            </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {series.map(s => (
-                <span key={s.label} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: `${s.color}22`, border: `1px solid ${s.color}55`, color: s.color, fontWeight: 600 }}>
-                  {s.label}
-                </span>
-              ))}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#8896a8', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
-          >✕</button>
-        </div>
-        {/* Chart */}
-        <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
-      </div>
-    </div>
-  );
-}
 
 // ── Delta×OI bar chart ────────────────────────────────────────────────────────
 interface ChartRow {
@@ -1050,17 +849,23 @@ function StrikeDetailPopup({
   strike,
   expiry,
   isAtm,
-  oiSeries,
-  deltaSeries,
   deltaOiSeries,
+  oiSeries,
+  pcrSeries,
+  loading,
+  date,
+  onDateChange,
   onClose,
 }: {
   strike: number;
   expiry: string;
   isAtm: boolean;
-  oiSeries: PopupSeries[];
-  deltaSeries: PopupSeries[];
   deltaOiSeries: PopupSeries[];
+  oiSeries: PopupSeries[];
+  pcrSeries: PopupSeries[];
+  loading: boolean;
+  date: string;
+  onDateChange: (d: string) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -1078,29 +883,24 @@ function StrikeDetailPopup({
         <div className={s.popupHeader}>
           <div className={s.popupHeaderLeft}>
             <span className={`${s.popupTitle} ${isAtm ? s.popupTitleAtm : ''}`}>
-              {strike.toFixed(0)}{isAtm ? ' ATM' : ''} - {fmtExpiry(expiry)}
+              {strike.toFixed(0)}{isAtm ? ' ⚡ATM' : ''} · {fmtExpiry(expiry)}
             </span>
-            <div className={s.popupBadges}>
-              {[{ label: 'CE', color: '#38d4c8' }, { label: 'PE', color: '#f59e0b' }].map(item => (
-                <span
-                  key={item.label}
-                  className={s.popupBadge}
-                  style={{ background: `${item.color}22`, borderColor: `${item.color}55`, color: item.color }}
-                >
-                  {item.label}
-                </span>
-              ))}
-            </div>
           </div>
-          <button
-            onClick={onClose}
-            className={s.popupClose}
-          >x</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="date"
+              value={date}
+              onChange={e => onDateChange(e.target.value)}
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, color: '#b6c2d9', fontSize: 11, padding: '3px 7px', cursor: 'pointer' }}
+            />
+            {loading && <span style={{ fontSize: 10, color: '#8896a8' }}>Loading…</span>}
+            <button onClick={onClose} className={s.popupClose}>✕</button>
+          </div>
         </div>
         <div className={s.popupBody}>
-          <PopupMetricChart title="Open Interest" series={oiSeries} formatter={value => fmtOi(value)} />
-          <PopupMetricChart title="Delta" series={deltaSeries} formatter={value => value.toFixed(3)} />
-          <PopupMetricChart title="Delta x OI" series={deltaOiSeries} formatter={value => fmtOi(value)} />
+          <PopupMetricChart title="Delta × OI" series={deltaOiSeries} formatter={fmtOi} />
+          <PopupMetricChart title="OI" series={oiSeries} formatter={fmtOi} />
+          <PopupMetricChart title="PCR" series={pcrSeries} formatter={v => v.toFixed(2)} />
         </div>
       </div>
     </div>
@@ -1114,12 +914,6 @@ interface HistoryRequest {
   side: 'CE' | 'PE';
 }
 
-function chunkArray<T>(items: T[], size: number): T[][] {
-  if (size <= 0) return [items];
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
-  return chunks;
-}
 
 function DeltaOiChart({ chartRows, spot }: { chartRows: ChartRow[]; spot: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1258,7 +1052,6 @@ export default function CumulativeOiChain({ visible }: Props) {
 
   const [symbol, setSymbol] = useState(DEFAULT_SCRIP);
   const [exchange, setExchange] = useState('NSE');
-  const [lotSize, setLotSize] = useState(1);
   const [expiries, setExpiries] = useState<string[]>([]);
   const [selectedExpiries, setSelectedExpiries] = useState<string[]>(['', '', '']);
   const [strikeCount, setStrikeCount] = useState(5);
@@ -1270,20 +1063,40 @@ export default function CumulativeOiChain({ visible }: Props) {
   const [error, setError] = useState('');
   const [deltaOi, setDeltaOi] = useState(false);
   const [showChart, setShowChart] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [histDate, setHistDate] = useState(() => todayIst());
+  const [histIsLive, setHistIsLive] = useState(false);
   // key = `${strike}:${expiry}:${side}` → TsPoint[]
   const [histData, setHistData] = useState<Record<string, StrikeHistorySeries>>({});
-  const [histLoading, setHistLoading] = useState(false);
   const [popupCell, setPopupCell] = useState<{ strike: number; expiry: string } | null>(null);
+  const [allExpiryOi, setAllExpiryOi] = useState<Record<number, { totalCeOi: number; totalPeOi: number; pcr: number } | 'loading'>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const histDataRef = useRef<Record<string, StrikeHistorySeries>>({});
   const histPendingRef = useRef<Set<string>>(new Set());
+  const histDateRef = useRef<string>(histDate);
 
   const pickedExpiries = useMemo(
     () => selectedExpiries.filter(Boolean).filter((value, idx, arr) => arr.indexOf(value) === idx),
     [selectedExpiries],
   );
+
+  // On mount: resolve last trading date from market schedule API
+  useEffect(() => {
+    fetchLastTradingDate().then(({ date, isLive }) => {
+      setHistDate(date);
+      setHistIsLive(isLive);
+    });
+  }, []);
+
+  // When user manually picks a date, recalculate isLive
+  const handleHistDateChange = useCallback((newDate: string) => {
+    const todayDate = todayIst();
+    if (newDate === todayDate && isMarketOpen()) {
+      setHistIsLive(true);
+    } else {
+      setHistIsLive(false);
+    }
+    setHistDate(newDate);
+  }, []);
 
   useEffect(() => {
     histDataRef.current = histData;
@@ -1297,7 +1110,6 @@ export default function CumulativeOiChain({ visible }: Props) {
   useEffect(() => {
     if (selectedSymbol) {
       setExchange(selectedSymbol.exchange);
-      setLotSize(selectedSymbol.lotSize);
     }
   }, [selectedSymbol]);
 
@@ -1307,7 +1119,6 @@ export default function CumulativeOiChain({ visible }: Props) {
     if (!preferred) return;
     setSymbol(preferred.sym);
     setExchange(preferred.exchange);
-    setLotSize(preferred.lotSize);
   }, [allSymbols]);
 
   useEffect(() => {
@@ -1320,7 +1131,6 @@ export default function CumulativeOiChain({ visible }: Props) {
         const nextExpiries = await fetchExpiries(resolved.nubraSym, resolved.exchange);
         if (cancelled) return;
         setExchange(resolved.exchange);
-        setLotSize(resolved.lotSize);
         setExpiries(nextExpiries);
         setSelectedExpiries(prev => prev.map((value, idx) => (nextExpiries.includes(value) ? value : nextExpiries[idx] ?? '')));
       } catch (err: any) {
@@ -1404,7 +1214,7 @@ export default function CumulativeOiChain({ visible }: Props) {
   // Fires when showHistory toggled on, date changes, or rows/expiries change
   const resolved = useMemo(() => resolveNubra(symbol, nubraInstruments), [symbol, nubraInstruments]);
 
-  const loadHistoryRequests = useCallback(async (requests: HistoryRequest[]) => {
+  const loadHistoryRequests = useCallback(async (requests: HistoryRequest[], forDate: string, forIsLive: boolean) => {
     if (requests.length === 0) return;
 
     const concurrency = 6;
@@ -1413,17 +1223,27 @@ export default function CumulativeOiChain({ visible }: Props) {
     const worker = async () => {
       while (cursor < requests.length) {
         const current = requests[cursor++];
-        if (histDataRef.current[current.key] || histPendingRef.current.has(current.key)) continue;
+        // Abort if date changed while we were running
+        if (histDateRef.current !== forDate) return;
+        if (histPendingRef.current.has(current.key)) continue;
 
         const stockName = findOptStockName(nubraInstruments, resolved.nubraSym, current.expiry, current.strike, current.side);
         if (!stockName) continue;
 
         histPendingRef.current.add(current.key);
         try {
-          const result = await fetchStrikeSeries(resolved.exchange, stockName, histDate);
-          setHistData(prev => ({ ...prev, [current.key]: buildStrikeHistorySeries(result) }));
+          const result = await fetchStrikeSeries(resolved.exchange, stockName, forDate, forIsLive);
+          if (histDateRef.current === forDate) {
+            const series = buildStrikeHistorySeries(result);
+            // Cache result even if empty — prevents infinite retry on 403/empty
+            histDataRef.current[current.key] = series;
+            setHistData(prev => ({ ...prev, [current.key]: series }));
+          }
         } catch {
-          // silent
+          // Mark as attempted so we don't retry endlessly
+          if (histDateRef.current === forDate) {
+            histDataRef.current[current.key] = EMPTY_HISTORY_SERIES;
+          }
         } finally {
           histPendingRef.current.delete(current.key);
         }
@@ -1431,71 +1251,17 @@ export default function CumulativeOiChain({ visible }: Props) {
     };
 
     await Promise.all(Array.from({ length: Math.min(concurrency, requests.length) }, () => worker()));
-  }, [nubraInstruments, resolved.nubraSym, resolved.exchange, histDate]);
+  }, [nubraInstruments, resolved.nubraSym, resolved.exchange]);
 
+
+  // Reset hist data when symbol/expiry/date changes — clear synchronously before next fetch runs
   useEffect(() => {
-    if (pickedExpiries.length === 0) return;
-
-    // strikesToFetch: use chartRows window (ATM ± strikeCount) once available,
-    // or fall back to primaryChain rows — we re-run when rows change anyway
-    const chainForStrikes = chains[pickedExpiries[0]];
-    if (!chainForStrikes || chainForStrikes.rows.length === 0) return;
-
-    const atmIdx = nearestStrikeIndex(chainForStrikes.rows, chainForStrikes.atm || chainForStrikes.spot);
-    const start = Math.max(0, atmIdx - strikeCount);
-    const end = Math.min(chainForStrikes.rows.length, atmIdx + strikeCount + 1);
-    const strikesToFetch = strikeViewMode === 'custom'
-      ? [...customStrikes].sort((a, b) => a - b)
-      : chainForStrikes.rows.slice(start, end).map(r => r.strike);
-    if (strikesToFetch.length === 0) return;
-
-    let cancelled = false;
-    setHistLoading(true);
-
-    const strikeBatches = chunkArray(strikesToFetch, HISTORY_BATCH_SIZE);
-
-    if (strikeBatches.length === 0) {
-      setHistLoading(false);
-      return;
-    }
-
-    (async () => {
-      for (const strikeBatch of strikeBatches) {
-        if (cancelled) return;
-        const requests: HistoryRequest[] = [];
-        for (const expiry of pickedExpiries) {
-          for (const strike of strikeBatch) {
-            for (const side of ['CE', 'PE'] as const) {
-              const key = `${strike}:${expiry}:${side}`;
-              if (histDataRef.current[key] || histPendingRef.current.has(key)) continue;
-              requests.push({ key, expiry, strike, side });
-            }
-          }
-        }
-        if (requests.length === 0) continue;
-        await loadHistoryRequests(requests);
-      }
-      if (!cancelled) setHistLoading(false);
-    })();
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [histDate, symbol, pickedExpiries.join(','), strikeCount, strikeViewMode, customStrikes.join(','), chains[pickedExpiries[0] ?? '']?.rows.length, loadHistoryRequests]);
-
-  // Reset hist data when symbol/expiry changes
-  useEffect(() => {
+    histDateRef.current = histDate;
     histPendingRef.current.clear();
     histDataRef.current = {};
     setHistData({});
   }, [symbol, pickedExpiries.join(','), histDate]);
 
-  // Expiry → color mapping (stable per pickedExpiries)
-  const EXPIRY_COLORS = ['#38d4c8', '#f59e0b', '#a78bfa'];
-  const expiryColors = useMemo(() => {
-    const m: Record<string, string> = {};
-    pickedExpiries.forEach((exp, i) => { m[exp] = EXPIRY_COLORS[i % EXPIRY_COLORS.length]; });
-    return m;
-  }, [pickedExpiries.join(',')]);
 
   const baseExpiry = pickedExpiries[0] ?? '';
   const primaryChain = baseExpiry ? chains[baseExpiry] : null;
@@ -1569,21 +1335,47 @@ export default function CumulativeOiChain({ visible }: Props) {
     }));
   }, [primaryChain, strikeCount]);
 
-  // Fetch a single strike on demand (e.g. when clicking the chart icon in the table)
-  const fetchStrikeOnDemand = useCallback(async (strike: number, expiryFilter?: string) => {
-    const targetExpiries = expiryFilter ? [expiryFilter] : pickedExpiries;
-    for (const expiry of targetExpiries) {
+  // Fetch all picked expiries for a strike on demand
+  const fetchStrikeOnDemand = useCallback(async (strike: number) => {
+    const currentDate = histDateRef.current;
+    const requests: HistoryRequest[] = [];
+    for (const expiry of pickedExpiries) {
       for (const side of ['CE', 'PE'] as const) {
         const key = `${strike}:${expiry}:${side}`;
         if (histDataRef.current[key] || histPendingRef.current.has(key)) continue;
-        await loadHistoryRequests([{ key, expiry, strike, side }]);
+        requests.push({ key, expiry, strike, side });
       }
     }
-  }, [pickedExpiries, loadHistoryRequests]);
+    if (requests.length > 0) {
+      await loadHistoryRequests(requests, currentDate, histIsLive);
+    }
+  }, [pickedExpiries, loadHistoryRequests, histIsLive]);
 
-  const maxTotalOi = useMemo(() => Math.max(1, ...rows.map(row => row.totalOi)), [rows]);
-  const maxTotalCeOi = useMemo(() => Math.max(1, ...rows.map(row => row.totalCeOi)), [rows]);
-  const maxTotalPeOi = useMemo(() => Math.max(1, ...rows.map(row => row.totalPeOi)), [rows]);
+  // Reset allExpiryOi when symbol changes
+  useEffect(() => { setAllExpiryOi({}); }, [symbol]);
+
+  const fetchAllExpiryOiForStrike = useCallback(async (strike: number) => {
+    if (expiries.length === 0) return;
+    setAllExpiryOi(prev => ({ ...prev, [strike]: 'loading' }));
+    const session = getSession();
+    const res = resolveNubra(symbol, nubraInstruments);
+    try {
+      const snapshots = await Promise.all(
+        expiries.map(exp => fetchOptionChainSnapshot(session, res.nubraSym, res.exchange, exp).catch(() => null)),
+      );
+      let totalCeOi = 0;
+      let totalPeOi = 0;
+      for (const snap of snapshots) {
+        if (!snap) continue;
+        const r = snap.rows.find(row => Math.abs(row.strike - strike) < 0.5);
+        if (r) { totalCeOi += r.ce.oi; totalPeOi += r.pe.oi; }
+      }
+      const pcr = totalCeOi > 0 ? totalPeOi / totalCeOi : 0;
+      setAllExpiryOi(prev => ({ ...prev, [strike]: { totalCeOi, totalPeOi, pcr } }));
+    } catch {
+      setAllExpiryOi(prev => { const next = { ...prev }; delete next[strike]; return next; });
+    }
+  }, [expiries, symbol, nubraInstruments]);
 
   // Per-expiry max CE/PE OI across all strikes — for progress bar scaling within each expiry column
   const maxPerExpiry = useMemo(() => {
@@ -1612,9 +1404,8 @@ export default function CumulativeOiChain({ visible }: Props) {
   const spotLabel = primaryChain?.spot ? `${primaryChain.spot.toFixed(2)} spot` : 'No live spot';
   const perExpiryCols = selectedMetric === 'oi' ? 4 : 2;
   const openPopupForCell = useCallback((strike: number, expiry: string) => {
-    setShowHistory(true);
     setPopupCell({ strike, expiry });
-    void fetchStrikeOnDemand(strike, expiry);
+    void fetchStrikeOnDemand(strike); // fetch all picked expiries
   }, [fetchStrikeOnDemand]);
 
   const renderCellValue = useCallback((
@@ -1709,13 +1500,6 @@ export default function CumulativeOiChain({ visible }: Props) {
         >
           {showChart ? '▲ Hide Chart' : '▼ Delta OI Chart'}
         </button>
-        <button
-          type="button"
-          style={{ cursor: 'pointer', border: 'none', background: showHistory ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.06)', borderRadius: 6, padding: '4px 10px', color: showHistory ? '#f59e0b' : '#8896a8', fontSize: 11, fontWeight: 600 }}
-          onClick={() => setShowHistory(v => !v)}
-        >
-          {showHistory ? '▲ Hide History' : '📈 History'}
-        </button>
       </div>
 
       {error && <div className={s.bannerError}>{error}</div>}
@@ -1728,81 +1512,8 @@ export default function CumulativeOiChain({ visible }: Props) {
         </div>
       )}
 
-      {showHistory && (
-        <div className={s.historyPanel}>
-          {/* History toolbar */}
-          <div className={s.historyToolbar}>
-            <div className={s.historyToolbarLeft}>
-              <label className={s.historyDateLabel}>
-                <span className={s.historyDateText}>Date</span>
-                <input
-                  type="date"
-                  value={histDate}
-                  onChange={e => setHistDate(e.target.value)}
-                  className={s.historyDateInput}
-                />
-              </label>
-            </div>
-            <div className={s.historyToolbarRight}>
-              {pickedExpiries.map((exp, i) => (
-                <span
-                  key={exp}
-                  className={s.historyLegendChip}
-                  style={{ background: `${EXPIRY_COLORS[i % EXPIRY_COLORS.length]}22`, border: `1px solid ${EXPIRY_COLORS[i % EXPIRY_COLORS.length]}55`, color: EXPIRY_COLORS[i % EXPIRY_COLORS.length] }}
-                >
-                  {fmtExpiry(exp)}
-                </span>
-              ))}
-              {histLoading && <span className={s.historyLoading}>Loading...</span>}
-            </div>
-          </div>
-          {/* Per-strike charts grid */}
-          <div className={s.historyGrid}>
-            {chartRows.map(row => {
-              const data: StrikeHistData = {};
-              pickedExpiries.forEach(exp => {
-                const ceKey = `${row.strike}:${exp}:CE`;
-                const peKey = `${row.strike}:${exp}:PE`;
-                if (histData[ceKey]?.deltaOi.length) data[`${exp}:CE`] = histData[ceKey].deltaOi;
-                if (histData[peKey]?.deltaOi.length) data[`${exp}:PE`] = histData[peKey].deltaOi;
-              });
-              return (
-                <div key={row.strike} className={`${s.historyCard} ${row.isAtm ? s.historyCardAtm : ''}`}>
-                  <div className={s.historyCardHeader}>
-                    <div className={s.historyCardTitle}>
-                      <span className={`${s.historyStrikeText} ${row.isAtm ? s.historyStrikeTextAtm : ''}`}>{row.strike.toFixed(0)}</span>
-                      {row.isAtm && <span className={s.historyAtmBadge}>ATM</span>}
-                    </div>
-                    <div className={s.historyCardLegend}>
-                      {pickedExpiries.map((exp, i) => (
-                        <span key={`${row.strike}-${exp}`} className={s.historyMiniLegend} style={{ background: EXPIRY_COLORS[i % EXPIRY_COLORS.length] }} />
-                      ))}
-                      <button
-                        title="Open chart"
-                        onClick={() => {
-                          const firstExpiry = pickedExpiries[0];
-                          if (!firstExpiry) return;
-                          openPopupForCell(row.strike, firstExpiry);
-                        }}
-                        className={s.historyCardAction}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <polyline points="1,11 5,6 8,9 11,4 15,7" />
-                          <rect x="1" y="1" width="14" height="14" rx="1" strokeWidth="1.2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div className={s.historyChartFrame}>
-                    <StrikeHistChart strike={row.strike} isAtm={row.isAtm} data={data} expiryColors={expiryColors} />
-                  </div>
-                </div>
-              );
-            })}
-            {chartRows.length === 0 && !histLoading && (
-              <div style={{ gridColumn: '1/-1', color: '#556', fontSize: 12, textAlign: 'center', padding: 24 }}>Load option chain first to see per-strike history</div>
-            )}
-          </div>
+      {false && (
+        <div>
         </div>
       )}
 
@@ -1814,10 +1525,10 @@ export default function CumulativeOiChain({ visible }: Props) {
               {pickedExpiries.map(expiry => (
                 <th key={expiry} colSpan={perExpiryCols} className={s.expiryHead}>{fmtExpiry(expiry)}</th>
               ))}
-              <th rowSpan={2} className={s.totalCeHead}>{deltaOi ? 'Total CE Delta OI' : 'Total CE OI'}</th>
-              <th rowSpan={2} className={s.totalPeHead}>{deltaOi ? 'Total PE Delta OI' : 'Total PE OI'}</th>
-              <th rowSpan={2} className={s.totalOiHead}>{deltaOi ? 'Total Delta OI' : 'Total OI'}</th>
-              <th rowSpan={2} className={s.totalOiHead}>PCR</th>
+              <th rowSpan={2} className={s.totalCeHead} title="Click a row cell to load across all expiries">{deltaOi ? 'Total CE Delta OI' : 'Total CE OI'} (All Exp)</th>
+              <th rowSpan={2} className={s.totalPeHead} title="Click a row cell to load across all expiries">{deltaOi ? 'Total PE Delta OI' : 'Total PE OI'} (All Exp)</th>
+              <th rowSpan={2} className={s.totalOiHead}>{deltaOi ? 'Total Delta OI' : 'Total OI'} (All Exp)</th>
+              <th rowSpan={2} className={s.totalOiHead}>PCR (All Exp)</th>
             </tr>
             <tr className={s.metricHeadRow}>
               {pickedExpiries.flatMap(expiry => (
@@ -1843,28 +1554,16 @@ export default function CumulativeOiChain({ visible }: Props) {
                 </td>
               </tr>
             ) : rows.map(row => {
-              const totalPct = Math.max(0, Math.min(100, (row.totalOi / maxTotalOi) * 100));
-              const cePct = Math.max(0, Math.min(100, (row.totalCeOi / maxTotalCeOi) * 100));
-              const pePct = Math.max(0, Math.min(100, (row.totalPeOi / maxTotalPeOi) * 100));
               return (
                 <tr key={row.strike} className={row.isAtm ? s.atmRow : ''}>
-                  <td className={`${s.strikeCell} ${row.isAtm ? s.strikeCellAtm : ''}`}>
+                  <td
+                    className={`${s.strikeCell} ${row.isAtm ? s.strikeCellAtm : ''}`}
+                    style={{ cursor: 'pointer' }}
+                    title="Click to view CE Delta×OI history"
+                    onClick={() => openPopupForCell(row.strike, row.expiryBreakdown[0]?.expiry ?? pickedExpiries[0])}
+                  >
                     {row.isAtm && <span className={s.atmPill}>ATM</span>}
                     <span className={row.isAtm ? s.strikeValAtm : s.strikeVal}>{row.strike.toFixed(0)}</span>
-                    <button
-                      title="Delta×OI chart"
-                      onClick={() => {
-                        const firstExpiry = row.expiryBreakdown[0]?.expiry;
-                        if (!firstExpiry) return;
-                        openPopupForCell(row.strike, firstExpiry);
-                      }}
-                      style={{ marginTop: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#38d4c8', padding: 0, display: 'flex', alignItems: 'center', opacity: 0.7 }}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <polyline points="1,11 5,6 8,9 11,4 15,7" />
-                        <rect x="1" y="1" width="14" height="14" rx="1" strokeWidth="1.2" />
-                      </svg>
-                    </button>
                   </td>
                   {row.expiryBreakdown.flatMap(item => {
                     const ceSource = chains[item.expiry]?.rows.find(entry => entry.strike === row.strike)?.ce ?? EMPTY_SIDE;
@@ -1906,29 +1605,67 @@ export default function CumulativeOiChain({ visible }: Props) {
                         <td key={`pechg-${item.expiry}-${row.strike}`} className={`${s.chgCell} ${peSource.oiChgPct >= 0 ? s.upText : s.downText}`}>{fmtPct(peSource.oiChgPct)}</td>,
                       ];
                     }
-                    const ceVal = formatMetric(selectedMetric, ceSource[selectedMetric], ceSource.oiChgPct);
-                    const peVal = formatMetric(selectedMetric, peSource[selectedMetric], peSource.oiChgPct);
+                    const ceVal = formatMetric(selectedMetric, ceSource[selectedMetric]);
+                    const peVal = formatMetric(selectedMetric, peSource[selectedMetric]);
                     return [
                       renderCellValue('CE', item.expiry, row.strike, ceVal.main, s.ceCell),
                       renderCellValue('PE', item.expiry, row.strike, peVal.main, s.peCell),
                     ];
                   })}
-                  <td className={s.totalCeCell}>
-                    <div className={`${s.oiBar} ${s.oiBarCe}`} style={{ ['--oi-fill' as string]: `${cePct.toFixed(1)}%` }}>
-                      <span className={s.oiBarText}>{fmtOi(row.totalCeOi)}</span>
-                    </div>
-                  </td>
-                  <td className={s.totalPeCell}>
-                    <div className={`${s.oiBar} ${s.oiBarPe}`} style={{ ['--oi-fill' as string]: `${pePct.toFixed(1)}%` }}>
-                      <span className={s.oiBarText}>{fmtOi(row.totalPeOi)}</span>
-                    </div>
-                  </td>
-                  <td className={s.totalOiCell}>
-                    <div className={`${s.oiBar} ${s.oiBarTotal}`} style={{ ['--oi-fill' as string]: `${totalPct.toFixed(1)}%` }}>
-                      <span className={s.oiBarText}>{fmtOi(row.totalOi)}</span>
-                    </div>
-                  </td>
-                  <td className={s.totalOiCell}>{row.pcr > 0 ? row.pcr.toFixed(2) : '—'}</td>
+                  {(() => {
+                    const allExp = allExpiryOi[row.strike];
+                    const isLoading = allExp === 'loading';
+                    const allData = typeof allExp === 'object' ? allExp : null;
+                    const dispCeOi = allData ? allData.totalCeOi : row.totalCeOi;
+                    const dispPeOi = allData ? allData.totalPeOi : row.totalPeOi;
+                    const dispTotalOi = dispCeOi + dispPeOi;
+                    const dispPcr = allData ? allData.pcr : row.pcr;
+                    const allMaxCe = Math.max(1, ...rows.map(r => {
+                      const a = allExpiryOi[r.strike];
+                      return typeof a === 'object' ? a.totalCeOi : r.totalCeOi;
+                    }));
+                    const allMaxPe = Math.max(1, ...rows.map(r => {
+                      const a = allExpiryOi[r.strike];
+                      return typeof a === 'object' ? a.totalPeOi : r.totalPeOi;
+                    }));
+                    const allMaxTotal = Math.max(1, ...rows.map(r => {
+                      const a = allExpiryOi[r.strike];
+                      return typeof a === 'object' ? a.totalCeOi + a.totalPeOi : r.totalOi;
+                    }));
+                    const cePctAll = Math.max(0, Math.min(100, (dispCeOi / allMaxCe) * 100));
+                    const pePctAll = Math.max(0, Math.min(100, (dispPeOi / allMaxPe) * 100));
+                    const totalPctAll = Math.max(0, Math.min(100, (dispTotalOi / allMaxTotal) * 100));
+                    const needsFetch = !allExp;
+                    const openTotalChart = () => openPopupForCell(row.strike, row.expiryBreakdown[0]?.expiry ?? pickedExpiries[0]);
+                    return (<>
+                      <td
+                        className={s.totalCeCell}
+                        style={{ cursor: 'pointer' }}
+                        title={needsFetch ? 'Click to view OI history (all expiries)' : 'Click to view OI history (all expiries)'}
+                        onClick={() => { if (needsFetch) void fetchAllExpiryOiForStrike(row.strike); openTotalChart(); }}
+                      >
+                        <div className={`${s.oiBar} ${s.oiBarCe}`} style={{ ['--oi-fill' as string]: `${cePctAll.toFixed(1)}%` }}>
+                          <span className={s.oiBarText}>{isLoading ? '…' : fmtOi(dispCeOi)}</span>
+                        </div>
+                      </td>
+                      <td
+                        className={s.totalPeCell}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to view OI history (all expiries)"
+                        onClick={() => { if (needsFetch) void fetchAllExpiryOiForStrike(row.strike); openTotalChart(); }}
+                      >
+                        <div className={`${s.oiBar} ${s.oiBarPe}`} style={{ ['--oi-fill' as string]: `${pePctAll.toFixed(1)}%` }}>
+                          <span className={s.oiBarText}>{isLoading ? '…' : fmtOi(dispPeOi)}</span>
+                        </div>
+                      </td>
+                      <td className={s.totalOiCell} style={{ cursor: 'pointer' }} title="Click to view OI history (all expiries)" onClick={openTotalChart}>
+                        <div className={`${s.oiBar} ${s.oiBarTotal}`} style={{ ['--oi-fill' as string]: `${totalPctAll.toFixed(1)}%` }}>
+                          <span className={s.oiBarText}>{isLoading ? '…' : fmtOi(dispTotalOi)}</span>
+                        </div>
+                      </td>
+                      <td className={s.totalOiCell} style={{ cursor: 'pointer' }} title="Click to view OI history (all expiries)" onClick={openTotalChart}>{isLoading ? '…' : (dispPcr > 0 ? dispPcr.toFixed(2) : '—')}</td>
+                    </>);
+                  })()}
                 </tr>
               );
             })}
@@ -1938,26 +1675,55 @@ export default function CumulativeOiChain({ visible }: Props) {
 
       {/* Strike popup */}
       {popupCell !== null && (() => {
-        const ceSeries = histData[`${popupCell.strike}:${popupCell.expiry}:CE`] ?? EMPTY_HISTORY_SERIES;
-        const peSeries = histData[`${popupCell.strike}:${popupCell.expiry}:PE`] ?? EMPTY_HISTORY_SERIES;
-        const popupRow = rows.find(r => r.strike === popupCell.strike);
+        const strike = popupCell.strike;
+        const isPending = pickedExpiries.some(exp =>
+          histPendingRef.current.has(`${strike}:${exp}:CE`) ||
+          histPendingRef.current.has(`${strike}:${exp}:PE`)
+        );
+        const popupRow = rows.find(r => r.strike === strike);
+        // Merge all expiries into single CE and PE lines
+        const mergedCeDeltaOi = sumTsPointSeries(pickedExpiries.map(exp => histData[`${strike}:${exp}:CE`]?.deltaOi ?? []));
+        const mergedPeDeltaOi = sumTsPointSeries(pickedExpiries.map(exp => histData[`${strike}:${exp}:PE`]?.deltaOi ?? []));
+        const mergedCeOi = sumTsPointSeries(pickedExpiries.map(exp => histData[`${strike}:${exp}:CE`]?.oi ?? []));
+        const mergedPeOi = sumTsPointSeries(pickedExpiries.map(exp => histData[`${strike}:${exp}:PE`]?.oi ?? []));
+        // PCR = Total PE OI / Total CE OI at each timestamp
+        const ceOiMap = new Map(mergedCeOi.map(p => [p.ts, p.v]));
+        const pcrPoints: TsPoint[] = mergedPeOi
+          .map(p => ({ ts: p.ts, v: (ceOiMap.get(p.ts) ?? 0) > 0 ? p.v / (ceOiMap.get(p.ts) ?? 1) : 0 }))
+          .filter(p => p.v > 0);
+        const deltaOiSeries: PopupSeries[] = [
+          { label: 'CE Δ×OI', color: '#38d4c8', points: mergedCeDeltaOi },
+          { label: 'PE Δ×OI', color: '#f59e0b', points: mergedPeDeltaOi },
+        ];
+        const oiSeries: PopupSeries[] = [
+          { label: 'CE OI', color: '#38d4c8', points: mergedCeOi },
+          { label: 'PE OI', color: '#f59e0b', points: mergedPeOi },
+        ];
         return (
           <StrikeDetailPopup
-            strike={popupCell.strike}
+            strike={strike}
             expiry={popupCell.expiry}
             isAtm={popupRow?.isAtm ?? false}
-            oiSeries={[
-              { label: 'CE', color: '#38d4c8', points: ceSeries.oi },
-              { label: 'PE', color: '#f59e0b', points: peSeries.oi },
-            ]}
-            deltaSeries={[
-              { label: 'CE', color: '#38d4c8', points: ceSeries.delta },
-              { label: 'PE', color: '#f59e0b', points: peSeries.delta },
-            ]}
-            deltaOiSeries={[
-              { label: 'CE', color: '#38d4c8', points: ceSeries.deltaOi },
-              { label: 'PE', color: '#f59e0b', points: peSeries.deltaOi },
-            ]}
+            deltaOiSeries={deltaOiSeries}
+            oiSeries={oiSeries}
+            pcrSeries={[{ label: 'PCR', color: '#a78bfa', points: pcrPoints }]}
+            loading={isPending}
+            date={histDate}
+            onDateChange={d => {
+              handleHistDateChange(d);
+              histDateRef.current = d;
+              histDataRef.current = {};
+              histPendingRef.current.clear();
+              setHistData({});
+              const isLive = d === todayIst() && isMarketOpen();
+              void loadHistoryRequests(
+                pickedExpiries.flatMap(exp => ([
+                  { key: `${strike}:${exp}:CE`, expiry: exp, strike, side: 'CE' as const },
+                  { key: `${strike}:${exp}:PE`, expiry: exp, strike, side: 'PE' as const },
+                ])),
+                d, isLive,
+              );
+            }}
             onClose={() => setPopupCell(null)}
           />
         );

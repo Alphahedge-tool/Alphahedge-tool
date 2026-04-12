@@ -2,12 +2,13 @@
 
 /* ── Root container ──────────────────────────────────────────────────────── */
 .root {
-  padding: 14px;
-  gap: 14px;
+  padding: 14px 16px 16px;
+  gap: 12px;
   background:
-    radial-gradient(circle at top right, rgba(255, 82, 82, 0.08), transparent 30%),
-    radial-gradient(circle at top left, rgba(0, 224, 170, 0.09), transparent 28%),
-    #111315;
+    radial-gradient(circle at top right, rgba(255, 82, 82, 0.10), transparent 28%),
+    radial-gradient(circle at top left, rgba(0, 224, 170, 0.10), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(84, 154, 255, 0.08), transparent 26%),
+    linear-gradient(180deg, #111418 0%, #0c0f13 100%);
   color: #e7edf6;
   width: 100%;
   height: 100%;
@@ -26,15 +27,18 @@
   position: relative;
   overflow: hidden;
   min-height: 0;
-  background: rgba(7, 8, 10, 0.75);
-  border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(20, 24, 31, 0.94) 0%, rgba(10, 13, 18, 0.96) 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(146, 163, 184, 0.12);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   gap: 0;
 }
 .leftPanelHistorical {
-  background: linear-gradient(180deg, rgba(255, 152, 0, 0.05) 0%, rgba(7, 8, 10, 0.82) 100%);
-  border-color: rgba(255, 169, 77, 0.36);
-  box-shadow: inset 0 0 0 1px rgba(255, 169, 77, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(255, 166, 77, 0.14), transparent 26%),
+    linear-gradient(180deg, rgba(28, 25, 18, 0.96) 0%, rgba(13, 12, 10, 0.98) 100%);
+  border-color: rgba(255, 169, 77, 0.28);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 214, 153, 0.06);
 }
 
 /* ── Top header container (search + toggles + actions) ───────────────────── */
@@ -42,34 +46,40 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 14px 16px 12px;
   flex-shrink: 0;
-  background: #202425;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(33, 39, 49, 0.94) 0%, rgba(22, 27, 35, 0.94) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* ── Search box ──────────────────────────────────────────────────────────── */
 .searchWrap {
   position: relative;
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
 }
 .searchBox {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 38px;
-  padding: 0 10px;
-  background: rgba(19, 21, 26, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  height: 40px;
+  padding: 0 12px;
+  background: rgba(10, 14, 20, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
   width: 100%;
   box-sizing: border-box;
-  transition: border-color 0.15s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .searchBox:hover {
   border-color: rgba(84, 154, 255, 0.45);
+}
+.searchBox:focus-within {
+  border-color: rgba(84, 154, 255, 0.52);
+  box-shadow: 0 0 0 3px rgba(84, 154, 255, 0.12);
+  background: rgba(12, 17, 24, 0.94);
 }
 .searchInput {
   flex: 1;
@@ -96,8 +106,8 @@
 /* ── Divider between sections ────────────────────────────────────────────── */
 .headerDivider {
   width: 1px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.12);
+  height: 28px;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.14) 20%, rgba(255, 255, 255, 0.14) 80%, transparent 100%);
   flex-shrink: 0;
 }
 
@@ -105,13 +115,13 @@
 .toggleGroup {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex-shrink: 0;
 }
 .toggleLabel {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   user-select: none;
 }
 
@@ -122,10 +132,10 @@
   left: 0;
   right: 0;
   z-index: 999;
-  background: #171a1f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  background: rgba(16, 20, 27, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -185,10 +195,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 12px 10px 4px;
+  padding: 12px 16px 12px 8px;
   flex-shrink: 0;
-  background: #202425;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 23, 31, 0.82);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Individual tab card */
@@ -196,34 +206,38 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: 160px;
-  height: 50px;
-  border-radius: 8px;
+  height: 56px;
+  border-radius: 14px;
   position: relative;
   display: flex;
   align-items: center;
   cursor: pointer;
   overflow: hidden;
-  transition: all 0.12s;
-  padding: 0 26px 0 10px;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+  padding: 0 28px 0 12px;
 }
 .tabCardActive {
-  background: rgba(78, 126, 255, 0.18);
-  border: 1px solid rgba(97, 150, 255, 0.45);
-  box-shadow: none;
+  background:
+    radial-gradient(circle at top right, rgba(90, 132, 255, 0.18), transparent 42%),
+    linear-gradient(180deg, rgba(31, 40, 56, 0.95) 0%, rgba(20, 27, 38, 0.95) 100%);
+  border: 1px solid rgba(97, 150, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .tabCardInactive {
-  background: rgba(19, 21, 26, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 16, 22, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.12);
 }
 .tabCardInactive:hover {
   border-color: rgba(84, 154, 255, 0.45);
+  transform: translateY(-1px);
+  background: rgba(16, 21, 28, 0.94);
 }
 .tabAccentBar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #FF9800, rgba(255,152,0,0.3));
-  border-radius: 8px 8px 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ffb347, rgba(84, 154, 255, 0.7));
+  border-radius: 14px 14px 0 0;
 }
 .tabContent {
   flex: 1;
@@ -247,15 +261,20 @@
   gap: 5px;
 }
 .tabPnl {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
   font-weight: 800;
   letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
 }
 .tabLegCount {
   font-size: 10px;
   font-weight: 700;
   color: #9CA3AF;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .tabCloseBtn {
   position: absolute;
@@ -280,10 +299,10 @@
 .tabAddBtn {
   flex-shrink: 0;
   width: 34px;
-  height: 50px;
-  border-radius: 8px;
-  background: rgba(19, 21, 26, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(12, 16, 22, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   cursor: pointer;
   color: #4B5563;
   display: flex;
@@ -294,12 +313,13 @@
 .tabAddBtn:hover {
   color: #dce8ff;
   border-color: rgba(84, 154, 255, 0.45);
+  background: rgba(18, 24, 32, 0.94);
 }
 
 /* ── Legs scroll area ────────────────────────────────────────────────────── */
 .legsScroll {
   flex: 1;
-  padding: 10px 10px 12px 10px;
+  padding: 14px;
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -308,23 +328,29 @@
 .legsInner {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 .legsEmpty {
-  padding: 32px;
+  padding: 40px 32px;
   text-align: center;
-  color: #3D4150;
-  font-size: 12px;
+  color: #64748b;
+  font-size: 13px;
   line-height: 1.6;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(148, 163, 184, 0.16);
 }
 
 /* ── Group block ─────────────────────────────────────────────────────────── */
 .groupBlock {
   display: flex;
   flex-direction: column;
-  border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 8, 10, 0.7);
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(84, 154, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(18, 23, 30, 0.96) 0%, rgba(11, 15, 20, 0.96) 100%);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
 }
 
@@ -333,36 +359,41 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px;
-  background: #202425;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(29, 36, 47, 0.96) 0%, rgba(21, 27, 35, 0.96) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   flex-shrink: 0;
 }
 .groupAccentBar {
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
+  width: 4px;
+  height: 22px;
+  border-radius: 999px;
   flex-shrink: 0;
 }
 .groupSymbol {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .groupLegCount {
   font-size: 11px;
-  color: #555B6A;
-  font-weight: 500;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .groupNetLabel {
   font-size: 10px;
-  color: #555B6A;
+  color: #64748b;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 .groupNetMtm {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -371,15 +402,15 @@
 .groupColHeader {
   display: flex;
   align-items: center;
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.01);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .groupColHeaderCell {
   font-size: 10px;
   font-weight: 700;
-  color: #3D4455;
-  letter-spacing: 0.07em;
+  color: #64748b;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -388,6 +419,7 @@
 .groupBody {
   display: flex;
   flex-direction: column;
+  padding: 6px 8px 8px;
 }
 
 /* ── Legs table ──────────────────────────────────────────────────────────── */
@@ -400,31 +432,32 @@
 
 /* ── Leg row ─────────────────────────────────────────────────────────────── */
 .legRow {
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease, transform 0.14s ease, background 0.14s ease;
 }
 .legRow:not(:last-child) td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 .legRowUnchecked { opacity: 0.38; }
 .legRowSquaredOff {
   opacity: 0.48;
   filter: saturate(0.75);
 }
-.legRowBuy { background: rgba(38, 166, 154, 0.03); }
-.legRowSell { background: rgba(242, 54, 69, 0.03); }
+.legRowBuy { background: rgba(15, 66, 63, 0.20); }
+.legRowSell { background: rgba(79, 24, 32, 0.18); }
 .legCell {
-  padding: 5px 4px;
+  padding: 8px 5px;
   vertical-align: middle;
 }
-.legCellFirst { padding-left: 10px; }
-.legCellLast { padding-right: 10px; }
+.legCellFirst { padding-left: 12px; }
+.legCellLast { padding-right: 12px; }
 
 /* ── Cell widgets ────────────────────────────────────────────────────────── */
 .cellBox {
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -432,49 +465,49 @@
 .cellVal {
   font-size: 12px;
   font-weight: 600;
-  color: #C4C8D4;
+  color: #d5dbe6;
   white-space: nowrap;
 }
 .cellValMono {
   font-size: 12px;
   font-weight: 600;
-  color: #C4C8D4;
+  color: #d5dbe6;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .cellValDim {
   font-size: 12px;
   font-weight: 500;
-  color: #555B6A;
+  color: #7b8799;
   white-space: nowrap;
 }
 .cellValStrike {
   font-size: 12px;
   font-weight: 700;
-  color: #60a5fa;
+  color: #7cc4ff;
   font-variant-numeric: tabular-nums;
 }
 
 /* MTM cell */
 .mtmPos {
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(38, 166, 154, 0.10);
-  border: 1px solid rgba(38, 166, 154, 0.22);
+  height: 30px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(22, 163, 137, 0.18) 0%, rgba(15, 118, 110, 0.12) 100%);
+  border: 1px solid rgba(45, 212, 191, 0.26);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 .mtmNeg {
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(242, 54, 69, 0.10);
-  border: 1px solid rgba(242, 54, 69, 0.22);
+  height: 30px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(244, 63, 94, 0.18) 0%, rgba(190, 24, 93, 0.12) 100%);
+  border: 1px solid rgba(251, 113, 133, 0.24);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 .mtmValPos {
   font-size: 12px;
@@ -491,22 +524,22 @@
 
 /* Action B/S badge */
 .actionBuy {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(38, 166, 154, 0.12);
-  border: 1px solid rgba(38, 166, 154, 0.35);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(22, 163, 137, 0.16);
+  border: 1px solid rgba(45, 212, 191, 0.34);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
 }
 .actionSell {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(242, 54, 69, 0.12);
-  border: 1px solid rgba(242, 54, 69, 0.35);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(244, 63, 94, 0.16);
+  border: 1px solid rgba(251, 113, 133, 0.32);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -517,23 +550,23 @@
 
 /* Type CE/PE badge */
 .typeBadge {
-  width: 34px;
-  height: 26px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  width: 40px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.typeCe { font-size: 12px; font-weight: 700; color: #facc15; }
-.typePe { font-size: 12px; font-weight: 700; color: #c084fc; }
+.typeCe { font-size: 12px; font-weight: 800; color: #f8c146; }
+.typePe { font-size: 12px; font-weight: 800; color: #c4b5fd; }
 
 /* Checkbox */
 .checkbox {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -552,17 +585,17 @@
 /* Lots stepper */
 .lotsStepper {
   width: 84px;
-  height: 26px;
+  height: 30px;
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.10);
+  border-radius: 10px;
   overflow: hidden;
 }
 .lotsStepBtn {
   width: 20px;
-  height: 26px;
+  height: 30px;
   background: transparent;
   border: none;
   color: #555B6A;
@@ -590,19 +623,22 @@
 
 /* Delete button */
 .deleteBtn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #333842;
+  color: #475569;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  transition: color 0.12s;
+  transition: color 0.12s, background 0.12s;
 }
-.deleteBtn:hover { color: #f23645; }
+.deleteBtn:hover {
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.10);
+}
 
 /* ── Right panel ─────────────────────────────────────────────────────────── */
 .rightPanel {
@@ -610,23 +646,35 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(7, 8, 10, 0.75);
-  border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(20, 24, 31, 0.94) 0%, rgba(10, 13, 18, 0.96) 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(146, 163, 184, 0.12);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
   position: relative;
 }
 
 /* ── Split divider ───────────────────────────────────────────────────────── */
 .divider {
-  width: 6px;
+  width: 8px;
   cursor: col-resize;
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
   flex-shrink: 0;
-  border-radius: 3px;
+  border-radius: 999px;
+  position: relative;
   transition: background 0.15s;
 }
-.divider:hover { background: rgba(255, 255, 255, 0.22); }
+.divider::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 4px;
+  height: 84px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+.divider:hover::before { background: rgba(96, 165, 250, 0.55); }
 
 /* ── colHeader (legacy, keep for Greeks flex mode) ───────────────────────── */
 .colHeader {
@@ -642,4 +690,453 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.headerSpacer {
+  flex: 1;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.headerIconBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #7b8799;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.headerIconBtn:hover {
+  color: #dce8ff;
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(96, 165, 250, 0.10);
+  transform: translateY(-1px);
+}
+
+.headerIconBtnActive {
+  color: #ffd089;
+  border-color: rgba(255, 179, 71, 0.34);
+  background: rgba(255, 179, 71, 0.12);
+}
+
+.optionChainOverlay {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  bottom: 8px;
+  z-index: 55;
+  background:
+    radial-gradient(circle at top right, rgba(255, 179, 71, 0.10), transparent 24%),
+    linear-gradient(180deg, rgba(21, 24, 30, 0.98) 0%, rgba(10, 12, 16, 0.98) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.52);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rightPanelTabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(29, 36, 47, 0.90) 0%, rgba(18, 23, 31, 0.78) 100%);
+  flex-shrink: 0;
+}
+
+.rightPanelTab {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #7b8799;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.rightPanelTab:hover {
+  color: #d7e1f5;
+  border-color: rgba(148, 163, 184, 0.20);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rightPanelTabActive {
+  color: #dce8ff;
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(96, 165, 250, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SENSIBULL-STYLE POSITIONS TABLE
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Positions Tab Bar ────────────────────────────────────────────────────── */
+.posTabBar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 12px;
+  background: #1b1f28;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  min-height: 38px;
+}
+.posTab {
+  padding: 9px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  position: relative;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.posTab:hover { color: #d1d5db; }
+.posTabActive {
+  color: #4fc3f7;
+  font-weight: 700;
+}
+.posTabActive::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: #4fc3f7;
+  border-radius: 2px 2px 0 0;
+}
+.posTabRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.posTabBtn {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.posTabBtn:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
+
+/* ── Positions Table ──────────────────────────────────────────────────────── */
+.posTableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2e38 transparent;
+}
+.posTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Header */
+.posTable thead { position: sticky; top: 0; z-index: 3; }
+.posTable thead th {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-align: left;
+  white-space: nowrap;
+  background: #1e222d;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  user-select: none;
+  cursor: default;
+  letter-spacing: 0.01em;
+}
+.posTable thead th svg { vertical-align: middle; margin-left: 2px; }
+
+/* Body rows */
+.posTable tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.12s;
+}
+.posTable tbody tr:hover { background: rgba(255,255,255,0.025); }
+.posTable tbody td {
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #c9cdd5;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* ── B/S Badge ────────────────────────────────────────────────────────────── */
+.posBadgeBuy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #26a69a;
+  background: rgba(38,166,154,0.18);
+  cursor: pointer;
+  border: none;
+  flex-shrink: 0;
+}
+.posBadgeSell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ef5350;
+  background: rgba(239,83,80,0.18);
+  cursor: pointer;
+  border: none;
+  flex-shrink: 0;
+}
+
+/* ── P&L cell ─────────────────────────────────────────────────────────────── */
+.posPnlPos {
+  font-size: 13px;
+  font-weight: 700;
+  color: #26a69a;
+}
+.posPnlNeg {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ef5350;
+}
+.posPnlPct {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+/* ── Lots Exit stepper ────────────────────────────────────────────────────── */
+.posLotsExit {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 24px;
+}
+.posLotsExitVal {
+  width: 36px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+
+/* ── Row action buttons ───────────────────────────────────────────────────── */
+.posRowAction {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.posRowAction:hover {
+  color: #f87171;
+  background: rgba(248,113,113,0.1);
+  border-color: rgba(248,113,113,0.3);
+}
+
+/* ── Footer Bar ───────────────────────────────────────────────────────────── */
+.posFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #1b1f28;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.posFooterLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.posFooterVal {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Multiplier stepper */
+.posMultiStepper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 26px;
+}
+.posMultiBtn {
+  width: 22px; height: 26px;
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.posMultiBtn:hover { color: #d1d5db; background: rgba(255,255,255,0.06); }
+.posMultiInput {
+  width: 32px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.posAutoSave {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.posAutoSaveCb {
+  width: 14px; height: 14px;
+  accent-color: #4fc3f7;
+}
+
+/* Footer action buttons */
+.posFooterBtn {
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid;
+  transition: background 0.14s, border-color 0.14s;
+}
+.posFooterBtnGreen {
+  background: rgba(38,166,154,0.15);
+  border-color: rgba(38,166,154,0.45);
+  color: #26a69a;
+}
+.posFooterBtnGreen:hover { background: rgba(38,166,154,0.25); }
+.posFooterBtnBlue {
+  background: rgba(79,142,247,0.15);
+  border-color: rgba(79,142,247,0.45);
+  color: #7aa7ff;
+}
+.posFooterBtnBlue:hover { background: rgba(79,142,247,0.25); }
+
+.posFooterSpacer { flex: 1; }
+
+.posFooterBtnExit {
+  padding: 5px 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(79,142,247,0.18);
+  border: 1px solid rgba(79,142,247,0.45);
+  color: #7aa7ff;
+}
+.posFooterBtnExit:hover { background: rgba(79,142,247,0.28); }
+.posFooterBtnClear {
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #9ca3af;
+}
+.posFooterBtnClear:hover { color: #f87171; border-color: rgba(248,113,113,0.4); }
+
+/* Unchecked / squared-off row states */
+.posRowUnchecked { opacity: 0.35; }
+.posRowSquaredOff { opacity: 0.45; filter: saturate(0.7); }
+
+/* Strike value styling */
+.posStrike {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c9cdd5;
+}
+.posType {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 0;
+}
+
+/* Qty cell */
+.posQty {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c9cdd5;
+}
+
+/* Date cell */
+.posDate {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* Delta cell */
+.posDelta {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c9cdd5;
 }

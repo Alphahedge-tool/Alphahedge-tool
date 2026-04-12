@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { NubraInstrument } from './useNubraInstruments';
 import s from './VolSkew.module.css';
 
-interface Props { nubraInstruments: NubraInstrument[]; }
+interface Props { nubraInstruments: NubraInstrument[]; initialSymbol?: string; }
 
 interface RefDataItem { StrikePrice: number; OptionType: 'CE' | 'PE'; }
 
@@ -62,11 +62,14 @@ function buildSuggestions(q: string, instruments: NubraInstrument[]): Suggestion
 
 function resolveNubra(sym: string, instruments: NubraInstrument[]) {
   const upper = sym.toUpperCase();
+  // Exact match only — avoids "NIFTY 100" matching for "NIFTY"
   const found = instruments.find(i =>
     (i.option_type === 'CE' || i.option_type === 'PE') &&
-    (i.asset?.toUpperCase() === upper || i.nubra_name?.toUpperCase() === upper || i.stock_name?.toUpperCase().startsWith(upper))
+    (i.asset?.toUpperCase() === upper || i.nubra_name?.toUpperCase() === upper || i.stock_name?.toUpperCase() === upper)
+  ) ?? instruments.find(i =>
+    i.asset?.toUpperCase() === upper || i.nubra_name?.toUpperCase() === upper || i.stock_name?.toUpperCase() === upper
   );
-  const isIndex = ((found ?? instruments.find(i => i.asset?.toUpperCase() === upper))?.asset_type ?? '').includes('INDEX');
+  const isIndex = (found?.asset_type ?? '').includes('INDEX');
   return { nubraSym: found?.asset ?? sym, exchange: found?.exchange ?? 'NSE', nubraType: isIndex ? 'INDEX' as const : 'STOCK' as const };
 }
 
@@ -113,7 +116,7 @@ async function fetchSkewForExpiry(sym: string, exch: string, exp: string, header
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function VolSkew({ nubraInstruments }: Props) {
+export default function VolSkew({ nubraInstruments, initialSymbol }: Props) {
   const [query,     setQuery]     = useState('');
   const [showDrop,  setShowDrop]  = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -187,6 +190,14 @@ export default function VolSkew({ nubraInstruments }: Props) {
     setExpiries([]); setSelectedExpiries(new Set()); setExpiryData(new Map());
     fetchExpiries(r.nubraSym, r.exchange);
   }, [nubraInstruments, fetchExpiries]);
+
+  // ── Auto-load initialSymbol on mount ────────────────────────────────────────
+  const initialSymbolLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!initialSymbol || initialSymbolLoadedRef.current || nubraInstruments.length === 0) return;
+    initialSymbolLoadedRef.current = true;
+    handleSymbolSelect(initialSymbol, 'NSE');
+  }, [initialSymbol, nubraInstruments, handleSymbolSelect]);
 
   // ── Toggle expiry ────────────────────────────────────────────────────────────
   const toggleExpiry = useCallback((exp: string) => {

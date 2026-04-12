@@ -142,7 +142,10 @@ app.get('/api/public-candles', async (req, reply) => {
   const { instrumentKey, interval, from, limit } = req.query as Record<string, string>;
   if (!instrumentKey || !from) return reply.status(400).send({ error: 'missing params' });
 
-  const iv = interval ?? 'I1';
+  const ivRaw = interval ?? 'I1';
+  // Map UI interval codes → Upstox API interval strings
+  const IV_MAP: Record<string, string> = { I1: 'I1', I5: 'I5', I15: 'I15', I30: 'I30', I60: 'I60', I1D: '1D' };
+  const iv = IV_MAP[ivRaw] ?? ivRaw;
   const lim = limit ?? '375';
 
   try {
@@ -1259,73 +1262,76 @@ app.get('/api/nubra-price', async (req, reply) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/nubra-historical
-// Proxies historical OHLCV + Greeks data from Nubra Market Data API
+// Proxies historical OHLCV + Greeks data from Nubra charts/timeseries API
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/nubra-historical', async (req, reply) => {
-  const { session_token, exchange, type, values, fields, startDate, endDate, interval, intraDay } = req.body as {
-    session_token: string;
-    exchange: string;
-    type: string;
-    values: string[];
-    fields: string[];
-    startDate: string;
-    endDate: string;
-    interval: string;
-    intraDay: boolean;
-  };
+  const body = req.body as any;
 
-  if (!session_token || !exchange || !type || !values?.length || !fields?.length) {
-    return reply.status(400).send({ error: 'session_token, exchange, type, values, fields are required' });
+  // Accept session token from body OR x-session-token header (same as nubra-timeseries)
+  const reqHeaders = req.headers;
+  const sessionToken = body.session_token || (reqHeaders['x-session-token'] as string) || '';
+  const deviceId     = body.device_id     || (reqHeaders['x-device-id']     as string) || getDeviceId();
+  const rawCookieHdr = (reqHeaders['x-raw-cookie'] as string) || '';
+  const rawCookieBody = body.raw_cookie || '';
+
+  if (!sessionToken) {
+    return reply.status(400).send({ error: 'session_token is required' });
   }
 
-  const authToken = (req.body as any).auth_token ?? '';
-  const deviceId = (req.body as any).device_id ?? getDeviceId();
-  const cookieStr = authToken
-    ? `authToken=${authToken}; sessionToken=${session_token}`
-    : `sessionToken=${session_token}`;
+  const { exchange, type, values, fields, startDate, endDate, interval, intraDay, realTime } = body;
 
-  // REST API: POST https://api.nubra.io/charts/timeseries
-  // Body is { query: [ { exchange, type, values, fields, startDate, endDate, interval, intraDay, realTime } ] }
-  // Nubra expects RFC3339 datetime — append T00:00:00Z if only a date was passed
-  const toDateTime = (d: string) => /T/.test(d) ? d : `${d}T00:00:00Z`;
+  if (!exchange || !type || !values?.length || !fields?.length) {
+    return reply.status(400).send({ error: 'exchange, type, values, fields are required' });
+  }
+
+  // Build cookie — prefer raw cookie with deviceId baked in
+  const rawCookie = rawCookieHdr || rawCookieBody || '';
+  const baseRaw = rawCookie || `authToken=${body.auth_token || sessionToken}; sessionToken=${sessionToken}`;
+  const cookieStr = baseRaw.includes('deviceId=') ? baseRaw : `${baseRaw}; deviceId=${deviceId}`;
+
+  // Nubra expects RFC3339 — pass dates as-is (already ISO from client)
   const queryItem = {
     exchange,
     type,
     values,
     fields,
-    startDate: toDateTime(startDate),
-    endDate: toDateTime(endDate),
-    interval,
+    startDate,
+    endDate,
+    interval: interval ?? '1m',
     intraDay: intraDay ?? false,
-    realTime: true,
+    realTime: realTime ?? false,
   };
-  const reqBody = { query: [queryItem] };
-  console.log(`[nubra historical] request:`, JSON.stringify(reqBody));
+
+  const reqBody = JSON.stringify({ query: [queryItem] });
+  console.log(`[nubra-historical] →`, reqBody.slice(0, 300));
 
   try {
     const upstream = await fetch(`${NUBRA_API}/charts/timeseries`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
         'Accept': 'application/json, text/plain, */*',
-        'Authorization': `Bearer ${session_token}`,
+        'Authorization': `Bearer ${sessionToken}`,
         'Cookie': cookieStr,
+        'x-device-id': deviceId,
         'Origin': 'https://nubra.io',
         'Referer': 'https://nubra.io/',
-        'x-device-id': deviceId,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
       },
-      body: JSON.stringify(reqBody),
-      dispatcher: nubraAuthAgent,
+      body: reqBody,
+      dispatcher: nubraAgent,
     } as any);
 
     const data = await upstream.text();
-    console.log(`[nubra historical] ${upstream.status} body(${data.length})=${data.slice(0, 500)}`);
+    console.log(`[nubra-historical] ← ${upstream.status} (${data.length}b) ${data.slice(0, 200)}`);
     reply.status(upstream.status);
     reply.header('Content-Type', upstream.headers.get('content-type') ?? 'application/json');
     return reply.send(data);
   } catch (e: any) {
-    console.error('[nubra historical error]', e);
+    console.error('[nubra-historical] error', e);
     return reply.status(502).send({ error: e.message });
   }
 });
@@ -1951,6 +1957,36 @@ app.get('/api/nubra-orderbook', async (req, reply) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/fii-dii — NSE FII/DII cash market activity (last 30 trading days)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/nubra-market-schedule → https://api.nubra.io/calendar/market_schedule
+app.get('/api/nubra-market-schedule', async (req, reply) => {
+  const headers = req.headers;
+  const sessionToken = (headers['x-session-token'] as string) ?? '';
+  const deviceId     = (headers['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  try {
+    const upstream = await fetch(`${NUBRA_API}/calendar/market_schedule`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Authorization': `Bearer ${sessionToken}`,
+        'Origin': 'https://nubra.io',
+        'Referer': 'https://nubra.io/',
+        'Cookie': rawCookie,
+        'x-device-id': deviceId,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+      },
+      dispatcher: nubraAgent,
+    } as any);
+    const data = await upstream.json();
+    reply.header('Cache-Control', 'public, max-age=60');
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
 
 app.get('/api/fii-dii', async (_req, reply) => {
   try {

@@ -23,6 +23,7 @@ interface Props {
   instruments: Instrument[];
   nubraInstruments: NubraInstrument[];
   workerRef?: React.RefObject<Worker | null>;
+  initialSymbol?: string;
 }
 
 // ── Helpers (mirrors StrategyChart) ──────────────────────────────────────────
@@ -50,17 +51,28 @@ function lastTradingDay(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
 }
 
-// Returns best endDate: current time if market open, else last trading day 15:30 IST (10:00 UTC)
-function bestEndDateUtc(): string {
+function getMarketSchedule() {
   const istMs  = Date.now() + 5.5 * 3600 * 1000;
   const istNow = new Date(istMs);
   const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
   const OPEN = 9 * 60 + 15, CLOSE = 15 * 60 + 30;
   const isWeekday = istNow.getUTCDay() >= 1 && istNow.getUTCDay() <= 5;
-  if (isWeekday && istMin >= OPEN && istMin <= CLOSE) {
-    return new Date().toISOString(); // live during market hours
-  }
-  return `${lastTradingDay()}T10:00:00.000Z`; // last close
+  return {
+    isMarketOpen: isWeekday && istMin >= OPEN && istMin <= CLOSE,
+    tradingDate: lastTradingDay(),
+    nowUtcIso: new Date().toISOString(),
+  };
+}
+
+function buildTimeseriesWindow(startDateStr: string) {
+  const { isMarketOpen, tradingDate, nowUtcIso } = getMarketSchedule();
+  const isIntraday = startDateStr === tradingDate && isMarketOpen;
+  return {
+    startDate: `${startDateStr}T03:45:00.000Z`,
+    endDate: isIntraday ? nowUtcIso : `${startDateStr}T10:00:00.000Z`,
+    intraDay: isIntraday,
+    realTime: false,
+  };
 }
 
 function expiryToMs(exp: string | number | null | undefined): number {
@@ -166,11 +178,7 @@ async function fetchAtmIvChart(
 
   const chainValue = toNubraChainValue(underlying, expiryMs);
   const spotType   = nubraType === 'STOCK' ? 'STOCK' : 'INDEX';
-  const startDate  = `${startDateStr}T03:45:00.000Z`; // 09:15 IST
-  const endDate    = bestEndDateUtc();
-
-  const isIntraday = startDateStr === lastTradingDay();
-  const commonDates = { interval: '1m', intraDay: isIntraday, realTime: false, startDate, endDate };
+  const commonDates = { interval: '1m', ...buildTimeseriesWindow(startDateStr) };
 
   const res = await fetch('/api/nubra-timeseries', {
     method: 'POST',
@@ -221,11 +229,7 @@ async function fetchPcrChart(
 
   const chainValue = toNubraChainValue(underlying, expiryMs);
   const spotType   = nubraType === 'STOCK' ? 'STOCK' : 'INDEX';
-  const startDate  = `${startDateStr}T03:45:00.000Z`;
-  const endDate    = bestEndDateUtc();
-
-  const isIntraday = startDateStr === lastTradingDay();
-  const commonDates = { interval: '1m', intraDay: isIntraday, realTime: false, startDate, endDate };
+  const commonDates = { interval: '1m', ...buildTimeseriesWindow(startDateStr) };
 
   const res = await fetch('/api/nubra-timeseries', {
     method: 'POST',
@@ -331,21 +335,22 @@ function resolveNubra(
   nubraInstruments: NubraInstrument[],
 ): { nubraSym: string; exchange: string; nubraType: 'INDEX' | 'STOCK' } {
   const upper = sym.toUpperCase();
-  const found = nubraInstruments.find(i =>
+  // Exact match first (asset/nubra_name/stock_name), options only
+  const exact = nubraInstruments.find(i =>
     (i.option_type === 'CE' || i.option_type === 'PE') &&
     (i.asset?.toUpperCase() === upper ||
      i.nubra_name?.toUpperCase() === upper ||
-     i.stock_name?.toUpperCase().startsWith(upper))
+     i.stock_name?.toUpperCase() === upper)
   );
-  if (found?.asset) {
-    const isIndex = (found.asset_type ?? '').includes('INDEX');
-    return { nubraSym: found.asset, exchange: found.exchange ?? 'NSE', nubraType: isIndex ? 'INDEX' : 'STOCK' };
+  if (exact?.asset) {
+    const isIndex = (exact.asset_type ?? '').includes('INDEX');
+    return { nubraSym: exact.asset, exchange: exact.exchange ?? 'NSE', nubraType: isIndex ? 'INDEX' : 'STOCK' };
   }
-  // fallback: use sym as-is
+  // Fallback: exact match across all rows (not just options)
   const fallback = nubraInstruments.find(i =>
     i.asset?.toUpperCase() === upper ||
     i.nubra_name?.toUpperCase() === upper ||
-    i.stock_name?.toUpperCase().startsWith(upper)
+    i.stock_name?.toUpperCase() === upper
   );
   const isIndex = (fallback?.asset_type ?? '').includes('INDEX');
   return {
@@ -526,7 +531,7 @@ const nubraWsSingleton = (() => {
 
 // ── IvChart ───────────────────────────────────────────────────────────────────
 
-export default function IvChart({ instruments, nubraInstruments, workerRef }: Props) {
+export default function IvChart({ instruments, nubraInstruments, workerRef, initialSymbol }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const ivSeriesRef   = useRef<ISeriesApi<'Line'> | null>(null);
@@ -1132,6 +1137,27 @@ export default function IvChart({ instruments, nubraInstruments, workerRef }: Pr
     // For MCX/commodity with no nubra expiries, still load spot chart with empty exp
     load(nubraSym, nubraExch, firstExp || '__spot_only__', upstoxSym, resolvedType);
   }, [nubraInstruments, load, disconnectNubraWs, disconnectSpot]);
+
+  // ── Auto-load initialSymbol on mount ─────────────────────────────────────
+  const initialSymbolLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!initialSymbol || initialSymbolLoadedRef.current || instruments.length === 0 || nubraInstruments.length === 0) return;
+    // Resolve via nubraInstruments first to get the exact asset name (avoids matching NIFTY 100 for "NIFTY")
+    const { nubraSym } = resolveNubra(initialSymbol, nubraInstruments);
+    const norm = nubraSym.toUpperCase();
+    // Find the exact upstox INDEX instrument matching the resolved nubra symbol
+    const ins = instruments.find(i =>
+      (i.instrument_type === 'INDEX' || i.segment?.includes('INDEX')) &&
+      (i.trading_symbol?.toUpperCase() === norm ||
+       i.underlying_symbol?.toUpperCase() === norm ||
+       i.name?.toUpperCase() === norm)
+    ) ?? instruments.find(i =>
+      i.trading_symbol?.toUpperCase() === norm || i.underlying_symbol?.toUpperCase() === norm
+    );
+    if (!ins) return;
+    initialSymbolLoadedRef.current = true;
+    handleSymbolSelect(ins);
+  }, [initialSymbol, instruments, nubraInstruments, handleSymbolSelect]);
 
   const handleExpiryChange = useCallback((exp: string) => {
     setExpiry(exp);

@@ -703,6 +703,35 @@ function combinePairSeries(
     .filter((point): point is { ts: number; v: number } => point != null);
 }
 
+// ── Realized Volatility (5-min, 12-bar rolling, annualized) ──────────────────
+// Formula: RV_i = sqrt( sum(r²) over last 12 bars × 252 × 75 ) × 100
+// where r_i = ln(close_i / close_{i-1}), 252 trading days, 75 five-min bars/day
+const RV_WINDOW = 12;       // 1-hour rolling (12 × 5min)
+const RV_ANNUAL = 252 * 75; // annualisation factor for 5-min bars
+
+function computeRV(spotPoints: Array<{ ts: number; v: number }>): LineData[] {
+  if (spotPoints.length < 2) return [];
+  const sorted = [...spotPoints].sort((a, b) => a.ts - b.ts);
+  const result: LineData[] = [];
+  const logReturns: number[] = [];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1].v;
+    const curr = sorted[i].v;
+    if (prev <= 0 || curr <= 0) { logReturns.push(0); continue; }
+    logReturns.push(Math.log(curr / prev));
+  }
+
+  for (let i = RV_WINDOW - 1; i < logReturns.length; i++) {
+    let sumSq = 0;
+    for (let j = i - RV_WINDOW + 1; j <= i; j++) sumSq += logReturns[j] * logReturns[j];
+    const rv = Math.sqrt(sumSq * RV_ANNUAL) * 100; // express as %
+    const tsSec = Math.floor(sorted[i + 1].ts / 1e9); // align with close bar i+1
+    if (tsSec > 0 && isFinite(rv)) result.push({ time: tsSec as Time, value: rv });
+  }
+  return result;
+}
+
 function appendLiveMetricPointAny(series: LineData[], value: number, maxPoints = 800): LineData[] {
   if (!isFinite(value)) return series;
   const t = Math.floor(Date.now() / 60000) * 60;
@@ -1036,15 +1065,15 @@ function SummaryMetricTrend({
 
     const chart = createChart(host, {
       width: Math.max(host.clientWidth, 120),
-      height: 88,
+      height: 96,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#8ea2c3',
+        textColor: '#90a7cb',
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: 'rgba(255,255,255,0.04)' },
-        horzLines: { color: 'rgba(255,255,255,0.05)' },
+        vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
+        horzLines: { color: 'rgba(148, 163, 184, 0.1)' },
       },
       rightPriceScale: {
         visible: false,
@@ -1059,19 +1088,23 @@ function SummaryMetricTrend({
         borderVisible: false,
         secondsVisible: false,
         timeVisible: true,
+        rightOffset: 1,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        lockVisibleTimeRangeOnResize: true,
       },
       crosshair: {
         vertLine: {
           visible: true,
           labelVisible: false,
-          color: 'rgba(201, 214, 255, 0.32)',
+          color: 'rgba(214, 226, 255, 0.42)',
           width: 1,
           style: 2,
         },
         horzLine: {
           visible: true,
           labelVisible: false,
-          color: 'rgba(201, 214, 255, 0.18)',
+          color: 'rgba(214, 226, 255, 0.22)',
           width: 1,
           style: 2,
         },
@@ -1082,22 +1115,30 @@ function SummaryMetricTrend({
 
     const callSeries = chart.addSeries(LineSeries, {
       color: '#1fe0af',
-      lineWidth: 3,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
-      crosshairMarkerVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      crosshairMarkerBorderWidth: 2,
+      crosshairMarkerBorderColor: '#10251e',
+      crosshairMarkerBackgroundColor: '#1fe0af',
     });
 
     const putSeries = chart.addSeries(LineSeries, {
       color: '#ff6f91',
-      lineWidth: 3,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
-      crosshairMarkerVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      crosshairMarkerBorderWidth: 2,
+      crosshairMarkerBorderColor: '#2b1420',
+      crosshairMarkerBackgroundColor: '#ff6f91',
     });
 
-    callSeries.priceScale().applyOptions({ scaleMargins: { top: 0.18, bottom: 0.14 } });
-    putSeries.priceScale().applyOptions({ scaleMargins: { top: 0.18, bottom: 0.14 } });
+    callSeries.priceScale().applyOptions({ scaleMargins: { top: 0.16, bottom: 0.12 } });
+    putSeries.priceScale().applyOptions({ scaleMargins: { top: 0.16, bottom: 0.12 } });
 
     chartRef.current = chart;
     callSeriesRef.current = callSeries;
@@ -1136,15 +1177,28 @@ function SummaryMetricTrend({
     };
   }, []);
 
-  const chartData = useMemo(() => {
-    const normalized = normalizeSummaryTrendHistory(history);
-    return {
-      call: normalized.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.call })),
-      put: normalized.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.put })),
-    };
-  }, [history]);
+  const normalizedHistory = useMemo(() => normalizeSummaryTrendHistory(history), [history]);
 
-  const displayTime = hoveredTime ?? ((chartData.call[chartData.call.length - 1]?.time as number | undefined) ?? null);
+  const chartData = useMemo(() => {
+    return {
+      call: normalizedHistory.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.call })),
+      put: normalizedHistory.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.put })),
+    };
+  }, [normalizedHistory]);
+
+  const displayPoint = useMemo(() => {
+    if (normalizedHistory.length === 0) return null;
+    if (hoveredTime != null) {
+      const hoveredMs = hoveredTime * 1000;
+      for (let idx = normalizedHistory.length - 1; idx >= 0; idx -= 1) {
+        const point = normalizedHistory[idx];
+        if (point.ts <= hoveredMs) return point;
+      }
+    }
+    return normalizedHistory[normalizedHistory.length - 1];
+  }, [normalizedHistory, hoveredTime]);
+
+  const displayTime = displayPoint ? Math.floor(displayPoint.ts / 1000) : null;
 
   useEffect(() => {
     callSeriesRef.current?.setData(chartData.call);
@@ -1158,9 +1212,13 @@ function SummaryMetricTrend({
         <div ref={hostRef} className={s.summaryTrendChart} aria-hidden="true" />
       </div>
       <div className={s.summaryTrendInlineMeta}>
-        <span className={s.summaryTrendCaption}>{history.length > 2 ? 'Day trend' : 'Live trend'}</span>
+        <span className={s.summaryTrendCaption}>{history.length > 2 ? 'Session trend' : 'Live trend'}</span>
         <span className={s.summaryTrendTime}>{formatSummaryTrendTimestamp(displayTime)}</span>
-        <span className={s.summaryTrendLive}>LIVE</span>
+        <span className={s.summaryTrendLive}>{hoveredTime != null ? 'INSPECT' : 'LIVE'}</span>
+      </div>
+      <div className={s.summaryTrendValues}>
+        <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {formatValue(displayPoint?.call ?? callValue)}</span>
+        <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {formatValue(displayPoint?.put ?? putValue)}</span>
       </div>
     </div>
   );
@@ -1512,13 +1570,15 @@ export default function MasterOptionChain({ visible }: Props) {
     iv: LineData[];
     oi: LineData[];
     pcr: LineData[];
-  }>({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [] });
+    rv: LineData[];
+  }>({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [], rv: [] });
   const [straddleChartLoading, setStraddleChartLoading] = useState(false);
   const [straddleChartError, setStraddleChartError] = useState('');
   const [straddleSeriesVisibility, setStraddleSeriesVisibility] = useState({
     straddle: true,
     spot: true,
     iv: true,
+    rv: true,
     pcr: true,
     oi: true,
     call: false,
@@ -1536,7 +1596,7 @@ export default function MasterOptionChain({ visible }: Props) {
   const [butterflyChartError, setButterflyChartError] = useState('');
   const [summaryOiTrendHistory, setSummaryOiTrendHistory] = useState<SummaryTrendPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const straddleHistoryCacheRef = useRef(new Map<string, { straddle: LineData[]; call: LineData[]; put: LineData[]; spot: LineData[]; iv: LineData[]; oi: LineData[]; pcr: LineData[] }>());
+  const straddleHistoryCacheRef = useRef(new Map<string, { straddle: LineData[]; call: LineData[]; put: LineData[]; spot: LineData[]; iv: LineData[]; oi: LineData[]; pcr: LineData[]; rv: LineData[] }>());
   const butterflyHistoryCacheRef = useRef(new Map<string, { net: LineData[]; spot: LineData[] }>());
   const ratioHistoryCacheRef = useRef(new Map<string, { pd: LineData[]; spot: LineData[] }>());
   const summaryOiHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
@@ -1547,6 +1607,7 @@ export default function MasterOptionChain({ visible }: Props) {
   const straddlePutSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const straddleSpotSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const straddleIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const straddleRvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const straddleOiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const straddlePcrSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ratioChartHostRef = useRef<HTMLDivElement | null>(null);
@@ -1829,16 +1890,17 @@ export default function MasterOptionChain({ visible }: Props) {
         const iv = toSpotLine(combinePairSeries(ceIvMid, peIvMid, (ce, pe) => (ce + pe) / 2));
         const oi = toMetricLine(combinePairSeries(ceCumOi, peCumOi, (ce, pe) => ce + pe));
         const pcr = toSpotLine(combinePairSeries(ceCumOi, peCumOi, (ce, pe) => (ce > 0 ? pe / ce : 0)));
+        const rv = computeRV(spotRaw);
 
         if (straddle.length === 0 && call.length === 0 && put.length === 0 && spot.length === 0 && iv.length === 0 && oi.length === 0 && pcr.length === 0) {
           setStraddleChartError('No historical data returned for selected straddle');
         }
-        const nextData = { straddle, call, put, spot, iv, oi, pcr };
+        const nextData = { straddle, call, put, spot, iv, oi, pcr, rv };
         straddleHistoryCacheRef.current.set(cacheKey, nextData);
         setStraddleChartData(nextData);
       } catch (err: any) {
         if (!cancelled) {
-          setStraddleChartData({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [] });
+          setStraddleChartData({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [], rv: [] });
           setStraddleChartError(err?.message ?? 'Failed to load straddle history');
         }
       } finally {
@@ -1869,6 +1931,7 @@ export default function MasterOptionChain({ visible }: Props) {
       iv: appendLivePointAny(prev.iv, straddleLivePoint.iv),
       oi: appendLiveMetricPointAny(prev.oi, straddleLivePoint.oi),
       pcr: appendLivePointAny(prev.pcr, straddleLivePoint.pcr),
+      rv: computeRV(prev.spot.map(p => ({ ts: (p.time as number) * 1e9, v: p.value }))),
     }));
   }, [straddleChartOpen, straddleLivePoint, viewMode]);
 
@@ -1958,6 +2021,19 @@ export default function MasterOptionChain({ visible }: Props) {
         minMove: 0.01,
       } as any,
     }, 1);
+    const rvSeries = chart.addSeries(LineSeries, {
+      color: '#f97316',
+      lineWidth: 2,
+      lineStyle: 1, // dashed
+      priceLineVisible: false,
+      title: 'RV (1h)',
+      priceScaleId: 'left',
+      priceFormat: {
+        type: 'custom',
+        formatter: (value: number) => value.toFixed(2),
+        minMove: 0.01,
+      } as any,
+    }, 1);
     const pcrSeries = chart.addSeries(LineSeries, {
       color: '#ff8a5b',
       lineWidth: 2,
@@ -1996,6 +2072,7 @@ export default function MasterOptionChain({ visible }: Props) {
     straddlePutSeriesRef.current = putSeries;
     straddleSpotSeriesRef.current = spotSeries;
     straddleIvSeriesRef.current = ivSeries;
+    straddleRvSeriesRef.current = rvSeries;
     straddlePcrSeriesRef.current = pcrSeries;
     straddleOiSeriesRef.current = oiSeries;
     return () => {
@@ -2004,6 +2081,7 @@ export default function MasterOptionChain({ visible }: Props) {
       straddlePutSeriesRef.current = null;
       straddleSpotSeriesRef.current = null;
       straddleIvSeriesRef.current = null;
+      straddleRvSeriesRef.current = null;
       straddlePcrSeriesRef.current = null;
       straddleOiSeriesRef.current = null;
       straddleChartRef.current = null;
@@ -2018,6 +2096,7 @@ export default function MasterOptionChain({ visible }: Props) {
     straddlePutSeriesRef.current?.setData(straddleChartData.put);
     straddleSpotSeriesRef.current?.setData(straddleChartData.spot);
     straddleIvSeriesRef.current?.setData(straddleChartData.iv);
+    straddleRvSeriesRef.current?.setData(straddleChartData.rv);
     straddlePcrSeriesRef.current?.setData(straddleChartData.pcr);
     straddleOiSeriesRef.current?.setData(straddleChartData.oi);
   }, [straddleChartData, straddleChartOpen]);
@@ -2029,6 +2108,7 @@ export default function MasterOptionChain({ visible }: Props) {
     straddlePutSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.put });
     straddleSpotSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.spot });
     straddleIvSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.iv });
+    straddleRvSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.rv });
     straddlePcrSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.pcr });
     straddleOiSeriesRef.current?.applyOptions({ visible: straddleSeriesVisibility.oi });
   }, [straddleChartOpen, straddleSeriesVisibility]);
@@ -2693,11 +2773,12 @@ export default function MasterOptionChain({ visible }: Props) {
 
   const openStraddleChart = useCallback((target: StraddleChartTarget) => {
     setStraddleChartTarget(target);
-    setStraddleChartData({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [] });
+    setStraddleChartData({ straddle: [], call: [], put: [], spot: [], iv: [], oi: [], pcr: [], rv: [] });
     setStraddleSeriesVisibility({
       straddle: true,
       spot: true,
       iv: true,
+      rv: true,
       pcr: true,
       oi: true,
       call: false,
@@ -3295,6 +3376,7 @@ export default function MasterOptionChain({ visible }: Props) {
               <span className={`${s.legendDot} ${s.legendDotPut}`} /> Put
               <span className={`${s.legendDot} ${s.legendDotSpot}`} /> Spot
               <span className={`${s.legendDot} ${s.legendDotIv}`} /> Avg IV
+              <span className={`${s.legendDot} ${s.legendDotRv}`} /> RV (1h)
               <span className={`${s.legendDot} ${s.legendDotPcr}`} /> PCR
               <span className={`${s.legendDot} ${s.legendDotOi}`} /> OI
             </div>
@@ -3306,6 +3388,7 @@ export default function MasterOptionChain({ visible }: Props) {
                 ['put', 'Put'],
                 ['spot', 'Spot'],
                 ['iv', 'IV'],
+                ['rv', 'RV (1h)'],
                 ['pcr', 'PCR'],
                 ['oi', 'OI'],
               ].map(([key, label]) => (

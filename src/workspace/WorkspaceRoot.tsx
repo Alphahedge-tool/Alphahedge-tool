@@ -14,10 +14,14 @@ import s from './WorkspaceRoot.module.css';
 
 // ── Interval definitions (mirrored from CandleChart) ─────────────────────────
 const INTERVALS = [
-  { label: '1m',  value: 'I1'  },
-  { label: '5m',  value: 'I5'  },
-  { label: '15m', value: 'I15' },
-  { label: '30m', value: 'I30' },
+  { label: '1m',  value: 'I1'   },
+  { label: '5m',  value: 'I5'   },
+  { label: '15m', value: 'I15'  },
+  { label: '30m', value: 'I30'  },
+  { label: '1h',  value: 'I60'  },
+  { label: '1D',  value: 'I1D'  },
+  { label: '1W',  value: 'I1W'  },
+  { label: '1M',  value: 'I1Mo' },
 ];
 
 // ── View options ─────────────────────────────────────────────────────────────

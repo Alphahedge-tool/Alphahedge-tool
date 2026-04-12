@@ -131,6 +131,31 @@ function IconLayers() {
     </svg>
   );
 }
+
+function IconMasterChain() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6.5h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17.5h16" />
+      <path d="M8 4v16" />
+      <path d="M16 4v16" opacity="0.75" />
+      <rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconCumulativeOi() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5h16" />
+      <path d="M7 19.5V11" />
+      <path d="M12 19.5V7" />
+      <path d="M17 19.5V4.5" />
+      <path d="M5 9.5c1.5-1.5 3.2-2.3 5-2.3 1.9 0 3.2.9 4.3 2 1 .9 1.8 1.6 3.7 1.6" opacity="0.85" />
+    </svg>
+  );
+}
 // OI Profile — pulse/waveform (open interest activity)
 function IconActivity() {
   return (
@@ -177,6 +202,84 @@ function IconTrendingUp() {
       <path fillRule="evenodd" clipRule="evenodd" d="M2.36426 7.95608C2.36426 7.76678 2.51777 7.61328 2.70712 7.61328H3.05582C3.24517 7.61328 3.39867 7.76678 3.39867 7.95608C3.39867 8.14548 3.24517 8.29898 3.05582 8.29898H2.70712C2.51777 8.29898 2.36426 8.14548 2.36426 7.95608ZM3.63963 7.95608C3.63963 7.76678 3.79313 7.61328 3.98249 7.61328H4.67988C4.86923 7.61328 5.02274 7.76678 5.02274 7.95608C5.02274 8.14548 4.86923 8.29898 4.67988 8.29898H3.98249C3.79313 8.29898 3.63963 8.14548 3.63963 7.95608ZM5.26369 7.95608C5.26369 7.76678 5.4172 7.61328 5.60655 7.61328H6.30394C6.49328 7.61328 6.64678 7.76678 6.64678 7.95608C6.64678 8.14548 6.49328 8.29898 6.30394 8.29898H5.60655C5.4172 8.29898 5.26369 8.14548 5.26369 7.95608ZM6.88778 7.95608C6.88778 7.76678 7.04128 7.61328 7.23058 7.61328H7.92798C8.11738 7.61328 8.27088 7.76678 8.27088 7.95608C8.27088 8.14548 8.11738 8.29898 7.92798 8.29898H7.23058C7.04128 8.29898 6.88778 8.14548 6.88778 7.95608ZM8.51178 7.95608C8.51178 7.76678 8.66528 7.61328 8.85468 7.61328H9.55208C9.74138 7.61328 9.89488 7.76678 9.89488 7.95608C9.89488 8.14548 9.74138 8.29898 9.55208 8.29898H8.85468C8.66528 8.29898 8.51178 8.14548 8.51178 7.95608ZM10.1359 7.95608C10.1359 7.76678 10.2894 7.61328 10.4788 7.61328H11.1761C11.3655 7.61328 11.519 7.76678 11.519 7.95608C11.519 8.14548 11.3655 8.29898 11.1761 8.29898H10.4788C10.2894 8.29898 10.1359 8.14548 10.1359 7.95608ZM11.76 7.95608C11.76 7.76678 11.9135 7.61328 12.1028 7.61328H12.8002C12.9896 7.61328 13.1431 7.76678 13.1431 7.95608C13.1431 8.14548 12.9896 8.29898 12.8002 8.29898H12.1028C11.9135 8.29898 11.76 8.14548 11.76 7.95608ZM13.384 7.95608C13.384 7.76678 13.5375 7.61328 13.7269 7.61328H14.0756C14.2649 7.61328 14.4184 7.76678 14.4184 7.95608C14.4184 8.14548 14.2649 8.29898 14.0756 8.29898H13.7269C13.5375 8.29898 13.384 8.14548 13.384 7.95608Z" fill="currentColor" />
       <path fillRule="evenodd" clipRule="evenodd" d="M10.2382 3.31291C10.3093 3.1246 10.4896 3 10.6909 3H14.484C14.7514 3 14.9681 3.21671 14.9681 3.48403C14.9681 3.75136 14.7514 3.96807 14.484 3.96807H11.0255L7.76439 12.5963C7.69329 12.7847 7.51299 12.9093 7.31159 12.9093H2.48404C2.21671 12.9093 2 12.6925 2 12.4252C2 12.1579 2.21671 11.9412 2.48404 11.9412H6.97709L10.2382 3.31291Z" fill="currentColor" />
     </svg>
+  );
+}
+
+// ── Market ticker strip ───────────────────────────────────────────────────────
+const TICKER_SYMBOLS = [
+  { label: 'NIFTY',     symbol: 'NIFTY',     exchange: 'NSE' },
+  { label: 'BANKNIFTY', symbol: 'BANKNIFTY', exchange: 'NSE' },
+  { label: 'INDIA VIX', symbol: 'INDIA_VIX', exchange: 'NSE' },
+  { label: 'SENSEX',    symbol: 'SENSEX',    exchange: 'BSE' },
+] as const;
+
+interface TickerPrice { price: number; change: number; prev_close: number }
+
+function MarketTicker() {
+  const [prices, setPrices] = useState<Record<string, TickerPrice>>({});
+
+  const fetchAll = useCallback(async () => {
+    const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+    if (!sessionToken) return;
+    await Promise.allSettled(
+      TICKER_SYMBOLS.map(async ({ symbol, exchange }) => {
+        try {
+          const res = await fetch(
+            `/api/nubra-price?symbol=${encodeURIComponent(symbol)}&exchange=${exchange}&session_token=${encodeURIComponent(sessionToken)}`,
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.price != null) {
+            const price = data.price / 100;
+            const prev_close = (data.prev_close ?? data.price) / 100;
+            setPrices(prev => ({ ...prev, [symbol]: { price, change: price - prev_close, prev_close } }));
+          }
+        } catch {}
+      }),
+    );
+  }, []);
+
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, marginRight: 4 }}>
+      {TICKER_SYMBOLS.map(({ label, symbol }, idx) => {
+        const d = prices[symbol];
+        const absChg = d ? d.change : null;
+        const prevClose = d ? d.prev_close : null;
+        const chgPct = absChg != null && prevClose ? (absChg / prevClose) * 100 : null;
+        const up = absChg == null ? null : absChg >= 0;
+        const chgColor = up == null ? '#6b7280' : up ? '#26a69a' : '#ef5350';
+        const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return (
+          <React.Fragment key={symbol}>
+            {idx > 0 && (
+              <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 12px', flexShrink: 0 }} />
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>
+                {label}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                  {d ? fmtPrice(d.price) : '—'}
+                </span>
+                {absChg != null && up != null && chgPct != null && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: chgColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                    {up
+                      ? <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,1 9,9 1,9"/></svg>
+                      : <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,9 9,1 1,1"/></svg>
+                    }
+                    {up ? '+' : '-'}{fmtChg(absChg)} ({up ? '+' : '-'}{Math.abs(chgPct).toFixed(2)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
   );
 }
 
@@ -581,7 +684,7 @@ function SquareOffCell({ leg, updateLeg, removeLeg }: { leg: Leg; updateLeg: (id
 const t2ColHelper = createColumnHelper<Leg>();
 
 
-function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[]; updateLeg: (id: number, patch: Partial<Leg>) => void; removeLeg: (id: number) => void; showGreeks: boolean }) {
+function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onTabChange, notes, onNotesChange }: { legs: Leg[]; updateLeg: (id: number, patch: Partial<Leg>) => void; removeLeg: (id: number) => void; showGreeks: boolean; activeTab: 'positions' | 'greeks' | 'notes'; onTabChange: (t: 'positions' | 'greeks' | 'notes') => void; notes: string; onNotesChange: (v: string) => void }) {
   const allDefinedColumns = useMemo(() => [
     t2ColHelper.display({
       id: 'symbol', size: 80,
@@ -798,6 +901,8 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
 
   const totalMtm = legs.filter(l => l.checked).reduce((sum, leg) => sum + getLegMtm(leg), 0);
   const totalColor = totalMtm >= 0 ? '#26a69a' : '#f23645';
+  const totalDelta = legs.filter(l => l.checked).reduce((sum, leg) => sum + (leg.action === 'S' ? -1 : 1) * leg.currGreeks.delta * (leg.lots || 1), 0);
+  const activeLotSize = legs.length > 0 ? (legs[0].lotSize || 65) : 65;
 
   const allCols    = table.getAllColumns();
   const detailCols = allCols.filter(c => ['buy_action','lots','price','ltp'].includes(c.id));
@@ -805,16 +910,38 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
   const greekCols  = allCols.filter(c => c.id.startsWith('greek_'));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, padding: '0 6px 6px' }}>
-      {/* Total MTM bar */}
-      {legs.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '5px 14px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-          <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, letterSpacing: '0.06em', fontFamily: 'var(--font-family-sans)' }}>Total MTM</span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: totalColor, fontFamily: 'var(--font-family-sans)' }}>{fmtMtm(totalMtm)}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* ── Sensibull-style Tab Bar ── */}
+      <div className={mtm.posTabBar}>
+        <button className={`${mtm.posTab} ${activeTab === 'positions' ? mtm.posTabActive : ''}`} onClick={() => onTabChange('positions')}>Positions ({legs.filter(l => !l.isSquaredOff).length})</button>
+        <button className={`${mtm.posTab} ${activeTab === 'greeks' ? mtm.posTabActive : ''}`} onClick={() => onTabChange('greeks')}>Greeks</button>
+        <button className={`${mtm.posTab} ${activeTab === 'notes' ? mtm.posTabActive : ''}`} onClick={() => onTabChange('notes')}>Notes</button>
+        <div className={mtm.posTabRight}>
+          <button className={mtm.posTabBtn}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            Add Ons
+          </button>
+        </div>
+      </div>
+      {/* ── Notes tab ── */}
+      {activeTab === 'notes' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16, gap: 8 }}>
+          <textarea
+            value={notes}
+            onChange={e => onNotesChange(e.target.value)}
+            placeholder="Write your trade notes here…"
+            style={{
+              flex: 1, resize: 'none', background: '#111110', color: '#D1D4DC',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+              padding: 12, fontSize: 13, lineHeight: 1.6, fontFamily: 'inherit',
+              outline: 'none',
+            }}
+          />
         </div>
       )}
-      {/* sticky cols: check=30, symbol=80, expiry=76, strike=64, type=44 → cumulative lefts */}
-      <div style={{ flexShrink: 0, overflowX: 'hidden', overflowY: 'visible', padding: '8px 10px' }}>
+
+      {/* sticky cols */}
+      {activeTab !== 'notes' && <div style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#2a2e38 transparent' }}>
       {(() => {
         const STICKY_IDS = ['expiry','strike','type'];
         const STICKY_SIZES: Record<string,number> = { expiry:76, strike:64, type:44 };
@@ -853,18 +980,18 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
                 {/* ── Super-header row ── */}
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   {/* Position: sticky th spanning all sticky cols, width forced to exact pixel sum */}
-                  <th colSpan={stickySpan} style={{ position: 'sticky', left: 0, zIndex: 5, width: stickyTotalW, minWidth: stickyTotalW, textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.08em', background: '#333333' }}>Position</th>
-                  {!showGreeks && <th colSpan={detailCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#e0a800', background: '#333333', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Buy / Sell</th>}
-                  {!showGreeks && <th colSpan={pnlCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#818cf8', background: '#333333', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>P&L</th>}
-                  {greekCols.length > 0 && <th colSpan={greekCols.length} style={{ textAlign: 'center', padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#34d399', background: '#333333', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Greeks</th>}
+                  <th colSpan={stickySpan} style={{ position: 'sticky', left: 0, zIndex: 5, width: stickyTotalW, minWidth: stickyTotalW, textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', background: '#1e222d' }}>Position</th>
+                  {!showGreeks && <th colSpan={detailCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#e0a800', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Buy / Sell</th>}
+                  {!showGreeks && <th colSpan={pnlCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#818cf8', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>P&L</th>}
+                  {greekCols.length > 0 && <th colSpan={greekCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#34d399', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Greeks</th>}
                 </tr>
                 {/* ── Sub-header row ── */}
                 {table.getHeaderGroups().map(hg => (
-                  <tr key={hg.id} style={{ borderBottom: '2px solid rgba(255,255,255,0.12)' }}>
+                  <tr key={hg.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                     {hg.headers.map(h => {
                       const id = h.column.id;
                       const isSticky = STICKY_IDS.includes(id);
-                      const sectionBg = '#333333';
+                      const sectionBg = '#1e222d';
                       const isFirstDetail = id === 'buy_action';
                       const isFirstEnd    = id === 'spot';
                       const isGreekGroupStartH = id.endsWith('_entry') && id.startsWith('greek_');
@@ -872,13 +999,13 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
                       const borderL = needsLeftBorder ? '2px solid rgba(255,255,255,0.18)' : 'none';
                       if (isSticky) {
                         return (
-                          <th key={h.id} style={{ ...stickyThStyle(id, '#333333', borderL), padding: '8px 8px', textAlign: 'left', fontSize: 13 }}>
+                          <th key={h.id} style={{ ...stickyThStyle(id, '#1e222d', borderL), padding: '7px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
                             {flexRender(h.column.columnDef.header, h.getContext())}
                           </th>
                         );
                       }
                       return (
-                        <th key={h.id} style={{ padding: '8px 8px', textAlign: 'left', background: sectionBg, borderLeft: borderL, whiteSpace: 'nowrap', fontSize: 13 }}>
+                        <th key={h.id} style={{ padding: '7px 10px', textAlign: 'left', background: sectionBg, borderLeft: borderL, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
                           {flexRender(h.column.columnDef.header, h.getContext())}
                         </th>
                       );
@@ -963,7 +1090,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
                   groups.forEach((grp, gi) => {
                     const accent = symbolColors[grp.sym]?.accent ?? '#9CA3AF';
                     result.push(
-                      <tr key={`grp-${grp.sym}-${gi}`} style={{ background: '#1a1a1a' }}>
+                      <tr key={`grp-${grp.sym}-${gi}`} style={{ background: '#181c24' }}>
                         <td colSpan={allCols.length} style={{
                           padding: '5px 10px',
                           borderTop: gi > 0 ? '2px solid rgba(255,255,255,0.1)' : undefined,
@@ -978,7 +1105,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
                     );
                     grp.rows.forEach(row => {
                       const ri = rowIndex++;
-                      const rowBg = row.original.isSquaredOff ? '#14161a' : (ri % 2 === 0 ? '#1c1c1c' : '#171717');
+                      const rowBg = row.original.isSquaredOff ? '#14161a' : (ri % 2 === 0 ? '#1c1f28' : '#181b23');
                       result.push(
                         <tr key={row.id} style={{ opacity: row.original.isSquaredOff ? 0.48 : (row.original.checked ? 1 : 0.38), filter: row.original.isSquaredOff ? 'saturate(0.75)' : 'none', transition: 'opacity 0.2s, filter 0.2s' }}>
                           {row.getVisibleCells().map(cell => {
@@ -1033,7 +1160,27 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks }: { legs: Leg[
           </div>
         );
       })()}
-      </div>
+      </div>}
+      {/* Footer Bar */}
+      {legs.length > 0 && (
+        <div className={mtm.posFooter}>
+          <span className={mtm.posFooterLabel}>Multiplier:</span>
+          <div className={mtm.posMultiStepper}>
+            <button className={mtm.posMultiBtn}>u{2212}</button>
+            <span className={mtm.posMultiInput}>{activeLotSize}</span>
+            <button className={mtm.posMultiBtn}>+</button>
+          </div>
+          <span className={mtm.posFooterLabel}>Lot Size: {activeLotSize}</span>
+          <label className={mtm.posAutoSave}><input type="checkbox" className={mtm.posAutoSaveCb} /> Auto Save</label>
+          <button className={`${mtm.posFooterBtn} ${mtm.posFooterBtnGreen}`}>Update</button>
+          <button className={`${mtm.posFooterBtn} ${mtm.posFooterBtnBlue}`}>Share</button>
+          <div className={mtm.posFooterSpacer} />
+          <span className={mtm.posFooterVal} style={{ color: '#c9cdd5' }}>{totalDelta.toFixed(2)}</span>
+          <span className={mtm.posFooterVal} style={{ color: totalColor, fontSize: 15 }}>{fmtMtm(totalMtm)}</span>
+          <button className={mtm.posFooterBtnExit}>Exit</button>
+          <button className={mtm.posFooterBtnClear} onClick={() => legs.forEach(l => removeLeg(l.id))}>Clear</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1141,6 +1288,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const currentLtpMapRef = useRef<Map<string, { ce: number; pe: number; ceGreeks: Greeks; peGreeks: Greeks }>>(new Map()); // key: `${expiry}:${strike}`
   const isHistoricalModeRef = useRef(false);
   const [showGreeks, setShowGreeks] = useState(false);
+  const [activeTab, setActiveTab] = useState<'positions' | 'greeks' | 'notes'>('positions');
+  const [notes, setNotes] = useState('');
   const [cloudOpen, setCloudOpen] = useState(false);
   const [cloudTab, setCloudTab] = useState<'import' | 'export'>('import');
   const [cloudLoading, setCloudLoading] = useState(false);
@@ -2135,22 +2284,22 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
             </div>
           </div>
 
-          <div style={{ flex: 1 }} />
+          <div className={mtm.headerSpacer} />
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <div className={mtm.headerActions}>
             {/* Option chain */}
-            <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} style={{ width: 26, height: 26, borderRadius: 5, border: `1px solid ${ocOpen ? 'rgba(255,152,0,0.4)' : 'rgba(255,255,255,0.07)'}`, background: ocOpen ? 'rgba(255,152,0,0.12)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} className={`${mtm.headerIconBtn} ${ocOpen ? mtm.headerIconBtnActive : ''}`}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="9 10 20 17.6">
                 <g><path d="M19.3956 10.4C19.3956 10.1791 19.2165 10 18.9956 10C18.7748 10 18.5957 10.1791 18.5957 10.4V27.2002C18.5957 27.4211 18.7748 27.6002 18.9956 27.6002C19.2165 27.6002 19.3956 27.4211 19.3956 27.2002V10.4Z" fill="#9CA3AF"/><path d="M16.1929 11.5977H11.3936C10.9519 11.5977 10.5938 11.9558 10.5938 12.3977C10.5938 12.8395 10.9519 13.1977 11.3936 13.1977H16.1929C16.6347 13.1977 16.9928 12.8395 16.9928 12.3977C16.9928 11.9558 16.6347 11.5977 16.1929 11.5977Z" fill="#9CA3AF"/><path d="M27.401 11.5977H21.8018C21.3601 11.5977 21.002 11.9558 21.002 12.3977C21.002 12.8395 21.3601 13.1977 21.8018 13.1977H27.401C27.8428 13.1977 28.2009 12.8395 28.2009 12.3977C28.2009 11.9558 27.8428 11.5977 27.401 11.5977Z" fill="#9CA3AF"/><path d="M16.1989 19.6016H9.79988C9.35812 19.6016 9 19.9597 9 20.4016C9 20.8434 9.35812 21.2016 9.79988 21.2016H16.1989C16.6407 21.2016 16.9988 20.8434 16.9988 20.4016C16.9988 19.9597 16.6407 19.6016 16.1989 19.6016Z" fill="#9CA3AF"/><path d="M25.0014 19.6016H21.8018C21.3601 19.6016 21.002 19.9597 21.002 20.4016C21.002 20.8434 21.3601 21.2016 21.8018 21.2016H25.0014C25.4431 21.2016 25.8013 20.8434 25.8013 20.4016C25.8013 19.9597 25.4431 19.6016 25.0014 19.6016Z" fill="#9CA3AF"/><path d="M16.1928 15.6016H12.9932C12.5515 15.6016 12.1934 15.9597 12.1934 16.4016C12.1934 16.8434 12.5515 17.2016 12.9932 17.2016H16.1928C16.6345 17.2016 16.9927 16.8434 16.9927 16.4016C16.9927 15.9597 16.6345 15.6016 16.1928 15.6016Z" fill="#9CA3AF"/><path d="M28.2009 15.6016H21.8018C21.3601 15.6016 21.002 15.9597 21.002 16.4016C21.002 16.8434 21.3601 17.2016 21.8018 17.2016H28.2009C28.6427 17.2016 29.0008 16.8434 29.0008 16.4016C29.0008 15.9597 28.6427 15.6016 28.2009 15.6016Z" fill="#9CA3AF"/><path d="M16.1979 23.5996H10.5987C10.1569 23.5996 9.79883 23.9578 9.79883 24.3996C9.79883 24.8414 10.1569 25.1996 10.5987 25.1996H16.1979C16.6397 25.1996 16.9978 24.8414 16.9978 24.3996C16.9978 23.9578 16.6397 23.5996 16.1979 23.5996Z" fill="#9CA3AF"/><path d="M26.6011 23.5996H21.8018C21.3601 23.5996 21.002 23.9578 21.002 24.3996C21.002 24.8414 21.3601 25.1996 21.8018 25.1996H26.6011C27.0429 25.1996 27.401 24.8414 27.401 24.3996C27.401 23.9578 27.0429 23.5996 26.6011 23.5996Z" fill="#9CA3AF"/></g>
               </svg>
             </button>
             {/* Export */}
-            <button onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }} title="Export strategy" style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555B6A' }}>
+            <button onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }} title="Export strategy" className={mtm.headerIconBtn}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 21h14a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2"/></svg>
             </button>
             {/* Import */}
-            <button onClick={() => { setCloudTab('import'); setCloudError(''); setCloudOpen(true); fetchCloudList(); }} title="Import strategy" style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555B6A' }}>
+            <button onClick={() => { setCloudTab('import'); setCloudError(''); setCloudOpen(true); fetchCloudList(); }} title="Import strategy" className={mtm.headerIconBtn}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21V9"/><path d="M16 13l-4 4-4-4"/><path d="M5 3h14a2 2 0 0 1 2 2v3"/><path d="M3 8V5a2 2 0 0 1 2-2"/></svg>
             </button>
           </div>
@@ -2333,7 +2482,14 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
         {/* Leg rows table */}
         {layoutTheme === 'theme2' ? (
           /* ── Theme 2: flat TanStack table ── */
-          <MtmTheme2Table legs={legs} updateLeg={updateLeg} removeLeg={removeLeg} showGreeks={showGreeks} />
+          <MtmTheme2Table
+            legs={legs} updateLeg={updateLeg} removeLeg={removeLeg}
+            showGreeks={activeTab === 'greeks'}
+            activeTab={activeTab}
+            onTabChange={t => { setActiveTab(t); setShowGreeks(t === 'greeks'); }}
+            notes={notes}
+            onNotesChange={setNotes}
+          />
         ) : (
           /* ── Theme 1: card / grouped layout ── */
           <div className={mtm.legsScroll}>
@@ -2397,18 +2553,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
 
       {/* Option Chain — floats OVER left panel, anchored to its right side */}
       {ocOpen && ocSymbol && (
-        <div style={{
-          position: 'absolute',
-          left: 8, top: 8, bottom: 8,
-          width: `calc(${leftPct}% - 16px)`,
-          zIndex: 55,
-          background: '#171717',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 10,
-          boxShadow: '0 8px 56px rgba(0,0,0,0.8)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
+        <div className={mtm.optionChainOverlay} style={{ width: `calc(${leftPct}% - 16px)` }}>
           <OptionChain symbol={ocSymbol} expiries={ocExpiries} sessionToken={nubraSession} exchange={ocExchange} onClose={() => setOcOpen(false)} onAddLeg={addLeg} onLtpUpdateRef={{ current: onLtpUpdate }} lotSize={ocLotSize} instruments={instruments} ocSpotRef={ocSpotRef} isHistoricalMode={isHistoricalMode} spotRefId={ocSpotRefId} />
         </div>
       )}
@@ -2423,14 +2568,14 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       {/* Right panel — Strategy Chart / Payoff Analyzer */}
       <div className={mtm.rightPanel} style={{ display: 'flex', flexDirection: 'column' }}>
         {/* View switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        <div className={mtm.rightPanelTabs}>
           <button
             onClick={() => setRightView('chart')}
-            style={{ padding: '6px 12px', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', cursor: 'pointer', color: rightView === 'chart' ? '#d1d4dc' : '#5d6673', borderBottom: `2px solid ${rightView === 'chart' ? '#818cf8' : 'transparent'}`, letterSpacing: '0.03em' }}
+            className={`${mtm.rightPanelTab} ${rightView === 'chart' ? mtm.rightPanelTabActive : ''}`}
           >MTM Chart</button>
           <button
             onClick={() => setRightView('payoff')}
-            style={{ padding: '6px 12px', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', cursor: 'pointer', color: rightView === 'payoff' ? '#d1d4dc' : '#5d6673', borderBottom: `2px solid ${rightView === 'payoff' ? '#818cf8' : 'transparent'}`, letterSpacing: '0.03em' }}
+            className={`${mtm.rightPanelTab} ${rightView === 'payoff' ? mtm.rightPanelTabActive : ''}`}
           >Payoff / Greeks</button>
         </div>
         {/* Content */}
@@ -2827,7 +2972,8 @@ export default function App() {
       localStorage.setItem('nubra_session_token', data.session_token);
       localStorage.setItem('nubra_auth_token', data.auth_token);
       if (data.device_id) localStorage.setItem('nubra_device_id', data.device_id);
-      localStorage.setItem('nubra_raw_cookie', `authToken=${data.auth_token}; sessionToken=${data.session_token}`);
+      const deviceIdLogin = data.device_id || localStorage.getItem('nubra_device_id') || '';
+      localStorage.setItem('nubra_raw_cookie', `authToken=${data.auth_token}; sessionToken=${data.session_token}; deviceId=${deviceIdLogin}`);
       setNubraSession(data.session_token); setShowNubraPanel(false);
     } catch (e) { setNubraError(e instanceof Error ? e.message : 'Network error'); }
     setNubraLogging(false);
@@ -2859,7 +3005,8 @@ export default function App() {
       localStorage.setItem('nubra_totp_secret', data.secret_key); localStorage.setItem('nubra_session_token', data.session_token);
       localStorage.setItem('nubra_auth_token', data.auth_token);
       if (data.device_id) localStorage.setItem('nubra_device_id', data.device_id);
-      localStorage.setItem('nubra_raw_cookie', `authToken=${data.auth_token}; sessionToken=${data.session_token}`);
+      const deviceIdSetup = data.device_id || localStorage.getItem('nubra_device_id') || '';
+      localStorage.setItem('nubra_raw_cookie', `authToken=${data.auth_token}; sessionToken=${data.session_token}; deviceId=${deviceIdSetup}`);
       setNubraTotpSecret(data.secret_key); setNubraSession(data.session_token); setSetupStep('done'); setShowNubraPanel(false);
     } catch (e) { setNubraError(e instanceof Error ? e.message : 'Network error'); }
     setNubraLogging(false);
@@ -2959,8 +3106,6 @@ export default function App() {
   useEffect(() => {
     if (status.phase !== 'ready' || !mtmWorkerRef.current) return;
     if (nubraInstruments.length === 0 && instruments.length === 0) return;
-    const up = (s?: string) => (s ?? '').toUpperCase().trim();
-
     const nubraItems = nubraInstruments.map(item => {
       const sym = item.stock_name || item.nubra_name || item.asset || '';
       const asset = item.asset || sym;
@@ -3103,8 +3248,8 @@ export default function App() {
     { page: 'backtest',  label: 'Backtest',  icon: <IconClock /> },
     { page: 'historical', label: 'Historical', icon: <IconHistory /> },
     { page: 'spread',     label: 'Spread Analyzer', icon: <IconLayers /> },
-    { page: 'masterchain', label: 'Master Option Chain', icon: <IconLayers /> },
-    { page: 'cumoi', label: 'Cumulative OI Chain', icon: <IconLayers /> },
+    { page: 'masterchain', label: 'Master Option Chain', icon: <IconMasterChain /> },
+    { page: 'cumoi', label: 'Cumulative OI Chain', icon: <IconCumulativeOi /> },
   ];
 
   return (
@@ -3127,6 +3272,7 @@ export default function App() {
                     <SidebarMenuButton
                       isActive={page === p}
                       onClick={() => navigateTo(p)}
+                      tooltip={label}
                       className="cursor-pointer"
                     >
                       {icon}
@@ -3142,8 +3288,6 @@ export default function App() {
         {/* Footer — connection status */}
         <SidebarFooter>
           <div className="space-y-1.5">
-            {/* Index prices */}
-            <NavIndexStrip data={nubraNavIndex} />
             {/* Upstox WS */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -3279,44 +3423,35 @@ export default function App() {
       {/* ── Main area ───────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col min-w-0 h-screen" style={{ marginLeft: 'var(--sidebar-w)', transition: 'margin-left 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}>
         {/* Top bar */}
-        <header className="glass-navbar flex h-12 shrink-0 items-center gap-3 px-4" style={{ minHeight: 48, fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>
-          <SidebarTrigger />
-          <div className="h-5 w-px bg-[#2a2a2a]" />
-
-          {/* Page title when not on chart */}
-          {page !== 'chart' && (
-            <span className="text-[13px] font-semibold text-[#D1D4DC]" style={{ fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>
-              {NAV_ITEMS.find(n => n.page === page)?.label}
-            </span>
-          )}
-
-          {/* Navbar links */}
-          <div className="flex items-center gap-1 shrink-0">
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: 'clamp(42px, 3vw, 64px)',
-                padding: 0,
-                marginRight: 10,
-                flexShrink: 0,
-              }}
+        <header className="glass-navbar flex h-16 shrink-0 items-center px-4" style={{ minHeight: 64, fontFamily: 'var(--font-family-sans)', textTransform: 'none', gap: 0 }}>
+          {/* Left: sidebar trigger + logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <SidebarTrigger />
+            <div className="h-5 w-px bg-[#2a2a2a]" style={{ margin: '0 4px' }} />
+            <img
+              src="/alpha-logo-white.jpg"
+              alt="AlphaHedge"
               title="AlphaHedge"
-            >
-              <img
-                src="/alpha-logo-white.jpg"
-                alt="AlphaHedge"
-                style={{
-                  height: 'clamp(30px, 2vw, 50px)',
-                  width: 'auto',
-                  maxWidth: 'clamp(160px, 14vw, 280px)',
-                  objectFit: 'contain',
-                  display: 'block',
-                }}
-              />
-            </div>
+              style={{ height: 'clamp(26px, 1.8vw, 40px)', width: 'auto', maxWidth: 'clamp(120px, 11vw, 220px)', objectFit: 'contain', display: 'block' }}
+            />
+            {/* Page title when not on chart */}
+            {page !== 'chart' && (
+              <>
+                <div className="h-5 w-px bg-[#2a2a2a]" style={{ margin: '0 6px' }} />
+                <span className="text-[13px] font-semibold text-[#D1D4DC]" style={{ fontFamily: 'var(--font-family-sans)', textTransform: 'none' }}>
+                  {NAV_ITEMS.find(n => n.page === page)?.label}
+                </span>
+              </>
+            )}
+          </div>
 
+          {/* Center: market ticker — takes all remaining space */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, overflow: 'hidden' }}>
+            <MarketTicker />
+          </div>
+
+          {/* Right: basket + avatar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {/* Basket icon button */}
             <button
               ref={basketBtnRef}

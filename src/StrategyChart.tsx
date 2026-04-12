@@ -94,6 +94,9 @@ function isMarketOpen(): boolean {
   return istMin >= 9 * 60 + 15 && istMin < 15 * 60 + 30;
 }
 
+const SESSION_START_UTC = 'T03:45:00.000Z';
+const SESSION_END_UTC = 'T10:00:00.000Z';
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function toDateStr(d: Date): string {
@@ -347,32 +350,47 @@ async function fetchMcxOptionCloseRange(instrumentKey: string, startDate: string
   return { close: out };
 }
 
-// Build Nubra date params: today → intraDay:true, historical → explicit range
-// entryTimeIst: "HH:MM" — when provided on the entry date, startDate begins at that time
+// Build Nubra date params for a single trading day.
+// Historical mode always uses an explicit session range.
 function buildDateParams(date: string, today: string, entryTimeIst?: string, forceHistorical?: boolean) {
   const isToday = date === today;
-  const useIntraDay = isToday;
-  let startDate = useIntraDay ? '' : `${date}T03:45:00.000Z`;
-  if (entryTimeIst) {
-    // Convert IST HH:MM to UTC ISO string
-    startDate = istTimeToUtcIso(date, entryTimeIst);
+  if (forceHistorical) {
+    const intradayHistorical = isToday && isMarketOpen();
+    return {
+      startDate: intradayHistorical
+        ? `${date}${SESSION_START_UTC}`
+        : entryTimeIst
+          ? istTimeToUtcIso(date, entryTimeIst)
+          : `${date}${SESSION_START_UTC}`,
+      endDate: `${date}${SESSION_END_UTC}`,
+      intraDay: false,
+    };
   }
-  // For historical (non-today) we keep a fixed end; for today, intraDay ignores endDate
+
+  const useIntraDay = isToday;
+  let startDate = useIntraDay ? '' : `${date}${SESSION_START_UTC}`;
+  if (!useIntraDay && entryTimeIst) startDate = istTimeToUtcIso(date, entryTimeIst);
   return {
-    startDate: forceHistorical && isToday ? startDate : startDate,
-    endDate: useIntraDay ? '' : `${date}T11:30:00.000Z`,
+    startDate,
+    endDate: useIntraDay ? '' : `${date}${SESSION_END_UTC}`,
     intraDay: useIntraDay,
   };
 }
 
-// Build Nubra range params: entryDate → today (trading day), intraDay only when same-day
+// Build Nubra range params: earliest entry date → today.
+// When the earliest entry is today and the market is currently live, use the
+// full session window (09:15 → 15:30 IST) instead of the leg entry time.
 function buildRangeParams(entryDate: string, today: string, entryTimeIst?: string) {
-  const sameDay = entryDate === today;
-  const startDate = entryTimeIst ? istTimeToUtcIso(entryDate, entryTimeIst) : `${entryDate}T03:45:00.000Z`;
+  const intradayHistorical = entryDate === today && isMarketOpen();
+  const startDate = intradayHistorical
+    ? `${entryDate}${SESSION_START_UTC}`
+    : entryTimeIst
+      ? istTimeToUtcIso(entryDate, entryTimeIst)
+      : `${entryDate}${SESSION_START_UTC}`;
   return {
     startDate,
-    endDate: sameDay ? '' : `${today}T11:30:00.000Z`,
-    intraDay: sameDay,
+    endDate: `${today}${SESSION_END_UTC}`,
+    intraDay: false,
   };
 }
 

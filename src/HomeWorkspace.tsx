@@ -337,17 +337,17 @@ const PanelBody = React.memo(function PanelBody({ content, symbol, exchange, exp
       )}
       {content === 'iv-chart' && (
         <div style={{ width: '100%', height: '100%' }}>
-          <IvChart instruments={instruments} nubraInstruments={nubraInstruments} workerRef={chartWorkerRef} />
+          <IvChart instruments={instruments} nubraInstruments={nubraInstruments} workerRef={chartWorkerRef} initialSymbol={symbol || 'NIFTY'} />
         </div>
       )}
       {content === 'open-interest' && (
         <div style={{ width: '100%', height: '100%' }}>
-          <OpenInterest nubraInstruments={nubraInstruments} />
+          <OpenInterest nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} />
         </div>
       )}
       {content === 'vol-skew' && (
         <div style={{ width: '100%', height: '100%' }}>
-          <VolSkew nubraInstruments={nubraInstruments} />
+          <VolSkew nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} />
         </div>
       )}
       {content === 'fwd-vol' && (
@@ -1347,6 +1347,9 @@ export default function HomeWorkspace() {
           (i.trading_symbol === 'NIFTY 50' || i.trading_symbol === 'Nifty 50' || i.underlying_symbol === 'NIFTY' || i.name?.includes('Nifty 50'))
         ) ?? instruments.find(i => i.segment?.includes('INDEX')) ?? null;
         return { ...p, content, instrument: nifty };
+      }
+      if ((content === 'iv-chart' || content === 'open-interest' || content === 'vol-skew') && !p.symbol) {
+        return { ...p, content, symbol: 'NIFTY' };
       }
       return { ...p, content };
     }));
