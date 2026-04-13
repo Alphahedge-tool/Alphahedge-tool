@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as am5 from '@amcharts/amcharts5';
+import * as am5percent from '@amcharts/amcharts5/percent';
 import { createChart, LineSeries, type IChartApi, type ISeriesApi, type LineData, type Time } from 'lightweight-charts';
 import { useInstrumentsCtx } from './AppContext';
 import type { NubraInstrument } from './useNubraInstruments';
@@ -26,6 +28,7 @@ interface OptionSide {
   theta: number;
   vega: number;
   gamma: number;
+  volume: number;
 }
 
 interface StrikeRow {
@@ -54,6 +57,7 @@ const EMPTY_SIDE: OptionSide = {
   theta: 0,
   vega: 0,
   gamma: 0,
+  volume: 0,
 };
 
 const BRIDGE = 'ws://localhost:8765';
@@ -105,6 +109,17 @@ function fmtOi(n: number) {
   return n.toLocaleString('en-IN');
 }
 
+function fmtMetricCompact(n: number) {
+  if (!n) return '0';
+  if (Math.abs(n) >= 1000) return fmtOi(Math.abs(n));
+  return Math.abs(n).toFixed(2);
+}
+
+function fmtRatio(n: number) {
+  if (!isFinite(n)) return '—';
+  return n.toFixed(2);
+}
+
 function fmtPct(n: number) {
   if (!isFinite(n) || n === 0) return '—';
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
@@ -141,6 +156,7 @@ function parseRestOption(opt: Record<string, number>): OptionSide {
     theta: opt.theta ?? 0,
     vega: opt.vega ?? 0,
     gamma: opt.gamma ?? 0,
+    volume: opt.volume ?? opt.vol ?? opt.total_volume ?? 0,
   };
 }
 
@@ -155,6 +171,7 @@ function parseWsOption(opt: Record<string, number>): OptionSide {
     theta: opt.theta ?? 0,
     vega: opt.vega ?? 0,
     gamma: opt.gamma ?? 0,
+    volume: opt.volume ?? opt.traded_volume ?? opt.total_traded_volume ?? 0,
   };
 }
 
@@ -212,6 +229,7 @@ function mergeOptionSide(base: OptionSide | undefined, live: OptionSide | undefi
     theta: live?.theta ?? base?.theta ?? 0,
     vega: live?.vega ?? base?.vega ?? 0,
     gamma: live?.gamma ?? base?.gamma ?? 0,
+    volume: live?.volume ?? base?.volume ?? 0,
   };
 }
 
@@ -461,6 +479,346 @@ function StrikeMultiSelect({
   );
 }
 
+// ── Summary card helpers ──────────────────────────────────────────────────────
+
+interface SummaryCardTrendPoint { ts: number; call: number; put: number }
+
+function normalizeSummaryCardHistory(points: SummaryCardTrendPoint[], maxPoints = 480): SummaryCardTrendPoint[] {
+  const byMinute = new Map<number, SummaryCardTrendPoint>();
+  for (const p of points) {
+    const ts = Math.floor((p.ts ?? 0) / 60000) * 60000;
+    byMinute.set(ts, { ts, call: p.call ?? 0, put: p.put ?? 0 });
+  }
+  const out = [...byMinute.values()].sort((a, b) => a.ts - b.ts);
+  return out.length > maxPoints ? out.slice(out.length - maxPoints) : out;
+}
+
+function appendSummaryCardPoint(
+  prev: SummaryCardTrendPoint[],
+  call: number,
+  put: number,
+  maxPoints = 480,
+): SummaryCardTrendPoint[] {
+  const ts = Math.floor(Date.now() / 60000) * 60000;
+  const next = normalizeSummaryCardHistory(prev, maxPoints);
+  const last = next[next.length - 1];
+  if (last && last.ts === ts) {
+    next[next.length - 1] = { ts, call, put };
+  } else {
+    next.push({ ts, call, put });
+  }
+  return normalizeSummaryCardHistory(next, maxPoints);
+}
+
+function fmtSummaryCardTime(tsSec: number | null) {
+  if (!tsSec) return '--';
+  return new Date(tsSec * 1000).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+function toSummaryCardTsSec(value: Time | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'object' && 'year' in value && 'month' in value && 'day' in value) {
+    return Math.floor(Date.UTC(value.year, value.month - 1, value.day) / 1000);
+  }
+  return null;
+}
+
+function SummaryCardPie({
+  callValue,
+  putValue,
+  ringMode,
+}: {
+  callValue: number;
+  putValue: number;
+  ringMode: 'standard' | 'signed';
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const call = ringMode === 'signed' ? Math.abs(callValue) : Math.max(callValue, 0);
+    const put  = ringMode === 'signed' ? Math.abs(putValue)  : Math.max(putValue, 0);
+    const root = am5.Root.new(host);
+    const chart = root.container.children.push(
+      am5percent.PieChart.new(root, { innerRadius: am5.percent(68), startAngle: -90, endAngle: 270 }),
+    );
+    const series = chart.series.push(
+      am5percent.PieSeries.new(root, { valueField: 'value', categoryField: 'category', alignLabels: false, startAngle: -90, endAngle: 270 }),
+    );
+    series.slices.template.setAll({ strokeOpacity: 0, cornerRadius: 6 });
+    series.slices.template.adapters.add('fill',   (_, t) => (t.dataItem?.dataContext as any)?.color ?? am5.color(0x516079));
+    series.slices.template.adapters.add('stroke', (_, t) => (t.dataItem?.dataContext as any)?.color ?? am5.color(0x516079));
+    series.labels.template.setAll({ forceHidden: true });
+    series.ticks.template.setAll({ forceHidden: true });
+    series.data.setAll([
+      { category: 'Call', value: call, color: am5.color(0x1fe0af) },
+      { category: 'Put',  value: put,  color: am5.color(0xff6f91) },
+    ]);
+    return () => { root.dispose(); };
+  }, [callValue, putValue, ringMode]);
+
+  return <div ref={hostRef} className={s.summaryPieHost} aria-hidden="true" />;
+}
+
+function SummaryCardTrend({
+  callValue,
+  putValue,
+  callChgValue = 0,
+  putChgValue = 0,
+  formatValue,
+  initialHistory,
+  initialChgHistory,
+}: {
+  callValue: number;
+  putValue: number;
+  callChgValue?: number;
+  putChgValue?: number;
+  formatValue: (v: number) => string;
+  initialHistory?: SummaryCardTrendPoint[];
+  initialChgHistory?: SummaryCardTrendPoint[];
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const callSerRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const putSerRef  = useRef<ISeriesApi<'Line'> | null>(null);
+  const initialFitDoneRef = useRef(false);
+  const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+  const [showChg, setShowChg] = useState(false);
+  const [history, setHistory] = useState<SummaryCardTrendPoint[]>(
+    initialHistory && initialHistory.length > 0
+      ? appendSummaryCardPoint(normalizeSummaryCardHistory(initialHistory), callValue, putValue)
+      : [{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }],
+  );
+  const [chgHistory, setChgHistory] = useState<SummaryCardTrendPoint[]>(
+    initialChgHistory && initialChgHistory.length > 0
+      ? appendSummaryCardPoint(normalizeSummaryCardHistory(initialChgHistory), callChgValue, putChgValue)
+      : [{ ts: Math.floor(Date.now() / 60000) * 60000, call: callChgValue, put: putChgValue }],
+  );
+
+  useEffect(() => {
+    if (initialHistory && initialHistory.length > 0) {
+      setHistory(appendSummaryCardPoint(normalizeSummaryCardHistory(initialHistory), callValue, putValue));
+      initialFitDoneRef.current = false;
+      return;
+    }
+    setHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }]);
+  }, [initialHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (initialChgHistory && initialChgHistory.length > 0) {
+      setChgHistory(appendSummaryCardPoint(normalizeSummaryCardHistory(initialChgHistory), callChgValue, putChgValue));
+      return;
+    }
+    setChgHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callChgValue, put: putChgValue }]);
+  }, [initialChgHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setHistory(prev => appendSummaryCardPoint(prev, callValue, putValue)); }, [callValue, putValue]);
+  useEffect(() => { setChgHistory(prev => appendSummaryCardPoint(prev, callChgValue, putChgValue)); }, [callChgValue, putChgValue]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const chart = createChart(host, {
+      width: Math.max(host.clientWidth, 120),
+      height: 96,
+      layout: { background: { color: 'transparent' }, textColor: '#90a7cb', attributionLogo: false },
+      grid: { vertLines: { color: 'rgba(148,163,184,0.08)' }, horzLines: { color: 'rgba(148,163,184,0.10)' } },
+      rightPriceScale: { visible: false, borderVisible: false },
+      leftPriceScale:  { visible: false, borderVisible: false },
+      timeScale: { visible: false, borderVisible: false, secondsVisible: false, timeVisible: true, rightOffset: 1, fixLeftEdge: true, fixRightEdge: true, lockVisibleTimeRangeOnResize: true },
+      crosshair: {
+        vertLine: { visible: true, labelVisible: false, color: 'rgba(214,226,255,0.42)', width: 1, style: 2 },
+        horzLine: { visible: true, labelVisible: false, color: 'rgba(214,226,255,0.22)', width: 1, style: 2 },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+    const callSer = chart.addSeries(LineSeries, { color: '#1fe0af', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, crosshairMarkerBorderWidth: 2, crosshairMarkerBorderColor: '#10251e', crosshairMarkerBackgroundColor: '#1fe0af' });
+    const putSer  = chart.addSeries(LineSeries, { color: '#ff6f91', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, crosshairMarkerBorderWidth: 2, crosshairMarkerBorderColor: '#2b1420', crosshairMarkerBackgroundColor: '#ff6f91' });
+    callSer.priceScale().applyOptions({ scaleMargins: { top: 0.16, bottom: 0.12 } });
+    putSer.priceScale().applyOptions({ scaleMargins: { top: 0.16, bottom: 0.12 } });
+    chartRef.current  = chart;
+    callSerRef.current = callSer;
+    putSerRef.current  = putSer;
+
+    chart.subscribeCrosshairMove(param => {
+      const t = toSummaryCardTsSec(param.time);
+      if (t != null) { setHoveredTime(t); return; }
+      if (param.point) {
+        const ct = toSummaryCardTsSec(chart.timeScale().coordinateToTime(param.point.x));
+        if (ct != null) { setHoveredTime(ct); return; }
+      }
+      setHoveredTime(null);
+    });
+
+    const ro = new ResizeObserver(entries => {
+      const e = entries[0]; if (!e) return;
+      chart.applyOptions({ width: Math.max(Math.floor(e.contentRect.width), 120) });
+    });
+    ro.observe(host);
+    return () => {
+      ro.disconnect();
+      callSerRef.current = null;
+      putSerRef.current  = null;
+      initialFitDoneRef.current = false;
+      chartRef.current?.remove();
+      chartRef.current = null;
+    };
+  }, []);
+
+  const normalizedHistory    = useMemo(() => normalizeSummaryCardHistory(history),    [history]);
+  const normalizedChgHistory = useMemo(() => normalizeSummaryCardHistory(chgHistory), [chgHistory]);
+  const activeHistory = showChg ? normalizedChgHistory : normalizedHistory;
+  const chartData = useMemo(() => ({
+    call: activeHistory.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.call })),
+    put:  activeHistory.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.put  })),
+  }), [activeHistory]);
+  const displayPoint = useMemo(() => {
+    if (activeHistory.length === 0) return null;
+    if (hoveredTime != null) {
+      const ms = hoveredTime * 1000;
+      for (let i = activeHistory.length - 1; i >= 0; i--) {
+        if (activeHistory[i].ts <= ms) return activeHistory[i];
+      }
+    }
+    return activeHistory[activeHistory.length - 1];
+  }, [activeHistory, hoveredTime]);
+  const displayTime = displayPoint ? Math.floor(displayPoint.ts / 1000) : null;
+  const prevShowChgRef = useRef(showChg);
+
+  useEffect(() => {
+    callSerRef.current?.setData(chartData.call);
+    putSerRef.current?.setData(chartData.put);
+    const modeChanged = prevShowChgRef.current !== showChg;
+    prevShowChgRef.current = showChg;
+    if (!initialFitDoneRef.current || modeChanged) {
+      if (chartData.call.length > 0 || chartData.put.length > 0) {
+        chartRef.current?.timeScale().fitContent();
+        initialFitDoneRef.current = true;
+      }
+    }
+  }, [chartData, showChg]);
+
+  const fmtChg = (v: number) => {
+    const abs = Math.abs(v); const sign = v >= 0 ? '+' : '-';
+    if (abs >= 1e7) return `${sign}${(abs / 1e7).toFixed(2)}Cr`;
+    if (abs >= 1e5) return `${sign}${(abs / 1e5).toFixed(1)}L`;
+    return `${sign}${abs.toLocaleString('en-IN')}`;
+  };
+
+  return (
+    <div className={s.summaryTrendInline}>
+      <div className={s.summaryTrendChartWrap}>
+        <div style={{ position: 'absolute', top: 4, right: 4, zIndex: 2, display: 'flex', gap: 2, background: 'rgba(0,0,0,0.45)', borderRadius: 5, padding: '2px 3px' }}>
+          <button type="button" onClick={() => setShowChg(false)} style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, border: 'none', cursor: 'pointer', background: !showChg ? '#2563eb' : 'transparent', color: !showChg ? '#fff' : '#6b7280', letterSpacing: '0.04em' }}>OI</button>
+          <button type="button" onClick={() => setShowChg(true)}  style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, border: 'none', cursor: 'pointer', background:  showChg ? '#2563eb' : 'transparent', color:  showChg ? '#fff' : '#6b7280', letterSpacing: '0.04em' }}>CHG</button>
+        </div>
+        <div ref={hostRef} className={s.summaryTrendChart} aria-hidden="true" />
+      </div>
+      <div className={s.summaryTrendInlineMeta}>
+        <span className={s.summaryTrendCaption}>{showChg ? 'OI change' : (history.length > 2 ? 'Session trend' : 'Live trend')}</span>
+        <span className={s.summaryTrendTime}>{fmtSummaryCardTime(displayTime)}</span>
+        <span className={s.summaryTrendLive}>{hoveredTime != null ? 'INSPECT' : 'LIVE'}</span>
+      </div>
+      <div className={s.summaryTrendValues}>
+        {showChg ? (
+          <>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {fmtChg(displayPoint?.call ?? callChgValue)}</span>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {fmtChg(displayPoint?.put ?? putChgValue)}</span>
+            {(() => { const c = displayPoint?.call ?? callChgValue; const p = displayPoint?.put ?? putChgValue; const pcrV = c !== 0 ? p / c : null; return pcrV != null ? <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', background: 'rgba(255,255,255,0.06)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>PCR {fmtRatio(pcrV)}</span> : null; })()}
+          </>
+        ) : (
+          <>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {formatValue(displayPoint?.call ?? callValue)}</span>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {formatValue(displayPoint?.put ?? putValue)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  subtitle,
+  callValue,
+  putValue,
+  callChgValue,
+  putChgValue,
+  pcr,
+  formatValue,
+  ringMode = 'standard',
+  trendHistory,
+  trendChgHistory,
+}: {
+  title: string;
+  subtitle: string;
+  callValue: number;
+  putValue: number;
+  callChgValue?: number;
+  putChgValue?: number;
+  pcr: number;
+  formatValue: (v: number) => string;
+  ringMode?: 'standard' | 'signed';
+  trendHistory?: SummaryCardTrendPoint[];
+  trendChgHistory?: SummaryCardTrendPoint[];
+}) {
+  const ringCall  = ringMode === 'signed' ? Math.abs(callValue) : Math.max(callValue, 0);
+  const ringPut   = ringMode === 'signed' ? Math.abs(putValue)  : Math.max(putValue, 0);
+  const totalLabel = formatValue(callValue + putValue);
+  const centerScale = totalLabel.length > 10 ? 0.72 : totalLabel.length > 8 ? 0.82 : totalLabel.length > 6 ? 0.92 : 1;
+
+  return (
+    <article className={s.summaryCard}>
+      <div className={s.summaryCardTop}>
+        <div>
+          <div className={s.summaryCardTitle}>{title}</div>
+          <div className={s.summaryCardSubtitle}>{subtitle}</div>
+        </div>
+        <div className={s.summaryPcrChip}>PCR {fmtRatio(pcr)}</div>
+      </div>
+      <div className={`${s.summaryCardBody} ${trendHistory ? s.summaryCardBodyWithTrend : ''}`}>
+        <div className={s.summaryDonutWrap}>
+          <SummaryCardPie callValue={ringCall} putValue={ringPut} ringMode={ringMode} />
+          <div className={s.summaryDonutCenter}>
+            <span className={s.summaryDonutCenterLabel}>Total</span>
+            <strong className={s.summaryDonutCenterValue} style={{ transform: `scale(${centerScale})` }}>{totalLabel}</strong>
+          </div>
+        </div>
+        <div className={s.summaryLegend}>
+          <div className={s.summaryLegendItem}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotCall}`} />
+            <div>
+              <div className={s.summaryLegendLabel}>Call</div>
+              <div className={s.summaryLegendValue}>{formatValue(callValue)}</div>
+            </div>
+          </div>
+          <div className={s.summaryLegendItem}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotPut}`} />
+            <div>
+              <div className={s.summaryLegendLabel}>Put</div>
+              <div className={s.summaryLegendValue}>{formatValue(putValue)}</div>
+            </div>
+          </div>
+        </div>
+        {trendHistory && (
+          <SummaryCardTrend
+            callValue={callValue} putValue={putValue}
+            callChgValue={callChgValue} putChgValue={putChgValue}
+            formatValue={formatValue}
+            initialHistory={trendHistory}
+            initialChgHistory={trendChgHistory}
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
 // ── Historical helpers ────────────────────────────────────────────────────────
 function todayIst(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -483,6 +841,116 @@ function istDayToUtcRange(istDate: string): { startDate: string; endDate: string
   };
 }
 
+
+// ── Nubra chain timeseries helpers ───────────────────────────────────────────
+
+function buildNubraChainValue(nubraSym: string, expiry: string): string {
+  return `${nubraSym}_${expiry}`;
+}
+
+async function fetchChainOiHistory(
+  exchange: string, chainValues: string[], startDate: string, endDate: string,
+): Promise<SummaryTrendPoint[]> {
+  const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+  const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
+  if (!sessionToken || chainValues.length === 0) return [];
+
+  const res = await fetch('/api/nubra-timeseries', {
+    method: 'POST',
+    headers: { 'x-session-token': sessionToken, 'x-device-id': deviceId, 'x-raw-cookie': rawCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chart: 'Put_Call_Ratio',
+      query: [{ exchange, type: 'CHAIN', values: chainValues, fields: ['cumulative_call_oi', 'cumulative_put_oi'], startDate, endDate, interval: '1m', intraDay: false, realTime: false }],
+    }),
+  });
+  if (!res.ok) return [];
+  const json = await res.json();
+  const totals = new Map<number, SummaryTrendPoint>();
+  for (const entry of json?.result ?? []) {
+    for (const valObj of entry?.values ?? []) {
+      for (const chainValue of chainValues) {
+        const d = valObj?.[chainValue];
+        if (!d) continue;
+        for (const p of (d.cumulative_call_oi ?? []) as Array<{ ts: number; v: number }>) {
+          const ts = Math.floor((p.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.call += p.v ?? 0;
+          totals.set(ts, row);
+        }
+        for (const p of (d.cumulative_put_oi ?? []) as Array<{ ts: number; v: number }>) {
+          const ts = Math.floor((p.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.put += p.v ?? 0;
+          totals.set(ts, row);
+        }
+      }
+    }
+  }
+  return [...totals.values()].sort((a, b) => a.ts - b.ts);
+}
+
+async function fetchChainVolHistory(
+  exchange: string, chainValues: string[], startDate: string, endDate: string,
+): Promise<SummaryTrendPoint[]> {
+  const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+  const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
+  if (!sessionToken || chainValues.length === 0) return [];
+
+  const res = await fetch('/api/nubra-timeseries', {
+    method: 'POST',
+    headers: { 'x-session-token': sessionToken, 'x-device-id': deviceId, 'x-raw-cookie': rawCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chart: 'Put_Call_Ratio',
+      query: [{ exchange, type: 'CHAIN', values: chainValues, fields: ['cumulative_call_vol', 'cumulative_put_vol'], startDate, endDate, interval: '1m', intraDay: false, realTime: false }],
+    }),
+  });
+  if (!res.ok) return [];
+  const json = await res.json();
+  const totals = new Map<number, SummaryTrendPoint>();
+  for (const entry of json?.result ?? []) {
+    for (const valObj of entry?.values ?? []) {
+      for (const chainValue of chainValues) {
+        const d = valObj?.[chainValue];
+        if (!d) continue;
+        for (const p of (d.cumulative_call_vol ?? []) as Array<{ ts: number; v: number }>) {
+          const ts = Math.floor((p.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.call += p.v ?? 0;
+          totals.set(ts, row);
+        }
+        for (const p of (d.cumulative_put_vol ?? []) as Array<{ ts: number; v: number }>) {
+          const ts = Math.floor((p.ts ?? 0) / 1e9) * 1000;
+          const row = totals.get(ts) ?? { ts, call: 0, put: 0 };
+          row.put += p.v ?? 0;
+          totals.set(ts, row);
+        }
+      }
+    }
+  }
+  return [...totals.values()].sort((a, b) => a.ts - b.ts);
+}
+
+// helper — current IST time as YYYY-MM-DD / HH:MM
+function toIstNow(): { date: string; time: string } {
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = Object.fromEntries(f.formatToParts(new Date()).map(p => [p.type, p.value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+}
+
+function istToUtcIsoLocal(date: string, hhmm: string): string {
+  const [y, mo, d] = date.split('-').map(Number);
+  const [h, mi] = hhmm.split(':').map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h - 5, mi - 30)).toISOString();
+}
 
 interface MarketSchedule {
   is_trading_on_today_nse: boolean;
@@ -670,6 +1138,21 @@ function sumTsPointSeries(seriesList: TsPoint[][]): TsPoint[] {
   return [...totals.entries()].map(([ts, v]) => ({ ts, v })).sort((a, b) => a.ts - b.ts);
 }
 
+// Append a live TsPoint using 1-min bucket logic:
+// same minute → replace last point (animated); new minute → push new point
+function appendTsPoint(series: TsPoint[], value: number, maxPoints = 800): TsPoint[] {
+  if (!isFinite(value)) return series;
+  const ts = Math.floor(Date.now() / 60000) * 60000;
+  const next = [...series];
+  const last = next[next.length - 1];
+  if (last && last.ts === ts) {
+    next[next.length - 1] = { ts, v: value };
+  } else {
+    next.push({ ts, v: value });
+  }
+  return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
+}
+
 // ── Per-strike historical line chart (canvas) ─────────────────────────────────
 
 function buildSparklinePath(points: TsPoint[], width: number, height: number): string {
@@ -732,18 +1215,30 @@ function CellSparkline({
 // ── Strike popup — TradingView-style chart ────────────────────────────────────
 interface PopupSeries { label: string; color: string; points: TsPoint[] }
 
-function PopupMetricChart({
-  title,
-  series,
-  formatter,
+// Single multi-pane chart:
+//   Pane 0 — Delta×OI  (CE Δ×OI left, PE Δ×OI right)
+//   Pane 1 — OI        (CE OI left, PE OI right)
+//   Pane 2 — PCR       (single right scale)
+function StrikeMultiPaneChart({
+  deltaOiSeries,
+  oiSeries,
+  pcrSeries,
 }: {
-  title: string;
-  series: PopupSeries[];
-  formatter: (value: number) => string;
+  deltaOiSeries: PopupSeries[];
+  oiSeries: PopupSeries[];
+  pcrSeries: PopupSeries[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const lineMapRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const seriesRefsRef = useRef<{
+    ceDeltaOi: ISeriesApi<'Line'> | null;
+    peDeltaOi: ISeriesApi<'Line'> | null;
+    ceOi:      ISeriesApi<'Line'> | null;
+    peOi:      ISeriesApi<'Line'> | null;
+    pcr:       ISeriesApi<'Line'> | null;
+  }>({ ceDeltaOi: null, peDeltaOi: null, ceOi: null, peOi: null, pcr: null });
+  const initialFitDoneRef = useRef(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -754,13 +1249,21 @@ function PopupMetricChart({
       layout: {
         background: { color: '#0b1118' },
         textColor: '#93a4bc',
+        panes: {
+          separatorColor: 'rgba(255,255,255,0.08)',
+          separatorHoverColor: 'rgba(255,255,255,0.18)',
+          enableResize: true,
+        },
       },
-      grid: { vertLines: { color: 'rgba(148,163,184,0.08)' }, horzLines: { color: 'rgba(148,163,184,0.08)' } },
-      rightPriceScale: { visible: true, borderColor: 'rgba(148,163,184,0.16)' },
+      grid: { vertLines: { color: 'rgba(148,163,184,0.07)' }, horzLines: { color: 'rgba(148,163,184,0.07)' } },
+      rightPriceScale: { visible: true, borderColor: 'rgba(148,163,184,0.14)' },
+      leftPriceScale:  { visible: true, borderColor: 'rgba(148,163,184,0.14)' },
       timeScale: {
-        borderColor: 'rgba(148,163,184,0.16)',
+        borderColor: 'rgba(148,163,184,0.14)',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 0,
+        lockVisibleTimeRangeOnResize: true,
         tickMarkFormatter: (ts: number) =>
           new Date(ts * 1000).toLocaleTimeString('en-IN', {
             timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -776,62 +1279,131 @@ function PopupMetricChart({
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     });
-    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.12, bottom: 0.12 } });
+
+    // ── Pane 0: Delta×OI ────────────────────────────────────────────────────────
+    const ceDeltaOi = chart.addSeries(LineSeries, {
+      color: '#38d4c8', lineWidth: 2, title: 'CE Δ×OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceScaleId: 'left',
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    }, 0);
+    const peDeltaOi = chart.addSeries(LineSeries, {
+      color: '#f59e0b', lineWidth: 2, title: 'PE Δ×OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceScaleId: 'right',
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    }, 0);
+
+    // ── Pane 1: OI ──────────────────────────────────────────────────────────────
+    const ceOi = chart.addSeries(LineSeries, {
+      color: '#38d4c8', lineWidth: 2, title: 'CE OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceScaleId: 'oi-left',
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    }, 1);
+    const peOi = chart.addSeries(LineSeries, {
+      color: '#f59e0b', lineWidth: 2, title: 'PE OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceScaleId: 'oi-right',
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    }, 1);
+
+    // ── Pane 2: PCR ─────────────────────────────────────────────────────────────
+    const pcr = chart.addSeries(LineSeries, {
+      color: '#a78bfa', lineWidth: 2, title: 'PCR',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceScaleId: 'pcr',
+      priceFormat: { type: 'custom', formatter: (v: number) => v.toFixed(2), minMove: 0.01 } as any,
+    }, 2);
+
+    chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+    ceOi.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.1, bottom: 0.1 } });
+    peOi.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.1, bottom: 0.1 } });
+    pcr.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.12, bottom: 0.12 } });
+    try { chart.panes()[1]?.setHeight(120); chart.panes()[2]?.setHeight(90); } catch {}
+
+    seriesRefsRef.current = { ceDeltaOi, peDeltaOi, ceOi, peOi, pcr };
     chartRef.current = chart;
-    lineMapRef.current = new Map();
+    initialFitDoneRef.current = false;
+
+    // ── Crosshair tooltip ───────────────────────────────────────────────────────
+    chart.subscribeCrosshairMove(param => {
+      const tooltip = tooltipRef.current;
+      if (!tooltip) return;
+      if (!param.point || !param.seriesData.size) { tooltip.style.display = 'none'; return; }
+      const refs = seriesRefsRef.current;
+      const entries: { color: string; label: string; fmt: (v: number) => string; ser: ISeriesApi<'Line'> | null }[] = [
+        { color: '#38d4c8', label: 'CE Δ×OI', fmt: fmtOi,              ser: refs.ceDeltaOi },
+        { color: '#f59e0b', label: 'PE Δ×OI', fmt: fmtOi,              ser: refs.peDeltaOi },
+        { color: '#38d4c8', label: 'CE OI',   fmt: fmtOi,              ser: refs.ceOi },
+        { color: '#f59e0b', label: 'PE OI',   fmt: fmtOi,              ser: refs.peOi },
+        { color: '#a78bfa', label: 'PCR',     fmt: (v: number) => v.toFixed(2), ser: refs.pcr },
+      ];
+      const parts = entries
+        .map(e => {
+          if (!e.ser) return null;
+          const d = param.seriesData.get(e.ser) as { value?: number } | undefined;
+          if (d?.value == null) return null;
+          return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+            <span style="width:7px;height:7px;border-radius:50%;background:${e.color};flex-shrink:0"></span>
+            <span style="color:#8896a8;font-size:10px">${e.label}:</span>
+            <span style="color:#e2e8f0;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums">${e.fmt(d.value)}</span>
+          </div>`;
+        })
+        .filter(Boolean);
+      if (!parts.length) { tooltip.style.display = 'none'; return; }
+      tooltip.innerHTML = parts.join('');
+      tooltip.style.display = 'flex';
+      tooltip.style.right = '68px';
+      tooltip.style.top = `${Math.max(4, param.point.y - 10)}px`;
+    });
 
     return () => {
-      lineMapRef.current.clear();
+      seriesRefsRef.current = { ceDeltaOi: null, peDeltaOi: null, ceOi: null, peOi: null, pcr: null };
       chartRef.current = null;
+      initialFitDoneRef.current = false;
       chart.remove();
     };
   }, []);
 
   useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
+    const refs = seriesRefsRef.current;
+    const toLineData = (pts: TsPoint[]): LineData[] =>
+      pts.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.v }))
+         .sort((a, b) => (a.time as number) - (b.time as number));
 
-    const lineMap = lineMapRef.current;
-    const currentLabels = new Set(series.map(item => item.label));
+    refs.ceDeltaOi?.setData(toLineData(deltaOiSeries.find(s => s.label === 'CE Δ×OI')?.points ?? []));
+    refs.peDeltaOi?.setData(toLineData(deltaOiSeries.find(s => s.label === 'PE Δ×OI')?.points ?? []));
+    refs.ceOi?.setData(toLineData(oiSeries.find(s => s.label === 'CE OI')?.points ?? []));
+    refs.peOi?.setData(toLineData(oiSeries.find(s => s.label === 'PE OI')?.points ?? []));
+    refs.pcr?.setData(toLineData(pcrSeries.find(s => s.label === 'PCR')?.points ?? []));
 
-    for (const [label, line] of lineMap.entries()) {
-      if (!currentLabels.has(label)) {
-        try { chart.removeSeries(line); } catch {}
-        lineMap.delete(label);
-      }
+    const hasData = [deltaOiSeries, oiSeries, pcrSeries].flat().some(s => s.points.length > 0);
+    if (!initialFitDoneRef.current && hasData) {
+      chartRef.current?.timeScale().fitContent();
+      initialFitDoneRef.current = true;
     }
-
-    series.forEach(item => {
-      let line = lineMap.get(item.label);
-      if (!line) {
-        line = chart.addSeries(LineSeries, {
-          color: item.color,
-          lineWidth: 2,
-          title: item.label,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerRadius: 3,
-          priceFormat: { type: 'custom', formatter, minMove: 0.0001 } as any,
-        });
-        lineMap.set(item.label, line);
-      }
-      const data: LineData[] = item.points
-        .map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.v }))
-        .sort((a, b) => (a.time as number) - (b.time as number));
-      line.setData(data);
-    });
-
-    if (series.some(item => item.points.length > 0)) {
-      chart.timeScale().fitContent();
-    }
-  }, [formatter, series]);
+  }, [deltaOiSeries, oiSeries, pcrSeries]);
 
   return (
-    <div className={s.popupPane}>
-      <div className={s.popupPaneLabel}>
-        {title}
-      </div>
-      <div ref={containerRef} className={s.popupChartFrame} />
+    <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div
+        ref={tooltipRef}
+        style={{
+          display: 'none',
+          position: 'absolute',
+          flexDirection: 'column',
+          gap: 3,
+          background: 'rgba(11,17,24,0.93)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 6,
+          padding: '6px 9px',
+          pointerEvents: 'none',
+          zIndex: 10,
+        }}
+      />
     </div>
   );
 }
@@ -897,10 +1469,12 @@ function StrikeDetailPopup({
             <button onClick={onClose} className={s.popupClose}>✕</button>
           </div>
         </div>
-        <div className={s.popupBody}>
-          <PopupMetricChart title="Delta × OI" series={deltaOiSeries} formatter={fmtOi} />
-          <PopupMetricChart title="OI" series={oiSeries} formatter={fmtOi} />
-          <PopupMetricChart title="PCR" series={pcrSeries} formatter={v => v.toFixed(2)} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '10px 12px 12px' }}>
+          <StrikeMultiPaneChart
+            deltaOiSeries={deltaOiSeries}
+            oiSeries={oiSeries}
+            pcrSeries={pcrSeries}
+          />
         </div>
       </div>
     </div>
@@ -1046,6 +1620,144 @@ function DeltaOiChart({ chartRows, spot }: { chartRows: ChartRow[]; spot: number
   );
 }
 
+// ── OI trend (cumulative CE vs PE over time) ─────────────────────────────────
+interface SummaryTrendPoint { ts: number; call: number; put: number }
+
+function appendSummaryTrendPoint(
+  prev: SummaryTrendPoint[],
+  callValue: number,
+  putValue: number,
+  maxPoints = 480,
+): SummaryTrendPoint[] {
+  const ts = Math.floor(Date.now() / 60000) * 60000;
+  const next = [...prev];
+  const last = next[next.length - 1];
+  if (last && last.ts === ts) {
+    next[next.length - 1] = { ts, call: callValue, put: putValue };
+  } else {
+    next.push({ ts, call: callValue, put: putValue });
+  }
+  return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
+}
+
+function OiTrendChart({ history }: { history: SummaryTrendPoint[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const callSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const initialFitDoneRef = useRef(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const chart = createChart(el, {
+      autoSize: true,
+      layout: { background: { color: '#0b1118' }, textColor: '#93a4bc' },
+      grid: { vertLines: { color: 'rgba(148,163,184,0.07)' }, horzLines: { color: 'rgba(148,163,184,0.07)' } },
+      rightPriceScale: { visible: true, borderColor: 'rgba(148,163,184,0.14)' },
+      timeScale: {
+        borderColor: 'rgba(148,163,184,0.14)',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 0,
+        lockVisibleTimeRangeOnResize: true,
+        tickMarkFormatter: (ts: number) =>
+          new Date(ts * 1000).toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
+          }),
+      },
+      crosshair: { mode: 1 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+    });
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+    const callSeries = chart.addSeries(LineSeries, {
+      color: '#38d4c8', lineWidth: 2, title: 'CE OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    });
+    const putSeries = chart.addSeries(LineSeries, {
+      color: '#f59e0b', lineWidth: 2, title: 'PE OI',
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+      priceFormat: { type: 'custom', formatter: fmtOi, minMove: 1 } as any,
+    });
+    callSeriesRef.current = callSeries;
+    putSeriesRef.current = putSeries;
+    chartRef.current = chart;
+    initialFitDoneRef.current = false;
+
+    // Crosshair tooltip on right Y axis
+    chart.subscribeCrosshairMove(param => {
+      const tooltip = tooltipRef.current;
+      if (!tooltip) return;
+      if (!param.point || !param.seriesData.size) { tooltip.style.display = 'none'; return; }
+      const callD = param.seriesData.get(callSeries) as { value?: number } | undefined;
+      const putD  = param.seriesData.get(putSeries)  as { value?: number } | undefined;
+      if (callD?.value == null && putD?.value == null) { tooltip.style.display = 'none'; return; }
+      tooltip.innerHTML = [
+        callD?.value != null ? `<div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#38d4c8;flex-shrink:0"></span><span style="color:#93a4bc;font-size:10px">CE OI:</span><span style="color:#e2e8f0;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums">${fmtOi(callD.value)}</span></div>` : '',
+        putD?.value  != null ? `<div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0"></span><span style="color:#93a4bc;font-size:10px">PE OI:</span><span style="color:#e2e8f0;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums">${fmtOi(putD.value)}</span></div>` : '',
+      ].join('');
+      tooltip.style.display = 'flex';
+      tooltip.style.right = '64px';
+      tooltip.style.top = `${Math.max(4, param.point.y - 20)}px`;
+    });
+
+    return () => {
+      callSeriesRef.current = null;
+      putSeriesRef.current = null;
+      chartRef.current = null;
+      initialFitDoneRef.current = false;
+      chart.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const callData: LineData[] = history.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.call }));
+    const putData: LineData[]  = history.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.put }));
+    callSeriesRef.current?.setData(callData);
+    putSeriesRef.current?.setData(putData);
+    // fitContent only on first data load
+    if (!initialFitDoneRef.current && history.length > 0) {
+      chartRef.current?.timeScale().fitContent();
+      initialFitDoneRef.current = true;
+    }
+  }, [history]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '6px 12px', background: '#0e1117', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Cumulative OI Trend</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#38d4c8' }}>
+          <span style={{ width: 10, height: 2, background: '#38d4c8', display: 'inline-block', borderRadius: 1 }} />CE OI
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f59e0b' }}>
+          <span style={{ width: 10, height: 2, background: '#f59e0b', display: 'inline-block', borderRadius: 1 }} />PE OI
+        </span>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <div ref={containerRef} style={{ height: 180 }} />
+        <div
+          ref={tooltipRef}
+          style={{
+            display: 'none',
+            position: 'absolute',
+            flexDirection: 'column',
+            gap: 3,
+            background: 'rgba(11,17,24,0.92)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 6,
+            padding: '5px 8px',
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function CumulativeOiChain({ visible }: Props) {
   const { nubraInstruments } = useInstrumentsCtx();
   const allSymbols = useMemo(() => buildSuggestions(nubraInstruments), [nubraInstruments]);
@@ -1063,6 +1775,16 @@ export default function CumulativeOiChain({ visible }: Props) {
   const [error, setError] = useState('');
   const [deltaOi, setDeltaOi] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [summaryOiTrendHistory, setSummaryOiTrendHistory] = useState<SummaryTrendPoint[]>([]);
+  const [summaryVolTrendHistory, setSummaryVolTrendHistory] = useState<SummaryTrendPoint[]>([]);
+  const [summaryDeltaTrendHistory, setSummaryDeltaTrendHistory] = useState<SummaryTrendPoint[]>([]);
+  const summaryOiHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
+  const summaryVolHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
+  const summaryOiChgHistory = useMemo<SummaryCardTrendPoint[]>(() => {
+    if (summaryOiTrendHistory.length === 0) return [];
+    const base = summaryOiTrendHistory[0];
+    return summaryOiTrendHistory.map(p => ({ ts: p.ts, call: p.call - base.call, put: p.put - base.put }));
+  }, [summaryOiTrendHistory]);
   const [histDate, setHistDate] = useState(() => todayIst());
   const [histIsLive, setHistIsLive] = useState(false);
   // key = `${strike}:${expiry}:${side}` → TsPoint[]
@@ -1162,7 +1884,18 @@ export default function CumulativeOiChain({ visible }: Props) {
           pickedExpiries.map(async expiry => [expiry, await fetchOptionChainSnapshot(session, resolved.nubraSym, resolved.exchange, expiry)] as const),
         );
         if (cancelled) return;
-        setChains(Object.fromEntries(entries));
+        const chainMap = Object.fromEntries(entries);
+        setChains(chainMap);
+        // Seed OI / vol / delta trend from REST snapshot
+        const totalCe  = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + r.ce.oi, 0), 0);
+        const totalPe  = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + r.pe.oi, 0), 0);
+        const totalCeV = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + r.ce.volume, 0), 0);
+        const totalPeV = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + r.pe.volume, 0), 0);
+        const totalCeD = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.ce.delta || 0) * (r.ce.oi || 0)), 0), 0);
+        const totalPeD = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.pe.delta || 0) * (r.pe.oi || 0)), 0), 0);
+        if (totalCe > 0 || totalPe > 0)   setSummaryOiTrendHistory(prev => appendSummaryTrendPoint(prev, totalCe, totalPe));
+        if (totalCeV > 0 || totalPeV > 0) setSummaryVolTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeV, totalPeV));
+        if (totalCeD > 0 || totalPeD > 0) setSummaryDeltaTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeD, totalPeD));
       } catch (err: any) {
         if (!cancelled) setError(err?.message ?? 'Failed to load cumulative chain');
       } finally {
@@ -1199,7 +1932,20 @@ export default function CumulativeOiChain({ visible }: Props) {
         if (msg.type !== 'option' || !msg.data?.expiry) return;
         const expiry = String(msg.data.expiry);
         const live = buildChainSnapshotWs(msg.data.ce ?? [], msg.data.pe ?? [], msg.data.at_the_money_strike ?? 0, msg.data.current_price ?? 0);
-        setChains(prev => ({ ...prev, [expiry]: mergeChainSnapshot(prev[expiry], live) }));
+        setChains(prev => {
+          const next = { ...prev, [expiry]: mergeChainSnapshot(prev[expiry], live) };
+          // Append OI / vol / delta trend from merged chains
+          const totalCe  = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.ce.oi, 0), 0);
+          const totalPe  = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.pe.oi, 0), 0);
+          const totalCeV = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.ce.volume, 0), 0);
+          const totalPeV = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.pe.volume, 0), 0);
+          const totalCeD = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.ce.delta || 0) * (r.ce.oi || 0)), 0), 0);
+          const totalPeD = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.pe.delta || 0) * (r.pe.oi || 0)), 0), 0);
+          if (totalCe > 0 || totalPe > 0)   setSummaryOiTrendHistory(prev => appendSummaryTrendPoint(prev, totalCe, totalPe));
+          if (totalCeV > 0 || totalPeV > 0) setSummaryVolTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeV, totalPeV));
+          if (totalCeD > 0 || totalPeD > 0) setSummaryDeltaTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeD, totalPeD));
+          return next;
+        });
       } catch {
         // ignore malformed frames
       }
@@ -1261,6 +2007,110 @@ export default function CumulativeOiChain({ visible }: Props) {
     histDataRef.current = {};
     setHistData({});
   }, [symbol, pickedExpiries.join(','), histDate]);
+
+  // Reset OI / vol / delta trend when symbol or expiry changes
+  useEffect(() => {
+    setSummaryOiTrendHistory([]);
+    setSummaryVolTrendHistory([]);
+    setSummaryDeltaTrendHistory([]);
+  }, [symbol, pickedExpiries.join(',')]);
+
+  // Fetch OI + vol history from Nubra timeseries on mount / symbol / expiry change
+  useEffect(() => {
+    let cancelled = false;
+    const resolved2 = resolveNubra(symbol, nubraInstruments);
+    if (!resolved2.nubraSym || !resolved2.exchange || pickedExpiries.length === 0) return;
+
+    const chainValues = pickedExpiries.map(exp => buildNubraChainValue(resolved2.nubraSym, exp));
+    const now = toIstNow();
+    // Match MasterOptionChain: startDate = 09:15 IST, endDate = current minute IST
+    const startDate = istToUtcIsoLocal(histDate, '09:15');
+    const endDate   = istToUtcIsoLocal(now.date, now.time);
+    const cacheKey  = [resolved2.nubraSym, resolved2.exchange, pickedExpiries.join(','), histDate, now.time.slice(0, 5)].join('|');
+
+    const load = async () => {
+      // OI history
+      const oiCached = summaryOiHistoryCacheRef.current.get(cacheKey);
+      if (oiCached) {
+        if (!cancelled) setSummaryOiTrendHistory(oiCached);
+      } else {
+        try {
+          const oiHist = await fetchChainOiHistory(resolved2.exchange, chainValues, startDate, endDate);
+          if (!cancelled) {
+            summaryOiHistoryCacheRef.current.set(cacheKey, oiHist);
+            setSummaryOiTrendHistory(oiHist);
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Vol history
+      const volCached = summaryVolHistoryCacheRef.current.get(cacheKey);
+      if (volCached) {
+        if (!cancelled) setSummaryVolTrendHistory(volCached);
+      } else {
+        try {
+          const volHist = await fetchChainVolHistory(resolved2.exchange, chainValues, startDate, endDate);
+          if (!cancelled) {
+            summaryVolHistoryCacheRef.current.set(cacheKey, volHist);
+            setSummaryVolTrendHistory(volHist);
+          }
+        } catch { /* ignore */ }
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, pickedExpiries.join(','), histDate, histIsLive, nubraInstruments]);
+
+  // ── Live WS append into popup histData ───────────────────────────────────────
+  // When the strike popup is open and market is live, append CE/PE OI + delta×OI
+  // from the latest WS chains tick into histData using 1-min bucket logic.
+  useEffect(() => {
+    if (!popupCell || !histIsLive) return;
+    const { strike } = popupCell;
+
+    setHistData(prev => {
+      let changed = false;
+      const next = { ...prev };
+
+      for (const expiry of pickedExpiries) {
+        const row = chains[expiry]?.rows.find(r => r.strike === strike);
+        if (!row) continue;
+
+        const ceKey = `${strike}:${expiry}:CE`;
+        const peKey = `${strike}:${expiry}:PE`;
+
+        const ceOi      = row.ce.oi;
+        const peOi      = row.pe.oi;
+        const ceDelta   = row.ce.delta;
+        const peDelta   = row.pe.delta;
+        const ceDeltaOi = Math.abs(ceDelta) * ceOi;
+        const peDeltaOi = Math.abs(peDelta) * peOi;
+
+        if (ceOi > 0 || ceDeltaOi > 0) {
+          const prev = next[ceKey] ?? EMPTY_HISTORY_SERIES;
+          const oi      = appendTsPoint(prev.oi,      ceOi);
+          const delta   = appendTsPoint(prev.delta,   ceDelta);
+          const deltaOi = appendTsPoint(prev.deltaOi, ceDeltaOi);
+          next[ceKey] = { oi, delta, deltaOi };
+          changed = true;
+        }
+
+        if (peOi > 0 || peDeltaOi > 0) {
+          const prev = next[peKey] ?? EMPTY_HISTORY_SERIES;
+          const oi      = appendTsPoint(prev.oi,      peOi);
+          const delta   = appendTsPoint(prev.delta,   peDelta);
+          const deltaOi = appendTsPoint(prev.deltaOi, peDeltaOi);
+          next[peKey] = { oi, delta, deltaOi };
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chains]);  // fires every WS tick — popupCell/pickedExpiries/histIsLive read from closure
 
 
   const baseExpiry = pickedExpiries[0] ?? '';
@@ -1334,6 +2184,27 @@ export default function CumulativeOiChain({ visible }: Props) {
       peDeltaOi: Math.abs(row.pe.delta) * row.pe.oi,
     }));
   }, [primaryChain, strikeCount]);
+
+  const summaryTotals = useMemo(() => {
+    let callOi = 0; let putOi = 0;
+    let callVolume = 0; let putVolume = 0;
+    let callDelta = 0; let putDelta = 0;
+    for (const snap of Object.values(chains)) {
+      for (const row of snap.rows) {
+        callOi     += row.ce.oi;
+        putOi      += row.pe.oi;
+        callVolume += row.ce.volume;
+        putVolume  += row.pe.volume;
+        callDelta  += Math.abs((row.ce.delta || 0) * (row.ce.oi || 0));
+        putDelta   += Math.abs((row.pe.delta || 0) * (row.pe.oi || 0));
+      }
+    }
+    const baseCall = summaryOiTrendHistory[0]?.call ?? callOi;
+    const basePut  = summaryOiTrendHistory[0]?.put  ?? putOi;
+    const callOiChg = callOi - baseCall;
+    const putOiChg  = putOi  - basePut;
+    return { callOi, putOi, callOiChg, putOiChg, callVolume, putVolume, callDelta, putDelta };
+  }, [chains, summaryOiTrendHistory]);
 
   // Fetch all picked expiries for a strike on demand
   const fetchStrikeOnDemand = useCallback(async (strike: number) => {
@@ -1506,9 +2377,62 @@ export default function CumulativeOiChain({ visible }: Props) {
       {!error && loading && <div className={s.bannerInfo}>Loading cumulative OI chain...</div>}
       {!loading && !error && pickedExpiries.length === 0 && <div className={s.bannerInfo}>Select at least one expiry</div>}
 
+      {pickedExpiries.length > 0 && (
+        <section className={s.summarySection}>
+          <SummaryCard
+            title="Open Interest"
+            subtitle="Total CE OI vs PE OI"
+            callValue={summaryTotals.callOi}
+            putValue={summaryTotals.putOi}
+            callChgValue={summaryTotals.callOiChg}
+            putChgValue={summaryTotals.putOiChg}
+            pcr={summaryTotals.callOi > 0 ? summaryTotals.putOi / summaryTotals.callOi : 0}
+            formatValue={fmtOi}
+            ringMode="standard"
+            trendHistory={summaryOiTrendHistory}
+            trendChgHistory={summaryOiChgHistory}
+          />
+          <SummaryCard
+            title="OI Change"
+            subtitle="CE vs PE OI change from day open"
+            callValue={summaryTotals.callOiChg}
+            putValue={summaryTotals.putOiChg}
+            pcr={summaryTotals.callOiChg !== 0 ? summaryTotals.putOiChg / summaryTotals.callOiChg : 0}
+            formatValue={fmtOi}
+            ringMode="signed"
+            trendHistory={summaryOiChgHistory}
+          />
+          <SummaryCard
+            title="Volume"
+            subtitle="Total CE volume vs PE volume"
+            callValue={summaryTotals.callVolume}
+            putValue={summaryTotals.putVolume}
+            pcr={summaryTotals.callVolume > 0 ? summaryTotals.putVolume / summaryTotals.callVolume : 0}
+            formatValue={fmtOi}
+            ringMode="standard"
+            trendHistory={summaryVolTrendHistory}
+          />
+          <SummaryCard
+            title="Delta OI"
+            subtitle="Absolute delta exposure from OI"
+            callValue={summaryTotals.callDelta}
+            putValue={summaryTotals.putDelta}
+            pcr={summaryTotals.callDelta > 0 ? summaryTotals.putDelta / summaryTotals.callDelta : 0}
+            formatValue={fmtMetricCompact}
+            ringMode="standard"
+            trendHistory={summaryDeltaTrendHistory}
+          />
+        </section>
+      )}
+
       {showChart && (
-        <div style={{ height: 340, flexShrink: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <DeltaOiChart chartRows={chartRows} spot={primaryChain?.spot ?? 0} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <div style={{ height: 340, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <DeltaOiChart chartRows={chartRows} spot={primaryChain?.spot ?? 0} />
+          </div>
+          <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <OiTrendChart history={summaryOiTrendHistory} />
+          </div>
         </div>
       )}
 

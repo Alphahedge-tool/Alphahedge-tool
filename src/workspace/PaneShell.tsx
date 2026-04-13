@@ -261,7 +261,7 @@ function resolveDefaultInstrument(instruments: Instrument[]) {
 }
 
 export function PaneShell({
-  pane, instruments, isActive, onPaneClick, onViewChange, onSearchOpen, activeLayout, onLayoutChange, onIntervalChange, onOiShowChange, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, onVwapShowChange, onVwapAnchorChange, onVwapColorChange, onVwapExpiryDayChange, onTwapShowChange, drawingRef, onDrawingsChange, style,
+  pane, instruments, isActive, onPaneClick, onViewChange, onInstrumentChange, onSearchOpen, activeLayout, onLayoutChange, onIntervalChange, onOiShowChange, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, onVwapShowChange, onVwapAnchorChange, onVwapColorChange, onVwapExpiryDayChange, onTwapShowChange, drawingRef, onDrawingsChange, style,
 }: PaneShellProps) {
   const isCandle = pane.viewType === 'candle';
   // If no instrument selected yet, fall back to NIFTY (or first available) so chart never shows blank
@@ -289,6 +289,7 @@ export function PaneShell({
                 instrument={effectiveInstrument}
                 instruments={instruments}
                 onSearchOpen={onSearchOpen}
+                onInstrumentChange={ins => onInstrumentChange(ins)}
                 onViewChange={onViewChange}
                 activeLayout={activeLayout}
                 onLayoutChange={onLayoutChange}

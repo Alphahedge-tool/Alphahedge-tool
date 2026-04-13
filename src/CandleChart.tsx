@@ -28,6 +28,7 @@ interface Props {
   instrument: Instrument;
   instruments?: Instrument[];
   onSearchOpen?: () => void;
+  onInstrumentChange?: (ins: Instrument) => void;
   visible?: boolean;
   onViewChange?: (v: 'candle' | 'straddle' | 'oiprofile') => void;
   activeLayout?: string;
@@ -110,6 +111,37 @@ function fmtOI(n: number) {
   if (n >= 1_00_000) return (n / 1_00_000).toFixed(2) + ' L';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+
+function instrumentDisplayLabel(ins: { name: string; trading_symbol: string; instrument_type: string; strike_price: number | null; expiry: number | null; underlying_symbol: string }): string {
+  const t = ins.instrument_type;
+  if (t === 'CE' || t === 'PE') {
+    // e.g. "NIFTY 13 Apr 26 24000 CE"
+    const sym = ins.underlying_symbol || ins.name;
+    const strike = ins.strike_price != null ? ins.strike_price.toLocaleString('en-IN') : '';
+    if (ins.expiry) {
+      const d = new Date(ins.expiry);
+      const day = d.toLocaleDateString('en-IN', { day: '2-digit', timeZone: 'Asia/Kolkata' });
+      const mon = d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' });
+      const yr = d.toLocaleDateString('en-IN', { year: '2-digit', timeZone: 'Asia/Kolkata' });
+      return `${sym} ${day} ${mon} ${yr} ${strike} ${t}`;
+    }
+    return `${sym} ${strike} ${t}`;
+  }
+  if (t === 'FUT') {
+    // e.g. "NIFTY 13 Apr 26 FUT"
+    const sym = ins.underlying_symbol || ins.name;
+    if (ins.expiry) {
+      const d = new Date(ins.expiry);
+      const day = d.toLocaleDateString('en-IN', { day: '2-digit', timeZone: 'Asia/Kolkata' });
+      const mon = d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' });
+      const yr = d.toLocaleDateString('en-IN', { year: '2-digit', timeZone: 'Asia/Kolkata' });
+      return `${sym} ${day} ${mon} ${yr} FUT`;
+    }
+    return `${sym} FUT`;
+  }
+  // INDEX / EQ / others — use name first
+  return ins.name || ins.trading_symbol;
 }
 
 function hexToRgb(hex: string) {
@@ -498,10 +530,12 @@ function OptionChainPanel({
   instrument,
   instruments,
   open,
+  onInstrumentSelect,
 }: {
   instrument: Instrument;
   instruments: Instrument[];
   open: boolean;
+  onInstrumentSelect?: (ins: Instrument) => void;
 }) {
   const underlying = instrument.underlying_symbol || instrument.trading_symbol;
 
@@ -594,6 +628,18 @@ function OptionChainPanel({
   }, [panelWidth]);
 
   const curMetricLabel = OC_METRICS.find(m => m.id === metric)?.label ?? metric.toUpperCase();
+
+  const instrByKey = useMemo(() => {
+    const map = new Map<string, Instrument>();
+    for (const i of instruments) if (i.instrument_key) map.set(i.instrument_key, i);
+    return map;
+  }, [instruments]);
+
+  const handleCellClick = useCallback((key: string | null) => {
+    if (!key || !onInstrumentSelect) return;
+    const ins = instrByKey.get(key);
+    if (ins) onInstrumentSelect(ins);
+  }, [instrByKey, onInstrumentSelect]);
 
   if (!open) return null;
 
@@ -704,14 +750,18 @@ function OptionChainPanel({
                     className={`ocp-row ${isAtm ? 'ocp-row-atm' : ri % 2 === 0 ? 'ocp-row-even' : 'ocp-row-odd'}`}
                     style={{ borderBottom: showAtmLine ? '1px dashed rgba(224,168,0,0.4)' : '1px solid rgba(255,255,255,0.06)' }}
                   >
-                    <td className={cx(s.ocTdCall, ceVal === '—' ? s.ocTdCallEmpty : '')}
+                    <td
+                      className={cx(s.ocTdCall, ceVal === '—' ? s.ocTdCallEmpty : '', onInstrumentSelect && row.ceKey ? s.ocTdClickable : '')}
                       style={{ background: isCeItm ? 'rgba(0,168,132,0.18)' : undefined }}
+                      onClick={() => handleCellClick(row.ceKey)}
                     >{ceVal}</td>
                     <td className={cx(s.ocTdStrike, isAtm ? s.ocTdStrikeAtm : '')}>
                       {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                     </td>
-                    <td className={cx(s.ocTdPut, peVal === '—' ? s.ocTdPutEmpty : '')}
+                    <td
+                      className={cx(s.ocTdPut, peVal === '—' ? s.ocTdPutEmpty : '', onInstrumentSelect && row.peKey ? s.ocTdClickable : '')}
                       style={{ background: isPeItm ? 'rgba(210,130,0,0.28)' : undefined }}
+                      onClick={() => handleCellClick(row.peKey)}
                     >{peVal}</td>
                   </tr>
                 );
@@ -1352,7 +1402,7 @@ function VwapSettingsPanel({
   );
 }
 
-export default function CandleChart({ instrument, instruments = [], onSearchOpen, visible = true, onViewChange, activeLayout, onLayoutChange, hideToolbar = false, defaultInterval, onIntervalChange, oiShowProp, onOiShowChange, optionChainOpenProp, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, vwapShowProp, onVwapShowChange, vwapAnchorProp, onVwapAnchorChange, vwapColorProp, onVwapColorChange, vwapExpiryDayProp, onVwapExpiryDayChange, twapShowProp, onTwapShowChange, drawingRef, onDrawingsChange }: Props) {
+export default function CandleChart({ instrument, instruments = [], onSearchOpen, onInstrumentChange, visible = true, onViewChange, activeLayout, onLayoutChange, hideToolbar = false, defaultInterval, onIntervalChange, oiShowProp, onOiShowChange, optionChainOpenProp, onOptionChainOpenChange, openOiSettingsRef, oiSettingsAnchorRef, vwapShowProp, onVwapShowChange, vwapAnchorProp, onVwapAnchorChange, vwapColorProp, onVwapColorChange, vwapExpiryDayProp, onVwapExpiryDayChange, twapShowProp, onTwapShowChange, drawingRef, onDrawingsChange }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const histLoadBarRef = useRef<HTMLDivElement>(null);
@@ -2644,7 +2694,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" className={s.searchIcon}>
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <span className={s.symbolName}>{instrument.name || instrument.trading_symbol}</span>
+            <span className={s.symbolName}>{instrumentDisplayLabel(instrument)}</span>
           </button>
 
           {/* ── Separator ── */}
@@ -2909,14 +2959,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             const raw = crosshairOHLC ?? (lastCandle ? { open: lastCandle.open, high: lastCandle.high, low: lastCandle.low, close: lastCandle.close, change: lastCandle.close - lastCandle.open, changePct: lastCandle.open > 0 ? ((lastCandle.close - lastCandle.open) / lastCandle.open) * 100 : 0 } : null);
             const d = raw;
             const changeColor = d ? (d.change >= 0 ? '#2ebd85' : '#f23645') : '#D1D4DC';
-            const symbolName = instrument.name || instrument.trading_symbol;
+            const symbolName = instrumentDisplayLabel(instrument);
             const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <div className={s.ohlcOverlay}>
                 {/* Symbol · interval · exchange */}
                 <span className={s.ohlcSymbol}>
                   {symbolName}
-                  <span className={s.ohlcMeta}>· {interval.label} · NSE</span>
+                  <span className={s.ohlcMeta}>· {interval.label} · {instrument.exchange || 'NSE'}</span>
                 </span>
                 {/* Live dot */}
                 {wsLive && <span className={s.ohlcLiveDot} />}
@@ -3037,6 +3087,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                 instrument={instrument}
                 instruments={instruments}
                 open={optionChainOpen}
+                onInstrumentSelect={onInstrumentChange}
               />
             )}
           </div>

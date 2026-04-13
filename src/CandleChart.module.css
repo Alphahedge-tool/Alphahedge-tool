@@ -336,6 +336,8 @@
 .ocTdStrikeAtm { color: #e0a800; }
 .ocTdPut       { padding: 7px 10px; font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; color: #f23645; }
 .ocTdPutEmpty  { color: #3D4150; }
+.ocTdClickable { cursor: pointer; }
+.ocTdClickable:hover { filter: brightness(1.35); background: rgba(255,255,255,0.05) !important; }
 
 /* ── Metric/Expiry dropdown (shared portal style) ── */
 .dropdownMenu {

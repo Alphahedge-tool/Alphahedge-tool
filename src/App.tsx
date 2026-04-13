@@ -207,53 +207,48 @@ function IconTrendingUp() {
 
 // ── Market ticker strip ───────────────────────────────────────────────────────
 const TICKER_SYMBOLS = [
-  { label: 'NIFTY',     symbol: 'NIFTY',     exchange: 'NSE' },
-  { label: 'BANKNIFTY', symbol: 'BANKNIFTY', exchange: 'NSE' },
-  { label: 'INDIA VIX', symbol: 'INDIA_VIX', exchange: 'NSE' },
-  { label: 'SENSEX',    symbol: 'SENSEX',    exchange: 'BSE' },
+  { label: 'NIFTY' },
+  { label: 'BANKNIFTY' },
+  { label: 'INDIA VIX' },
+  { label: 'SENSEX' },
 ] as const;
 
-interface TickerPrice { price: number; change: number; prev_close: number }
-
-function MarketTicker() {
-  const [prices, setPrices] = useState<Record<string, TickerPrice>>({});
-
-  const fetchAll = useCallback(async () => {
-    const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
-    if (!sessionToken) return;
-    await Promise.allSettled(
-      TICKER_SYMBOLS.map(async ({ symbol, exchange }) => {
-        try {
-          const res = await fetch(
-            `/api/nubra-price?symbol=${encodeURIComponent(symbol)}&exchange=${exchange}&session_token=${encodeURIComponent(sessionToken)}`,
-          );
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data.price != null) {
-            const price = data.price / 100;
-            const prev_close = (data.prev_close ?? data.price) / 100;
-            setPrices(prev => ({ ...prev, [symbol]: { price, change: price - prev_close, prev_close } }));
-          }
-        } catch {}
-      }),
-    );
+function LiveMarketBadge() {
+  const [live, setLive] = React.useState(isMarketOpen);
+  useEffect(() => {
+    // Re-check every 30s so it turns on/off at boundaries without page reload
+    const id = setInterval(() => setLive(isMarketOpen()), 30_000);
+    return () => clearInterval(id);
   }, []);
+  if (!live) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(34,197,94,0.28)' }}>
+      <span style={{
+        width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0,
+        boxShadow: '0 0 0 0 rgba(34,197,94,0.6)',
+        animation: 'livePulse 1.4s ease-in-out infinite',
+      }} />
+      <span style={{ fontSize: 11, fontWeight: 700, color: '#4ade80', letterSpacing: '0.08em' }}>LIVE</span>
+      <style>{`@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.6)}50%{box-shadow:0 0 0 5px rgba(34,197,94,0)}}`}</style>
+    </div>
+  );
+}
 
-  useEffect(() => { void fetchAll(); }, [fetchAll]);
+function MarketTicker({ nubraNavIndex }: { nubraNavIndex: Map<string, { ltp: number; changePct: number; pointChange: number }> }) {
+  const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, marginRight: 4 }}>
-      {TICKER_SYMBOLS.map(({ label, symbol }, idx) => {
-        const d = prices[symbol];
-        const absChg = d ? d.change : null;
-        const prevClose = d ? d.prev_close : null;
-        const chgPct = absChg != null && prevClose ? (absChg / prevClose) * 100 : null;
-        const up = absChg == null ? null : absChg >= 0;
+      {TICKER_SYMBOLS.map(({ label }, idx) => {
+        const d = nubraNavIndex.get(label);
+        const ltp = d?.ltp ?? null;
+        const changePct = d?.changePct ?? null;
+        const pointChange = d?.pointChange ?? null;
+        const up = pointChange == null ? null : pointChange >= 0;
         const chgColor = up == null ? '#6b7280' : up ? '#26a69a' : '#ef5350';
-        const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return (
-          <React.Fragment key={symbol}>
+          <React.Fragment key={label}>
             {idx > 0 && (
               <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 12px', flexShrink: 0 }} />
             )}
@@ -263,15 +258,15 @@ function MarketTicker() {
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                  {d ? fmtPrice(d.price) : '—'}
+                  {ltp != null ? fmtPrice(ltp) : '—'}
                 </span>
-                {absChg != null && up != null && chgPct != null && (
+                {pointChange != null && up != null && changePct != null && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: chgColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
                     {up
                       ? <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,1 9,9 1,9"/></svg>
                       : <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,9 9,1 1,1"/></svg>
                     }
-                    {up ? '+' : '-'}{fmtChg(absChg)} ({up ? '+' : '-'}{Math.abs(chgPct).toFixed(2)}%)
+                    {up ? '+' : '-'}{fmtChg(pointChange)} ({up ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%)
                   </span>
                 )}
               </div>
@@ -427,13 +422,13 @@ function getLegProfitPoints(leg: Leg, ltp = getLegEffectiveLtp(leg)): number {
   return leg.action === 'B' ? Math.max(0, ltp - leg.price) : Math.max(0, leg.price - ltp);
 }
 
-function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' = 'manual'): Leg {
+function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' = 'manual', tickAt?: number): Leg {
   const exitLtp = (ltp ?? 0) > 0 ? ltp! : getLegLiveLtp(leg);
   return {
     ...leg,
     isSquaredOff: true,
     squareOffLtp: exitLtp,
-    squareOffAt: Math.floor(Date.now() / 1000),
+    squareOffAt: tickAt ?? Math.floor(Date.now() / 1000),
     squareOffReason: reason,
     currLtp: exitLtp,
   };
@@ -453,6 +448,7 @@ function applyLegLiveUpdate(
   leg: Leg,
   nextLtp?: number | null,
   nextGreeks?: Partial<Greeks> | null,
+  tickAt?: number,
 ): Leg {
   if (leg.isSquaredOff) return leg;
 
@@ -468,11 +464,11 @@ function applyLegLiveUpdate(
   const updated = { ...leg, currLtp: resolvedLtp, currGreeks: mergedGreeks, entryGreeks };
   const slPoints = getLegStopLossPoints(updated);
   if (slPoints != null && getLegLossPoints(updated, resolvedLtp) >= slPoints - 1e-9) {
-    return squareOffLeg(updated, resolvedLtp, 'sl');
+    return squareOffLeg(updated, resolvedLtp, 'sl', tickAt);
   }
   const tpPoints = getLegTargetPoints(updated);
   if (tpPoints != null && getLegProfitPoints(updated, resolvedLtp) >= tpPoints - 1e-9) {
-    return squareOffLeg(updated, resolvedLtp, 'tp');
+    return squareOffLeg(updated, resolvedLtp, 'tp', tickAt);
   }
   return updated;
 }
@@ -1715,8 +1711,11 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           const cur = prev[idx];
           const newGreeks = { delta: md.delta ?? cur.currGreeks.delta, theta: md.theta ?? cur.currGreeks.theta, vega: md.vega ?? cur.currGreeks.vega, gamma: md.gamma ?? cur.currGreeks.gamma, iv: md.iv ?? cur.currGreeks.iv };
           if (cur.currLtp === md.ltp && cur.currGreeks.delta === newGreeks.delta) return prev;
+          // md.ltt is epoch ms from Upstox protobuf; squareOffAt is stored in seconds
+          const lttNum = md.ltt ? Number(md.ltt) : 0;
+          const tickAt = lttNum > 0 ? Math.floor(lttNum > 1e12 ? lttNum / 1000 : lttNum) : undefined;
           const next = [...prev];
-          next[idx] = applyLegLiveUpdate(cur, md.ltp, newGreeks);
+          next[idx] = applyLegLiveUpdate(cur, md.ltp, newGreeks, tickAt);
           return next;
         });
         // Update inactive tabs by instrumentKey
@@ -1731,7 +1730,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
               if (l.instrumentKey !== leg.instrumentKey) return l;
               tabChanged = true;
               const newGreeks = { delta: md.delta ?? l.currGreeks.delta, theta: md.theta ?? l.currGreeks.theta, vega: md.vega ?? l.currGreeks.vega, gamma: md.gamma ?? l.currGreeks.gamma, iv: md.iv ?? l.currGreeks.iv };
-              return applyLegLiveUpdate(l, md.ltp, newGreeks);
+              return applyLegLiveUpdate(l, md.ltp, newGreeks, tickAt);
             });
             next[kn] = tabChanged ? updated : tabLegs;
             if (tabChanged) anyChanged = true;
@@ -2731,10 +2730,10 @@ export default function App() {
     const TARGETS = [
       { label: 'NIFTY',     keys: ['NIFTY 50', 'NIFTY50', 'NIFTY', 'CNX NIFTY'],      exchange: 'NSE' },
       { label: 'BANKNIFTY', keys: ['NIFTY BANK', 'BANKNIFTY', 'BANK NIFTY'],           exchange: 'NSE' },
-      { label: 'INDIA VIX', keys: ['INDIA VIX', 'INDIAVIX', 'VIX'],                    exchange: 'NSE' },
+      { label: 'INDIA VIX', keys: ['INDIA_VIX', 'INDIA VIX', 'INDIAVIX', 'VIX'],       exchange: 'NSE', fallbackSymbol: 'INDIA_VIX' },
       { label: 'SENSEX',    keys: ['SENSEX', 'BSE SENSEX', 'S&P BSE SENSEX'],          exchange: 'BSE' },
     ];
-    return TARGETS.map(({ label, keys, exchange }) => {
+    return TARGETS.map(({ label, keys, exchange, fallbackSymbol }) => {
       const match = nubraInstruments.find(i =>
         i.option_type === 'N/A' &&
         keys.some(k =>
@@ -2742,8 +2741,8 @@ export default function App() {
           (i.nubra_name ?? '').toUpperCase() === k.toUpperCase()
         )
       );
-      // nubra_name is the zanskar symbol used for WS/REST; fall back to well-known name
-      const symbol = match?.nubra_name || match?.stock_name || label;
+      // nubra_name is the zanskar symbol used for WS/REST; fall back to explicit fallbackSymbol or label
+      const symbol = match?.nubra_name || match?.stock_name || fallbackSymbol || label;
       return { label, symbol, exchange };
     });
   }, [nubraInstruments]);
@@ -2754,7 +2753,7 @@ export default function App() {
   const NAV_LABEL_MAP: Record<string, string> = {
     'NIFTY': 'NIFTY', 'NIFTY 50': 'NIFTY', 'CNX NIFTY': 'NIFTY', 'NIFTY50': 'NIFTY',
     'BANKNIFTY': 'BANKNIFTY', 'NIFTY BANK': 'BANKNIFTY', 'BANK NIFTY': 'BANKNIFTY',
-    'INDIA VIX': 'INDIA VIX', 'INDIAVIX': 'INDIA VIX', 'VIX': 'INDIA VIX',
+    'INDIA VIX': 'INDIA VIX', 'INDIA_VIX': 'INDIA VIX', 'INDIAVIX': 'INDIA VIX', 'VIX': 'INDIA VIX',
     'SENSEX': 'SENSEX', 'BSE SENSEX': 'SENSEX', 'S&P BSE SENSEX': 'SENSEX',
   };
 
@@ -2790,7 +2789,32 @@ export default function App() {
       if (bse.length) ws.send(JSON.stringify({ action: 'subscribe', session_token: tok, data_type: 'index', symbols: bse, exchange: 'BSE' }));
     };
 
-    ws.onopen = () => {};
+    // ── REST snapshot — seeds the ticker before first WS tick arrives ──────────
+    const fetchSnapshot = async () => {
+      const tgts = nubraNavTargetsRef.current;
+      const tok = nubraNavSessionRef.current;
+      if (!tok || destroyed) return;
+      await Promise.allSettled(
+        tgts.map(async ({ label, symbol, exchange }) => {
+          try {
+            const res = await fetch(
+              `/api/nubra-price?symbol=${encodeURIComponent(symbol)}&exchange=${exchange}&session_token=${encodeURIComponent(tok)}`,
+            );
+            if (!res.ok || destroyed) return;
+            const data = await res.json();
+            if (data.price == null) return;
+            const ltp = data.price / 100;
+            const prev_close = (data.prev_close ?? data.price) / 100;
+            const pointChange = ltp - prev_close;
+            const changePct = prev_close > 0 ? (pointChange / prev_close) * 100 : 0;
+            setNubraNavIndex(prev => { const next = new Map(prev); next.set(label, { ltp, changePct, pointChange }); return next; });
+          } catch { /* silent */ }
+        }),
+      );
+    };
+    void fetchSnapshot();
+
+    ws.onopen = () => { sendSubs(); };
     ws.onmessage = (e) => {
       if (destroyed) return;
       try {
@@ -3221,12 +3245,19 @@ export default function App() {
       if (page !== 'chart') return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === '/') { openChartSearch(''); e.preventDefault(); return; }
-      if (e.key.length === 1) { openChartSearch(e.key); e.preventDefault(); }
+      const openWithActivePane = (seed: string) => {
+        const paneId = activePaneIdRef.current ?? workspaceState.panes[0]?.id;
+        if (paneId) {
+          paneSearchCallbackRef.current = ins => workspaceDispatch({ type: 'SET_INSTRUMENT', paneId, instrument: ins });
+        }
+        openChartSearch(seed);
+      };
+      if (e.key === '/') { openWithActivePane(''); e.preventDefault(); return; }
+      if (e.key.length === 1) { openWithActivePane(e.key); e.preventDefault(); }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [page, showChartSearch, openChartSearch, closeChartSearch]);
+  }, [page, showChartSearch, openChartSearch, closeChartSearch, workspaceState.panes, workspaceDispatch]);
 
   // Auto-activate first pane on mount / when panes change and nothing is active
   useEffect(() => {
@@ -3447,11 +3478,13 @@ export default function App() {
 
           {/* Center: market ticker — takes all remaining space */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, overflow: 'hidden' }}>
-            <MarketTicker />
+            <MarketTicker nubraNavIndex={nubraNavIndex} />
           </div>
 
-          {/* Right: basket + avatar */}
+          {/* Right: live indicator + basket + avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* Live market indicator */}
+            <LiveMarketBadge />
             {/* Basket icon button */}
             <button
               ref={basketBtnRef}

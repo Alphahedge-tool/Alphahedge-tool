@@ -943,10 +943,14 @@ interface SummaryMetricCardProps {
   subtitle: string;
   callValue: number;
   putValue: number;
+  callChgValue?: number;
+  putChgValue?: number;
   pcr: number;
   formatValue: (value: number) => string;
   ringMode?: 'standard' | 'signed';
   trendHistory?: SummaryTrendPoint[];
+  trendChgHistory?: SummaryTrendPoint[];
+  compact?: boolean;
 }
 
 interface SummaryTrendPoint {
@@ -1028,36 +1032,63 @@ function toSummaryTrendTsSec(value: Time | null | undefined): number | null {
 function SummaryMetricTrend({
   callValue,
   putValue,
+  callChgValue = 0,
+  putChgValue = 0,
   formatValue,
   initialHistory,
+  initialChgHistory,
 }: {
   callValue: number;
   putValue: number;
+  callChgValue?: number;
+  putChgValue?: number;
   formatValue: (value: number) => string;
   initialHistory?: SummaryTrendPoint[];
+  initialChgHistory?: SummaryTrendPoint[];
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const callSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const initialFitDoneRef = useRef(false);
   const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+  const [showChg, setShowChg] = useState(false);
   const [history, setHistory] = useState<SummaryTrendPoint[]>(
     initialHistory && initialHistory.length > 0
       ? appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialHistory), callValue, putValue)
       : [{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }],
   );
+  const [chgHistory, setChgHistory] = useState<SummaryTrendPoint[]>(() =>
+    initialChgHistory && initialChgHistory.length > 0
+      ? appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialChgHistory), callChgValue, putChgValue)
+      : [{ ts: Math.floor(Date.now() / 60000) * 60000, call: callChgValue, put: putChgValue }],
+  );
 
   useEffect(() => {
     if (initialHistory && initialHistory.length > 0) {
       setHistory(appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialHistory), callValue, putValue));
+      // full day history just arrived — reset fit so chart zooms out to show all of it
+      initialFitDoneRef.current = false;
       return;
     }
     setHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callValue, put: putValue }]);
-  }, [initialHistory]);
+  }, [initialHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (initialChgHistory && initialChgHistory.length > 0) {
+      setChgHistory(appendSummaryTrendPoint(normalizeSummaryTrendHistory(initialChgHistory), callChgValue, putChgValue));
+      return;
+    }
+    setChgHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callChgValue, put: putChgValue }]);
+  }, [initialChgHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setHistory(prev => appendSummaryTrendPoint(prev, callValue, putValue));
   }, [callValue, putValue]);
+
+  useEffect(() => {
+    setChgHistory(prev => appendSummaryTrendPoint(prev, callChgValue, putChgValue));
+  }, [callChgValue, putChgValue]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1164,7 +1195,6 @@ function SummaryMetricTrend({
       const entry = entries[0];
       if (!entry) return;
       chart.applyOptions({ width: Math.max(Math.floor(entry.contentRect.width), 120) });
-      chart.timeScale().fitContent();
     });
     resizeObserver.observe(host);
 
@@ -1172,53 +1202,105 @@ function SummaryMetricTrend({
       resizeObserver.disconnect();
       callSeriesRef.current = null;
       putSeriesRef.current = null;
+      initialFitDoneRef.current = false;
       chartRef.current?.remove();
       chartRef.current = null;
     };
   }, []);
 
-  const normalizedHistory = useMemo(() => normalizeSummaryTrendHistory(history), [history]);
+  const normalizedHistory    = useMemo(() => normalizeSummaryTrendHistory(history),    [history]);
+  const normalizedChgHistory = useMemo(() => normalizeSummaryTrendHistory(chgHistory), [chgHistory]);
 
-  const chartData = useMemo(() => {
-    return {
-      call: normalizedHistory.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.call })),
-      put: normalizedHistory.map(point => ({ time: Math.floor(point.ts / 1000) as Time, value: point.put })),
-    };
-  }, [normalizedHistory]);
+  const activeHistory = showChg ? normalizedChgHistory : normalizedHistory;
+
+  const chartData = useMemo(() => ({
+    call: activeHistory.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.call })),
+    put:  activeHistory.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.put  })),
+  }), [activeHistory]);
 
   const displayPoint = useMemo(() => {
-    if (normalizedHistory.length === 0) return null;
+    if (activeHistory.length === 0) return null;
     if (hoveredTime != null) {
       const hoveredMs = hoveredTime * 1000;
-      for (let idx = normalizedHistory.length - 1; idx >= 0; idx -= 1) {
-        const point = normalizedHistory[idx];
-        if (point.ts <= hoveredMs) return point;
+      for (let idx = activeHistory.length - 1; idx >= 0; idx -= 1) {
+        if (activeHistory[idx].ts <= hoveredMs) return activeHistory[idx];
       }
     }
-    return normalizedHistory[normalizedHistory.length - 1];
-  }, [normalizedHistory, hoveredTime]);
+    return activeHistory[activeHistory.length - 1];
+  }, [activeHistory, hoveredTime]);
 
   const displayTime = displayPoint ? Math.floor(displayPoint.ts / 1000) : null;
+
+  // track previous showChg to detect mode switch
+  const prevShowChgRef = useRef(showChg);
 
   useEffect(() => {
     callSeriesRef.current?.setData(chartData.call);
     putSeriesRef.current?.setData(chartData.put);
-    chartRef.current?.timeScale().fitContent();
-  }, [chartData]);
+    const modeChanged = prevShowChgRef.current !== showChg;
+    prevShowChgRef.current = showChg;
+    // fitContent only on first load or when toggling between OI / CHG mode
+    if (!initialFitDoneRef.current || modeChanged) {
+      if (chartData.call.length > 0 || chartData.put.length > 0) {
+        chartRef.current?.timeScale().fitContent();
+        initialFitDoneRef.current = true;
+      }
+    }
+  }, [chartData, showChg]);
+
+  const fmtChg = (v: number) => {
+    const abs = Math.abs(v);
+    const sign = v >= 0 ? '+' : '-';
+    if (abs >= 1e7) return `${sign}${(abs / 1e7).toFixed(2)}Cr`;
+    if (abs >= 1e5) return `${sign}${(abs / 1e5).toFixed(1)}L`;
+    return `${sign}${abs.toLocaleString('en-IN')}`;
+  };
 
   return (
     <div className={s.summaryTrendInline}>
       <div className={s.summaryTrendChartWrap}>
+        {/* toggle pill */}
+        <div style={{ position: 'absolute', top: 4, right: 4, zIndex: 2, display: 'flex', gap: 2, background: 'rgba(0,0,0,0.45)', borderRadius: 5, padding: '2px 3px' }}>
+          <button
+            type="button"
+            onClick={() => setShowChg(false)}
+            style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, border: 'none', cursor: 'pointer', background: !showChg ? '#2563eb' : 'transparent', color: !showChg ? '#fff' : '#6b7280', letterSpacing: '0.04em' }}
+          >OI</button>
+          <button
+            type="button"
+            onClick={() => setShowChg(true)}
+            style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, border: 'none', cursor: 'pointer', background: showChg ? '#2563eb' : 'transparent', color: showChg ? '#fff' : '#6b7280', letterSpacing: '0.04em' }}
+          >CHG</button>
+        </div>
         <div ref={hostRef} className={s.summaryTrendChart} aria-hidden="true" />
       </div>
       <div className={s.summaryTrendInlineMeta}>
-        <span className={s.summaryTrendCaption}>{history.length > 2 ? 'Session trend' : 'Live trend'}</span>
+        <span className={s.summaryTrendCaption}>{showChg ? 'OI change' : (history.length > 2 ? 'Session trend' : 'Live trend')}</span>
         <span className={s.summaryTrendTime}>{formatSummaryTrendTimestamp(displayTime)}</span>
         <span className={s.summaryTrendLive}>{hoveredTime != null ? 'INSPECT' : 'LIVE'}</span>
       </div>
       <div className={s.summaryTrendValues}>
-        <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {formatValue(displayPoint?.call ?? callValue)}</span>
-        <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {formatValue(displayPoint?.put ?? putValue)}</span>
+        {showChg ? (
+          <>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {fmtChg(displayPoint?.call ?? callChgValue)}</span>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {fmtChg(displayPoint?.put ?? putChgValue)}</span>
+            {(() => {
+              const c = displayPoint?.call ?? callChgValue;
+              const p = displayPoint?.put  ?? putChgValue;
+              const chgPcr = c !== 0 ? p / c : null;
+              return chgPcr != null ? (
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', background: 'rgba(255,255,255,0.06)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                  PCR {fmtRatio(chgPcr)}
+                </span>
+              ) : null;
+            })()}
+          </>
+        ) : (
+          <>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValueCall}`}>CE {formatValue(displayPoint?.call ?? callValue)}</span>
+            <span className={`${s.summaryTrendValuePill} ${s.summaryTrendValuePut}`}>PE {formatValue(displayPoint?.put ?? putValue)}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1300,15 +1382,46 @@ function SummaryMetricCard({
   subtitle,
   callValue,
   putValue,
+  callChgValue,
+  putChgValue,
   pcr,
   formatValue,
   ringMode = 'standard',
   trendHistory,
+  trendChgHistory,
+  compact = false,
 }: SummaryMetricCardProps) {
   const ringCallValue = ringMode === 'signed' ? Math.abs(callValue) : Math.max(callValue, 0);
   const ringPutValue = ringMode === 'signed' ? Math.abs(putValue) : Math.max(putValue, 0);
   const totalLabel = formatValue(callValue + putValue);
   const centerScale = totalLabel.length > 10 ? 0.72 : totalLabel.length > 8 ? 0.82 : totalLabel.length > 6 ? 0.92 : 1;
+
+  if (compact) {
+    return (
+      <article className={`${s.summaryCard} ${s.summaryCardCompact}`}>
+        <div className={s.summaryCardCompactHeader}>
+          <span className={s.summaryCardTitle}>{title}</span>
+          <span className={s.summaryPcrChipSm}>PCR {fmtRatio(pcr)}</span>
+        </div>
+        <div className={s.summaryCardCompactBody}>
+          <div className={s.summaryCompactRow}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotCall}`} />
+            <span className={s.summaryCompactLabel}>CE</span>
+            <span className={s.summaryCompactValue}>{formatValue(callValue)}</span>
+          </div>
+          <div className={s.summaryCompactRow}>
+            <span className={`${s.summaryLegendDot} ${s.summaryLegendDotPut}`} />
+            <span className={s.summaryCompactLabel}>PE</span>
+            <span className={s.summaryCompactValue}>{formatValue(putValue)}</span>
+          </div>
+          <div className={s.summaryCompactTotal}>
+            <span className={s.summaryCompactTotalLabel}>Total</span>
+            <span className={s.summaryCompactTotalValue}>{totalLabel}</span>
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article className={s.summaryCard}>
@@ -1352,7 +1465,7 @@ function SummaryMetricCard({
         </div>
 
         {trendHistory && (
-          <SummaryMetricTrend callValue={callValue} putValue={putValue} formatValue={formatValue} initialHistory={trendHistory} />
+          <SummaryMetricTrend callValue={callValue} putValue={putValue} callChgValue={callChgValue} putChgValue={putChgValue} formatValue={formatValue} initialHistory={trendHistory} initialChgHistory={trendChgHistory} />
         )}
       </div>
     </article>
@@ -1595,6 +1708,16 @@ export default function MasterOptionChain({ visible }: Props) {
   const [butterflyChartLoading, setButterflyChartLoading] = useState(false);
   const [butterflyChartError, setButterflyChartError] = useState('');
   const [summaryOiTrendHistory, setSummaryOiTrendHistory] = useState<SummaryTrendPoint[]>([]);
+  // Derived: OI change from start of day — each point = current_oi - first_oi_of_day
+  const summaryOiChgHistory = useMemo<SummaryTrendPoint[]>(() => {
+    if (summaryOiTrendHistory.length === 0) return [];
+    const base = summaryOiTrendHistory[0];
+    return summaryOiTrendHistory.map(p => ({
+      ts: p.ts,
+      call: p.call - base.call,
+      put:  p.put  - base.put,
+    }));
+  }, [summaryOiTrendHistory]);
   const wsRef = useRef<WebSocket | null>(null);
   const straddleHistoryCacheRef = useRef(new Map<string, { straddle: LineData[]; call: LineData[]; put: LineData[]; spot: LineData[]; iv: LineData[]; oi: LineData[]; pcr: LineData[]; rv: LineData[] }>());
   const butterflyHistoryCacheRef = useRef(new Map<string, { net: LineData[]; spot: LineData[] }>());
@@ -2595,12 +2718,15 @@ export default function MasterOptionChain({ visible }: Props) {
       const tradingDate = resolveIntradayTradingDate();
       const startDate = istToUtcIso(tradingDate, '09:15');
       const endDate = istToUtcIso(now.date, now.time);
+      // Include current minute in cache key so each new page-load gets fresh
+      // history up to now, not stale history from the last load time.
       const cacheKey = [
         resolved.nubraSym,
         resolved.exchange,
         viewMode,
         scopeExpiries.join(','),
         tradingDate,
+        now.time.slice(0, 5), // HH:MM
       ].join('|');
 
       const cached = summaryOiHistoryCacheRef.current.get(cacheKey);
@@ -2731,6 +2857,12 @@ export default function MasterOptionChain({ visible }: Props) {
       }
     }
 
+    // OI change from start of day = current - first historical point
+    const baseCall = summaryOiTrendHistory[0]?.call ?? callOi;
+    const basePut  = summaryOiTrendHistory[0]?.put  ?? putOi;
+    const callOiChg = callOi - baseCall;
+    const putOiChg  = putOi  - basePut;
+
     return [
       {
         key: 'oi',
@@ -2738,9 +2870,21 @@ export default function MasterOptionChain({ visible }: Props) {
         subtitle: viewMode === 'chain' ? 'Total CE OI vs PE OI' : 'Selected expiry total OI',
         callValue: callOi,
         putValue: putOi,
+        callChgValue: callOiChg,
+        putChgValue: putOiChg,
         pcr: callOi > 0 ? putOi / callOi : 0,
         formatValue: fmtOi,
         ringMode: 'standard' as const,
+      },
+      {
+        key: 'oichg',
+        title: 'OI Change',
+        subtitle: 'CE vs PE OI change from day open',
+        callValue: callOiChg,
+        putValue: putOiChg,
+        pcr: callOiChg !== 0 ? putOiChg / callOiChg : 0,
+        formatValue: fmtOi,
+        ringMode: 'signed' as const,
       },
       {
         key: 'volume',
@@ -2763,7 +2907,7 @@ export default function MasterOptionChain({ visible }: Props) {
         ringMode: 'standard' as const,
       },
     ];
-  }, [butterflyChain, chains, pickedExpiries, ratioChain, straddleChain, viewMode]);
+  }, [butterflyChain, chains, pickedExpiries, ratioChain, straddleChain, summaryOiTrendHistory, viewMode]);
 
   const priceScale = perLot ? lotSize : 1;
 
@@ -3008,10 +3152,14 @@ export default function MasterOptionChain({ visible }: Props) {
               subtitle={card.subtitle}
               callValue={card.callValue}
               putValue={card.putValue}
+              callChgValue={(card as any).callChgValue}
+              putChgValue={(card as any).putChgValue}
               pcr={card.pcr}
               formatValue={card.formatValue}
               ringMode={card.ringMode}
-              trendHistory={card.key === 'oi' ? summaryOiTrendHistory : undefined}
+              compact={false}
+              trendHistory={card.key === 'oi' ? summaryOiTrendHistory : card.key === 'oichg' ? summaryOiChgHistory : undefined}
+              trendChgHistory={card.key === 'oi' ? summaryOiChgHistory : undefined}
             />
           ))}
         </section>
