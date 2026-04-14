@@ -40,17 +40,17 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
   const [otp,       setOtp]       = useState('');
   const [regenMode, setRegenMode] = useState(false); // true = re-generate flow (OTP + fresh Upstox)
 
-  // Upstox fields — initialize directly from localStorage so form is pre-filled immediately
-  const [upPhone,  setUpPhone]  = useState(() => localStorage.getItem('upstox_phone')      ?? '');
-  const [upPin,    setUpPin]    = useState(() => localStorage.getItem('upstox_pin')        ?? '');
-  const [upTotp,   setUpTotp]   = useState(() => localStorage.getItem('upstox_totp')       ?? '');
-  const [upKey,    setUpKey]    = useState(() => localStorage.getItem('upstox_api_key')    ?? '');
-  const [upSecret, setUpSecret] = useState(() => localStorage.getItem('upstox_api_secret') ?? '');
+  // Upstox fields — pre-filled from IDB on mount (see useEffect below)
+  const [upPhone,  setUpPhone]  = useState('');
+  const [upPin,    setUpPin]    = useState('');
+  const [upTotp,   setUpTotp]   = useState('');
+  const [upKey,    setUpKey]    = useState('');
+  const [upSecret, setUpSecret] = useState('');
 
-  // Nubra fields
-  const [nuPhone,   setNuPhone]   = useState(() => localStorage.getItem('nubra_phone') ?? '');
-  const [nuMpin,    setNuMpin]    = useState(() => localStorage.getItem('nubra_mpin')  ?? '');
-  const [nuTotpKey, setNuTotpKey] = useState(() => localStorage.getItem('nubra_totp_secret') ?? '');
+  // Nubra fields — pre-filled from IDB on mount
+  const [nuPhone,   setNuPhone]   = useState('');
+  const [nuMpin,    setNuMpin]    = useState('');
+  const [nuTotpKey, setNuTotpKey] = useState('');
 
   const [hasValidCache, setHasValidCache] = useState(false); // today's tokens cached
 
@@ -124,7 +124,7 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     }
   }, []);
 
-  // ── On mount: load saved creds + auth tokens, pre-fill form, show setup page ─
+  // ── On mount: load creds + auth tokens from IDB (single source of truth) ────
   useEffect(() => {
     const today = todayIST();
     Promise.all([
@@ -133,54 +133,38 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
       loadAuthToken('nubra'),
       loadAuthToken('upstox'),
     ]).then(([creds, fallback, nubraAuth, upstoxAuth]) => {
-      // Pick best creds
+      // Pick best creds: prefer sub-keyed record; fall back to 'default' if sub has no TOTP
       const c = (creds?.nubra?.totp_secret || !fallback) ? creds : fallback;
+      // If we promoted a fallback, persist it under the real sub so next load is direct
       if (!creds?.nubra?.totp_secret && fallback?.nubra?.totp_secret && sub !== 'default') {
-        saveUserCreds(sub, fallback).catch(() => {});
+        saveUserCreds(sub, fallback).catch(console.error);
       }
 
-      // Pre-fill form fields — IDB first, then fallback to localStorage
-      const lsPhone    = localStorage.getItem('nubra_phone')       ?? '';
-      const lsMpin     = localStorage.getItem('nubra_mpin')        ?? '';
-      const lsTotpSec  = localStorage.getItem('nubra_totp_secret') ?? '';
-      const lsUpPhone  = localStorage.getItem('upstox_phone')      ?? '';
-      const lsUpPin    = localStorage.getItem('upstox_pin')        ?? '';
-      const lsUpTotp   = localStorage.getItem('upstox_totp')       ?? '';
-      const lsUpKey    = localStorage.getItem('upstox_api_key')    ?? '';
-      const lsUpSecret = localStorage.getItem('upstox_api_secret') ?? '';
+      // Pre-fill form from IDB only — credentials never live in localStorage
+      if (c?.upstox) {
+        setUpPhone(c.upstox.phone      ?? '');
+        setUpPin(c.upstox.pin          ?? '');
+        setUpTotp(c.upstox.totp_secret ?? '');
+        setUpKey(c.upstox.api_key      ?? '');
+        setUpSecret(c.upstox.api_secret ?? '');
+      }
+      if (c?.nubra) {
+        setNuPhone(c.nubra.phone        ?? '');
+        setNuMpin(c.nubra.mpin          ?? '');
+        setNuTotpKey(c.nubra.totp_secret ?? '');
+      }
 
-      setUpPhone(c?.upstox?.phone       || lsUpPhone);
-      setUpPin(c?.upstox?.pin           || lsUpPin);
-      setUpTotp(c?.upstox?.totp_secret  || lsUpTotp);
-      setUpKey(c?.upstox?.api_key       || lsUpKey);
-      setUpSecret(c?.upstox?.api_secret || lsUpSecret);
-      setNuPhone(c?.nubra?.phone        || lsPhone);
-      setNuMpin(c?.nubra?.mpin          || lsMpin);
-      setNuTotpKey(c?.nubra?.totp_secret || lsTotpSec);
+      // Restore runtime tokens to localStorage so the rest of the app can read them
+      const hasValidNubra  = nubraAuth?.date === today && !!nubraAuth?.token && nubraSessionValid();
+      const hasValidUpstox = !!upstoxAuth?.token;
 
-      // Check if valid cached tokens exist (IDB or localStorage) — store in state for button to use
-      const hasValidNubraIDB  = nubraAuth?.date === today && !!nubraAuth?.token && nubraSessionValid();
-      const hasValidUpstoxIDB = !!upstoxAuth?.token;
-      const lsUpstox          = localStorage.getItem('upstox_token');
-      const hasValidLS        = !!(nubraSessionValid() && lsUpstox);
-
-      if (hasValidNubraIDB && hasValidUpstoxIDB) {
-        // Backfill localStorage from IDB
+      if (hasValidNubra && hasValidUpstox) {
         localStorage.setItem('nubra_session_token', nubraAuth!.token);
         if (nubraAuth!.auth_token) localStorage.setItem('nubra_auth_token', nubraAuth!.auth_token);
         if (nubraAuth!.raw_cookie) localStorage.setItem('nubra_raw_cookie', nubraAuth!.raw_cookie);
         if (nubraAuth!.device_id)  localStorage.setItem('nubra_device_id',  nubraAuth!.device_id);
         localStorage.setItem('nubra_login_date', today);
         localStorage.setItem('upstox_token', upstoxAuth!.token);
-        setHasValidCache(true);
-      } else if (hasValidLS) {
-        // Backfill IDB from localStorage
-        const lsSession   = localStorage.getItem('nubra_session_token')!;
-        const lsAuthToken = localStorage.getItem('nubra_auth_token') ?? undefined;
-        const lsRawCookie = localStorage.getItem('nubra_raw_cookie') ?? undefined;
-        const lsDeviceId  = localStorage.getItem('nubra_device_id')  ?? undefined;
-        saveAuthToken('nubra', lsSession, { auth_token: lsAuthToken, raw_cookie: lsRawCookie, device_id: lsDeviceId }).catch(() => {});
-        saveAuthToken('upstox', lsUpstox!).catch(() => {});
         setHasValidCache(true);
       }
 
@@ -200,19 +184,15 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
     if (!upPhone || !upPin || !upTotp || !upKey || !upSecret) { setErr('Fill in all Upstox fields'); return; }
     if (!nuPhone || !nuMpin) { setErr('Fill in all Nubra fields'); return; }
     setLoading(true); setErr('');
-    // Save partial creds to IDB + localStorage so form is pre-filled on next visit
-    await saveUserCreds(sub, {
-      upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
-      nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
-    }).catch(() => {});
-    localStorage.setItem('upstox_phone',      upPhone);
-    localStorage.setItem('upstox_pin',        upPin);
-    localStorage.setItem('upstox_totp',       upTotp);
-    localStorage.setItem('upstox_api_key',    upKey);
-    localStorage.setItem('upstox_api_secret', upSecret);
-    localStorage.setItem('nubra_phone',       nuPhone);
-    localStorage.setItem('nubra_mpin',        nuMpin);
-    if (nuTotpKey) localStorage.setItem('nubra_totp_secret', nuTotpKey);
+    // Save partial creds to IDB only — single source of truth
+    try {
+      await saveUserCreds(sub, {
+        upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
+        nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: nuTotpKey },
+      });
+    } catch (e) {
+      setErr('Failed to save credentials. Please try again.'); setLoading(false); return;
+    }
     try {
       const res  = await fetch('/api/nubra-send-otp', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -240,23 +220,15 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
         setErr(`${data.error ?? 'Setup failed'}${data.detail?.message ? ': ' + data.detail.message : ''}`);
         setLoading(false); return;
       }
-      // Save all creds to IDB
+      // Save all creds to IDB — single source of truth
       const creds: UserCreds = {
         upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
         nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: data.secret_key },
       };
-      await saveUserCreds(sub, creds).catch(() => {});
-      // Save all creds to localStorage for form pre-fill
-      localStorage.setItem('upstox_phone',      upPhone);
-      localStorage.setItem('upstox_pin',        upPin);
-      localStorage.setItem('upstox_totp',       upTotp);
-      localStorage.setItem('upstox_api_key',    upKey);
-      localStorage.setItem('upstox_api_secret', upSecret);
-      // Restore to localStorage
+      await saveUserCreds(sub, creds);
+      // Write only session tokens to localStorage (runtime use by the rest of the app)
       const rawCookie = `authToken=${data.auth_token}; sessionToken=${data.session_token}`;
-      localStorage.setItem('nubra_phone',         nuPhone);
-      localStorage.setItem('nubra_mpin',          nuMpin);
-      localStorage.setItem('nubra_totp_secret',   data.secret_key);
+      // Runtime tokens only — not credentials
       localStorage.setItem('nubra_session_token', data.session_token);
       localStorage.setItem('nubra_auth_token',    data.auth_token);
       localStorage.setItem('nubra_raw_cookie',    rawCookie);
@@ -314,18 +286,19 @@ export default function SetupScreen({ googleUser, onReady }: Props) {
       // Update stored TOTP secret if server generated a new one
       const newSecret = data.secret_key ?? nuTotpKey;
       setNuTotpKey(newSecret);
-      localStorage.setItem('nubra_totp_secret', newSecret);
+      const creds: UserCreds = {
+        upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
+        nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: newSecret },
+      };
+      // Save updated creds to IDB (new TOTP secret must be persisted)
+      await saveUserCreds(sub, creds);
+      // Write only session tokens to localStorage (runtime use)
       const rawCookie = `authToken=${data.auth_token}; sessionToken=${data.session_token}`;
       localStorage.setItem('nubra_session_token', data.session_token);
       localStorage.setItem('nubra_auth_token',    data.auth_token);
       localStorage.setItem('nubra_raw_cookie',    rawCookie);
       if (data.device_id) localStorage.setItem('nubra_device_id', data.device_id);
       localStorage.setItem('nubra_login_date', todayIST());
-      const creds: UserCreds = {
-        upstox: { phone: upPhone, pin: upPin, totp_secret: upTotp, api_key: upKey, api_secret: upSecret },
-        nubra:  { phone: nuPhone, mpin: nuMpin, totp_secret: newSecret },
-      };
-      await saveUserCreds(sub, creds).catch(() => {});
       // Now do Upstox login and enter app
       setMsg('TOTP re-enabled! Connecting Upstox…');
       setPhase('logging-in');

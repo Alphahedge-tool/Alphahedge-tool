@@ -126,16 +126,48 @@ const upstoxAgent = new Agent({
   pipelining: 1,
 });
 
+const RETRYABLE_UPSTOX_STATUS = new Set([429, 464, 500, 502, 503, 504]);
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function fetchUpstox(instrumentKey: string, interval: string, from: string, limit: string): Promise<{ candles: number[][]; prevTimestamp: number | null }> {
   const params = new URLSearchParams({ instrumentKey, interval, from, limit });
   const url = `https://service.upstox.com/chart/open/v3/candles?${params}`;
   const res = await fetch(url, { dispatcher: upstoxAgent } as any);
-  if (!res.ok) throw new Error(`upstream ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(`upstream ${res.status}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   const json = await res.json() as any;
   return {
     candles: json?.data?.candles ?? [],
     prevTimestamp: json?.data?.meta?.prevTimestamp ?? null,
   };
+}
+
+async function fetchUpstoxWithRetry(
+  instrumentKey: string,
+  interval: string,
+  from: string,
+  limit: string,
+  maxAttempts = 4,
+): Promise<{ candles: number[][]; prevTimestamp: number | null }> {
+  let lastErr: unknown = null;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      return await fetchUpstox(instrumentKey, interval, from, limit);
+    } catch (e) {
+      lastErr = e;
+      const status = (e as any)?.status;
+      const retryable = status != null ? RETRYABLE_UPSTOX_STATUS.has(status) : true;
+      if (!retryable || i === maxAttempts - 1) throw e;
+      await delay(120 * (2 ** i) + Math.floor(Math.random() * 80));
+    }
+  }
+  throw lastErr ?? new Error('upstream failed');
 }
 
 app.get('/api/public-candles', async (req, reply) => {
@@ -149,8 +181,70 @@ app.get('/api/public-candles', async (req, reply) => {
   const lim = limit ?? '375';
 
   try {
-    const fresh = await fetchUpstox(instrumentKey, iv, from, lim);
+    const fresh = await fetchUpstoxWithRetry(instrumentKey, iv, from, lim);
     return { data: { candles: fresh.candles, meta: { prevTimestamp: fresh.prevTimestamp } } };
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// Batch candles endpoint to reduce frontend request pressure:
+// POST /api/public-candles-batch
+// Body: { instrumentKeys: string[], interval?: string, from: string, limit?: string }
+app.post('/api/public-candles-batch', async (req, reply) => {
+  const body = (req.body ?? {}) as {
+    instrumentKeys?: string[];
+    interval?: string;
+    from?: string;
+    limit?: string;
+  };
+
+  const keys = Array.from(new Set(body.instrumentKeys ?? [])).filter(Boolean).slice(0, 60);
+  if (!keys.length || !body.from) {
+    return reply.status(400).send({ error: 'instrumentKeys[] and from are required' });
+  }
+
+  const ivRaw = body.interval ?? 'I1';
+  const IV_MAP: Record<string, string> = { I1: 'I1', I5: 'I5', I15: 'I15', I30: 'I30', I60: 'I60', I1D: '1D' };
+  const iv = IV_MAP[ivRaw] ?? ivRaw;
+  const lim = body.limit ?? '375';
+
+  const data: Record<string, { candles: number[][]; meta: { prevTimestamp: number | null } }> = {};
+  const errors: Record<string, string> = {};
+
+  const CONCURRENCY = 3;
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < keys.length) {
+      const idx = cursor++;
+      const key = keys[idx];
+      try {
+        let res = await fetchUpstoxWithRetry(key, iv, body.from!, lim);
+        // If current page empty, auto-fallback one page back within same batch call
+        if (res.candles.length === 0 && res.prevTimestamp != null) {
+          res = await fetchUpstoxWithRetry(key, iv, String(res.prevTimestamp), lim);
+        }
+        data[key] = { candles: res.candles, meta: { prevTimestamp: res.prevTimestamp } };
+      } catch (e: any) {
+        errors[key] = String(e?.message ?? e);
+      }
+      // Short pacing to avoid burst pressure on upstream
+      await delay(20);
+    }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, keys.length) }, () => worker()));
+    return reply.send({
+      data,
+      errors,
+      meta: {
+        requested: keys.length,
+        success: Object.keys(data).length,
+        failed: Object.keys(errors).length,
+      },
+    });
   } catch (e: any) {
     return reply.status(502).send({ error: e.message });
   }
@@ -619,6 +713,29 @@ const nubraAgent = new Agent({
   pipelining: 1,
 });
 
+function buildNubraCookie(rawCookie: string, sessionToken: string, authToken: string, deviceId: string): string {
+  const map = new Map<string, string>();
+  for (const part of String(rawCookie || '').split(';')) {
+    const s = part.trim();
+    if (!s) continue;
+    const eq = s.indexOf('=');
+    if (eq <= 0) continue;
+    const k = s.slice(0, eq).trim();
+    const v = s.slice(eq + 1).trim();
+    if (k && v) map.set(k, v);
+  }
+
+  if (authToken) map.set('authToken', authToken);
+  if (sessionToken) map.set('sessionToken', sessionToken);
+  if (deviceId) map.set('deviceId', deviceId);
+
+  if (!map.get('authToken') && sessionToken) map.set('authToken', sessionToken);
+  if (!map.get('sessionToken') && sessionToken) map.set('sessionToken', sessionToken);
+  if (!map.get('deviceId') && deviceId) map.set('deviceId', deviceId);
+
+  return [...map.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
 app.post('/api/nubra-timeseries', async (req, reply) => {
   const body = req.body as {
     rawCookie?: string;
@@ -639,7 +756,7 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
   }
 
   const targetUrl = `https://api.nubra.io/charts/timeseries?chart=${encodeURIComponent(chart)}`;
-  const cookieStr = rawCookie || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+  const cookieStr = buildNubraCookie(rawCookie, sessionToken, '', deviceId);
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -663,7 +780,6 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
 
     const contentType = upstream.headers.get('content-type') ?? 'application/json';
     const data = await upstream.text();
-
     reply.status(upstream.status);
     reply.header('Content-Type', contentType);
     return reply.send(data);
@@ -1286,8 +1402,7 @@ app.post('/api/nubra-historical', async (req, reply) => {
 
   // Build cookie — prefer raw cookie with deviceId baked in
   const rawCookie = rawCookieHdr || rawCookieBody || '';
-  const baseRaw = rawCookie || `authToken=${body.auth_token || sessionToken}; sessionToken=${sessionToken}`;
-  const cookieStr = baseRaw.includes('deviceId=') ? baseRaw : `${baseRaw}; deviceId=${deviceId}`;
+  const cookiePrimary = buildNubraCookie(rawCookie, sessionToken, body.auth_token || '', deviceId);
 
   // Nubra expects RFC3339 — pass dates as-is (already ISO from client)
   const queryItem = {
@@ -1306,13 +1421,13 @@ app.post('/api/nubra-historical', async (req, reply) => {
   console.log(`[nubra-historical] →`, reqBody.slice(0, 300));
 
   try {
-    const upstream = await fetch(`${NUBRA_API}/charts/timeseries`, {
+    const callUpstream = async (url: string, cookie: string) => fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'application/json',
         'Accept': 'application/json, text/plain, */*',
         'Authorization': `Bearer ${sessionToken}`,
-        'Cookie': cookieStr,
+        'Cookie': cookie,
         'x-device-id': deviceId,
         'Origin': 'https://nubra.io',
         'Referer': 'https://nubra.io/',
@@ -1325,6 +1440,7 @@ app.post('/api/nubra-historical', async (req, reply) => {
       dispatcher: nubraAgent,
     } as any);
 
+    const upstream = await callUpstream(`${NUBRA_API}/charts/timeseries?chart=charts`, cookiePrimary);
     const data = await upstream.text();
     console.log(`[nubra-historical] ← ${upstream.status} (${data.length}b) ${data.slice(0, 200)}`);
     reply.status(upstream.status);
@@ -1964,7 +2080,7 @@ app.get('/api/nubra-market-schedule', async (req, reply) => {
   const sessionToken = (headers['x-session-token'] as string) ?? '';
   const deviceId     = (headers['x-device-id'] as string) ?? 'web';
   const rawCookieHdr = (headers['x-raw-cookie'] as string) ?? '';
-  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+  const rawCookie = buildNubraCookie(rawCookieHdr, sessionToken, '', deviceId);
 
   try {
     const upstream = await fetch(`${NUBRA_API}/calendar/market_schedule`, {

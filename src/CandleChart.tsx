@@ -2202,9 +2202,12 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
         prevTimestampRef.current = prevPrev;
 
         // ── Pop live bar BEFORE setData so we only paint once ──────────────────
+        // Use >= not === : REST fetch may straddle a minute boundary, causing
+        // wallBarSec to advance past the last bar — >= ensures the live bar is
+        // always handed to WS regardless of small timing drift (prevents 1-bar gap).
         const wallBarSec = snapToBarTime(Date.now(), INTERVALS.find(i => i.value === iv)?.minutes ?? 1);
         const lastCandle = cData.length > 0 ? cData[cData.length - 1] : null;
-        if (lastCandle && Number(lastCandle.time) === wallBarSec) {
+        if (lastCandle && Number(lastCandle.time) >= wallBarSec) {
           const poppedCandle = cData.pop()!;
           const poppedVol = vData.pop();
           allCandlesRef.current = cData;
@@ -2348,9 +2351,10 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           prevTimestampRef.current = prevPrev;
 
           // Pop the current forming bar if REST already includes it
+          // Use >= to handle timing drift across minute boundaries (prevents 1-bar gap)
           const wallBarSec = snapToBarTime(Date.now(), intervalRef.current.minutes);
           const lastCandle = cData.length > 0 ? cData[cData.length - 1] : null;
-          if (lastCandle && Number(lastCandle.time) === wallBarSec) {
+          if (lastCandle && Number(lastCandle.time) >= wallBarSec) {
             cData.pop();
             vData.pop();
           }

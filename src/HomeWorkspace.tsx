@@ -17,8 +17,10 @@ const IVRank            = React.lazy(() => import('./IVRank'));
 const OIHeatmap         = React.lazy(() => import('./OIHeatmap'));
 const SupportResistance = React.lazy(() => import('./SupportResistance'));
 const FiiDii            = React.lazy(() => import('./FiiDii'));
+const AtmRollingStraddle = React.lazy(() => import('./AtmRollingStraddle'));
+const GammaExposure = React.lazy(() => import('./GammaExposure'));
 
-type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew' | 'fwd-vol' | 'pcr-chart' | 'max-pain' | 'oi-buildup' | 'iv-rank' | 'oi-heatmap' | 'support-resistance' | 'fii-dii';
+type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew' | 'fwd-vol' | 'pcr-chart' | 'max-pain' | 'oi-buildup' | 'iv-rank' | 'oi-heatmap' | 'support-resistance' | 'fii-dii' | 'atm-rolling-straddle' | 'gamma-exposure';
 
 interface Panel {
   id: string;
@@ -110,6 +112,8 @@ const CONTENT_OPTIONS: { type: PanelContent; label: string; icon: React.ReactNod
   { type: 'oi-heatmap',         label: 'OI Heatmap',        icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 9h20M2 15h20M9 2v20M15 2v20"/></svg> },
   { type: 'support-resistance', label: 'Support/Resistance', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 18h18"/><path d="m3 12 9-6 9 6"/></svg> },
   { type: 'fii-dii',            label: 'FII / DII',         icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m3 15 4-4 4 4 4-6 4 2"/></svg> },
+  { type: 'atm-rolling-straddle', label: 'ATM Rolling Straddle', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20h18"/><path d="M6 16l4-4 3 3 5-7"/><circle cx="10" cy="12" r="1.5"/><circle cx="13" cy="15" r="1.5"/></svg> },
+  { type: 'gamma-exposure', label: 'Gamma Exposure', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19h16"/><path d="M7 15V9"/><path d="M12 19V5"/><path d="M17 13v-3"/></svg> },
 ];
 
 const MIN_COL_PX = 260;
@@ -388,6 +392,16 @@ const PanelBody = React.memo(function PanelBody({ content, symbol, exchange, exp
       {content === 'fii-dii' && (
         <div style={{ width: '100%', height: '100%' }}>
           <FiiDii />
+        </div>
+      )}
+      {content === 'atm-rolling-straddle' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <AtmRollingStraddle instruments={instruments} />
+        </div>
+      )}
+      {content === 'gamma-exposure' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <GammaExposure nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} sessionToken={nubraSession} />
         </div>
       )}
     </React.Suspense>
@@ -788,6 +802,8 @@ const CONTENT_SHORT: Record<PanelContent, string> = {
   'oi-heatmap':          'OI Heat',
   'support-resistance':  'S/R',
   'fii-dii':             'FII/DII',
+  'atm-rolling-straddle': 'ATM Roll',
+  'gamma-exposure':      'GEX',
 };
 
 // ── TemplatePicker ─────────────────────────────────────────────────────────────
@@ -1348,7 +1364,7 @@ export default function HomeWorkspace() {
         ) ?? instruments.find(i => i.segment?.includes('INDEX')) ?? null;
         return { ...p, content, instrument: nifty };
       }
-      if ((content === 'iv-chart' || content === 'open-interest' || content === 'vol-skew') && !p.symbol) {
+      if ((content === 'iv-chart' || content === 'open-interest' || content === 'vol-skew' || content === 'gamma-exposure') && !p.symbol) {
         return { ...p, content, symbol: 'NIFTY' };
       }
       return { ...p, content };

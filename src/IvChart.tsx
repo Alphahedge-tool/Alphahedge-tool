@@ -925,9 +925,15 @@ export default function IvChart({ instruments, nubraInstruments, workerRef, init
 
         const spotData = candlesToCandleData(deduped);
 
-        // Pop the currently-forming bar — WS will keep it live
+        // Pop the currently-forming bar — WS will keep it live.
+        // Use >= not === : if the REST fetch straddles a minute boundary,
+        // wallBarSec may have advanced past the last bar's timestamp, causing
+        // the completed bar to stay in the series while WS writes the next one —
+        // that's what produces the 1-bar gap (e.g. 13:45 present, 13:46 missing).
+        // Popping any bar whose time >= wallBarSec lets WS own the live bar
+        // regardless of the small timing drift.
         const wallBarSec = snapToMinBar(Date.now());
-        if (spotData.length > 0 && Number(spotData[spotData.length - 1].time) === wallBarSec) {
+        if (spotData.length > 0 && Number(spotData[spotData.length - 1].time) >= wallBarSec) {
           const forming = spotData.pop()!;
           spotLiveBarRef.current = forming;
         }

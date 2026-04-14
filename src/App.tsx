@@ -684,7 +684,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
   const allDefinedColumns = useMemo(() => [
     t2ColHelper.display({
       id: 'symbol', size: 80,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Symbol</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Symbol</span>,
       cell: ({ row }) => {
         const leg = row.original;
         const symbolColors: Record<string, string> = { NIFTY: '#60a5fa', BANKNIFTY: '#a78bfa', FINNIFTY: '#34d399', SENSEX: '#fb923c' };
@@ -694,17 +694,17 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
     }),
     t2ColHelper.display({
       id: 'expiry', size: 76,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Expiry</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Expiry</span>,
       cell: ({ row }) => <span style={{ fontSize: 13, color: '#C0C7D4', fontWeight: 500 }}>{fmtExpiry(row.original.expiry)}</span>,
     }),
     t2ColHelper.display({
       id: 'strike', size: 64,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Strike</span>,
-      cell: ({ row }) => <span style={{ fontSize: 14, fontWeight: 700, color: '#60a5fa', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{row.original.strike}</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Strike</span>,
+      cell: ({ row }) => <span style={{ fontSize: 14, fontWeight: 700, color: '#60a5fa', fontFamily: 'var(--font-family-sans)' }}>{row.original.strike}</span>,
     }),
     t2ColHelper.display({
       id: 'type', size: 44,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Type</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Type</span>,
       cell: ({ row }) => {
         const leg = row.original;
         return <span style={{ fontSize: 13, fontWeight: 700, color: leg.type === 'CE' ? '#26a69a' : '#f23645', background: leg.type === 'CE' ? 'rgba(38,166,154,0.1)' : 'rgba(242,54,69,0.1)', padding: '2px 6px', borderRadius: 4 }}>{leg.type}</span>;
@@ -713,7 +713,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
     // ── Buy columns ──────────────────────────────────────────────────────────
     t2ColHelper.display({
       id: 'buy_action', size: 52,
-      header: () => <span style={{ fontSize: 12, color: '#26a69a', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Side</span>,
+      header: () => <span style={{ fontSize: 11, color: '#26a69a', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Side</span>,
       cell: ({ row }) => {
         const leg = row.original; const isBuy = leg.action === 'B';
         return (
@@ -726,45 +726,45 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
     }),
     t2ColHelper.display({
       id: 'lots', size: 80,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Lots</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Lots</span>,
       cell: ({ row }) => (
         <input
           type="number"
           min={1}
           value={row.original.lots}
           onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) updateLeg(row.original.id, { lots: v }); }}
-          style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4, height: 24, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', outline: 'none', padding: '0 4px', MozAppearance: 'textfield' } as React.CSSProperties}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4, height: 24, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: 'var(--font-family-sans)', outline: 'none', padding: '0 4px', MozAppearance: 'textfield' } as React.CSSProperties}
         />
       ),
     }),
     t2ColHelper.display({
       id: 'price', size: 72,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Price</span>,
-      cell: ({ row }) => <span style={{ fontSize: 15, fontWeight: 600, color: '#D1D4DC', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{row.original.price.toFixed(2)}</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Price</span>,
+      cell: ({ row }) => <span style={{ fontSize: 15, fontWeight: 600, color: '#D1D4DC', fontFamily: 'var(--font-family-sans)' }}>₹{row.original.price.toFixed(2)}</span>,
     }),
     t2ColHelper.display({
       id: 'ltp', size: 72,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>LTP</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>LTP</span>,
       cell: ({ row }) => {
         const ltp = getLegEffectiveLtp(row.original);
         const diff = ltp - row.original.price;
         const col = diff > 0 ? '#26a69a' : diff < 0 ? '#f23645' : '#E2E8F0';
-        return <span style={{ fontSize: 15, fontWeight: 700, color: col, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{ltp.toFixed(2)}</span>;
+        return <span style={{ fontSize: 15, fontWeight: 700, color: col, fontFamily: 'var(--font-family-sans)' }}>₹{ltp.toFixed(2)}</span>;
       },
     }),
     t2ColHelper.display({
       id: 'spot', size: 72,
-      header: () => <span style={{ fontSize: 12, color: '#e0a800', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>E.Spot</span>,
-      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600, color: '#e0a800', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{row.original.entrySpot > 0 ? row.original.entrySpot.toFixed(2) : '—'}</span>,
+      header: () => <span style={{ fontSize: 11, color: '#e0a800', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>E.Spot</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600, color: '#e0a800', fontFamily: 'var(--font-family-sans)' }}>{row.original.entrySpot > 0 ? row.original.entrySpot.toFixed(2) : '—'}</span>,
     }),
     t2ColHelper.display({
       id: 'time', size: 68,
-      header: () => <span style={{ fontSize: 12, color: '#a78bfa', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>E.Time</span>,
+      header: () => <span style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>E.Time</span>,
       cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 500, color: '#a78bfa' }}>{row.original.entryTime}</span>,
     }),
     t2ColHelper.display({
       id: 'entry_date', size: 84,
-      header: () => <span style={{ fontSize: 12, color: '#a78bfa', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>E.Date</span>,
+      header: () => <span style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>E.Date</span>,
       cell: ({ row }) => {
         const d = row.original.entryDate;
         if (!d) return <span style={{ fontSize: 13, fontWeight: 500, color: '#a78bfa' }}>—</span>;
@@ -775,7 +775,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
     }),
     t2ColHelper.display({
       id: 'mtm', size: 96,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>MTM</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>MTM</span>,
       cell: ({ row }) => {
         const leg = row.original;
         const mtm = getLegMtm(leg);
@@ -783,7 +783,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
         const fmt = fmtMtm(mtm);
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 0, whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: pos ? '#26a69a' : '#f23645', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', lineHeight: 1, whiteSpace: 'nowrap' }}>{fmt}</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: pos ? '#26a69a' : '#f23645', fontFamily: 'var(--font-family-sans)', lineHeight: 1, whiteSpace: 'nowrap' }}>{fmt}</span>
           </div>
         );
       },
@@ -791,12 +791,12 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
     // ── Greeks: 3 columns per greek (Entry | Live | Chg) ────────────────────
     t2ColHelper.display({
       id: 'sl', size: 170,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Stop Loss</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Stop Loss</span>,
       cell: ({ row }) => <StopLossEditor leg={row.original} updateLeg={updateLeg} />,
     }),
     t2ColHelper.display({
       id: 'manage', size: 220,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.03em' }}>Manage</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em', fontFamily: 'var(--font-family-sans)' }}>Manage</span>,
       cell: ({ row }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />
@@ -810,10 +810,10 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
       const hdr = (label: string) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-            <span style={{ fontSize: 13, color: gk.color, fontWeight: 800 }}>{gk.label}</span>
+            <span style={{ fontSize: 13, color: gk.color, fontWeight: 700 }}>{gk.label}</span>
             <span style={{ fontSize: 11, color: '#D1D5DB', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>{gk.name}</span>
           </div>
-          <span style={{ fontSize: 11, color: 'rgba(209,213,219,0.7)', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'capitalize' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'rgba(209,213,219,0.72)', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'capitalize' }}>{label}</span>
         </div>
       );
       return [
@@ -976,10 +976,10 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                 {/* ── Super-header row ── */}
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   {/* Position: sticky th spanning all sticky cols, width forced to exact pixel sum */}
-                  <th colSpan={stickySpan} style={{ position: 'sticky', left: 0, zIndex: 5, width: stickyTotalW, minWidth: stickyTotalW, textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', background: '#1e222d' }}>Position</th>
-                  {!showGreeks && <th colSpan={detailCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#e0a800', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Buy / Sell</th>}
-                  {!showGreeks && <th colSpan={pnlCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#818cf8', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>P&L</th>}
-                  {greekCols.length > 0 && <th colSpan={greekCols.length} style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, fontWeight: 700, color: '#34d399', background: '#1e222d', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Greeks</th>}
+                  <th colSpan={stickySpan} style={{ position: 'sticky', left: 0, zIndex: 5, width: stickyTotalW, minWidth: stickyTotalW, textAlign: 'center', padding: '9px 0', fontSize: 11, fontWeight: 600, color: '#95A2B7', letterSpacing: '0.04em', background: '#1a2230', fontFamily: 'var(--font-family-sans)' }}>Position</th>
+                  {!showGreeks && <th colSpan={detailCols.length} style={{ textAlign: 'center', padding: '9px 0', fontSize: 11, fontWeight: 600, color: '#e0a800', background: '#1a2230', letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>Buy / Sell</th>}
+                  {!showGreeks && <th colSpan={pnlCols.length} style={{ textAlign: 'center', padding: '9px 0', fontSize: 11, fontWeight: 600, color: '#8ea6d0', background: '#1a2230', letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>P&L</th>}
+                  {greekCols.length > 0 && <th colSpan={greekCols.length} style={{ textAlign: 'center', padding: '9px 0', fontSize: 11, fontWeight: 600, color: '#34d399', background: '#1a2230', letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>Greeks</th>}
                 </tr>
                 {/* ── Sub-header row ── */}
                 {table.getHeaderGroups().map(hg => (
@@ -987,7 +987,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                     {hg.headers.map(h => {
                       const id = h.column.id;
                       const isSticky = STICKY_IDS.includes(id);
-                      const sectionBg = '#1e222d';
+                      const sectionBg = '#1a2230';
                       const isFirstDetail = id === 'buy_action';
                       const isFirstEnd    = id === 'spot';
                       const isGreekGroupStartH = id.endsWith('_entry') && id.startsWith('greek_');
@@ -995,13 +995,13 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                       const borderL = needsLeftBorder ? '2px solid rgba(255,255,255,0.18)' : 'none';
                       if (isSticky) {
                         return (
-                          <th key={h.id} style={{ ...stickyThStyle(id, '#1e222d', borderL), padding: '7px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
+                          <th key={h.id} style={{ ...stickyThStyle(id, '#1a2230', borderL), padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#95A2B7', fontFamily: 'var(--font-family-sans)' }}>
                             {flexRender(h.column.columnDef.header, h.getContext())}
                           </th>
                         );
                       }
                       return (
-                        <th key={h.id} style={{ padding: '7px 10px', textAlign: 'left', background: sectionBg, borderLeft: borderL, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
+                        <th key={h.id} style={{ padding: '8px 12px', textAlign: 'left', background: sectionBg, borderLeft: borderL, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 600, color: '#95A2B7', fontFamily: 'var(--font-family-sans)' }}>
                           {flexRender(h.column.columnDef.header, h.getContext())}
                         </th>
                       );
@@ -1032,7 +1032,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                         live:  checked.reduce((s, l) => s + (l.action === 'S' ? -1 : 1) * l.currGreeks[g.key] * (l.lots || 1), 0),
                       };
                     });
-                    const baseStyle: React.CSSProperties = { padding: '8px 10px', fontSize: 13, fontWeight: 700, verticalAlign: 'middle', whiteSpace: 'nowrap', borderTop: '1px solid rgba(255,255,255,0.1)' };
+                    const baseStyle: React.CSSProperties = { padding: '8px 10px', fontSize: 13, fontWeight: 600, verticalAlign: 'middle', whiteSpace: 'nowrap', borderTop: '1px solid rgba(255,255,255,0.1)' };
                     return (
                       <tr key={`net-${key}`} style={{ background: bg, ...rowStyle }}>
                         {table.getVisibleLeafColumns().map(col => {
@@ -1041,7 +1041,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                           const isGreekGroupStart = id.endsWith('_entry') && id.startsWith('greek_');
                           const borderL = isGreekGroupStart ? '2px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.05)';
                           if (isSticky) {
-                            const label = id === 'symbol' ? <span style={{ fontSize: 11, fontWeight: 700, color: labelColor, letterSpacing: '0.06em', fontFamily: 'var(--font-family-sans)' }}>{labelText}</span> : null;
+                            const label = id === 'symbol' ? <span style={{ fontSize: 11, fontWeight: 600, color: labelColor, letterSpacing: '0.04em', fontFamily: 'var(--font-family-sans)' }}>{labelText}</span> : null;
                             return <td key={id} style={{ ...stickyTdStyle(id, bg), ...baseStyle }}>{label}</td>;
                           }
                           if (id.startsWith('greek_') && id.endsWith('_entry')) {
@@ -1094,7 +1094,7 @@ function MtmTheme2Table({ legs, updateLeg, removeLeg, showGreeks, activeTab, onT
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <div style={{ width: 3, height: 14, borderRadius: 2, background: accent, flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: '0.08em', fontFamily: 'var(--font-family-sans)' }}>{grp.sym}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.06em', fontFamily: 'var(--font-family-sans)' }}>{grp.sym}</span>
                           </div>
                         </td>
                       </tr>
@@ -1748,7 +1748,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const stdColumns = useMemo(() => [
     columnHelper.display({
       id: 'check', size: 28,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}></span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)' }}></span>,
       cell: ({ row }) => {
         const leg = row.original;
         return (
@@ -1761,7 +1761,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'action', size: 36,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>B/S</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>B/S</span>,
       cell: ({ row }) => {
         const leg = row.original; const isBuy = leg.action === 'B';
         return (
@@ -1774,7 +1774,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'type', size: 44,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Type</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Type</span>,
       cell: ({ row }) => {
         const leg = row.original;
         return (
@@ -1786,7 +1786,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'lots', size: 96,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Lots</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Lots</span>,
       cell: ({ row }) => (
         <div style={{ width: 88, height: 26, display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5, overflow: 'hidden' }}>
           <button onClick={() => updateLeg(row.original.id, { lots: Math.max(1, row.original.lots - 1) })} style={{ width: 22, height: 26, background: 'transparent', border: 'none', color: '#6B7280', cursor: 'pointer', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>−</button>
@@ -1802,7 +1802,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'expiry', size: 90,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Expiry</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Expiry</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
           <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtExpiry(row.original.expiry)}</span>
@@ -1811,43 +1811,43 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'strike', size: 72,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Strike</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Strike</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{row.original.strike}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', fontFamily: 'var(--font-family-sans)' }}>{row.original.strike}</span>
         </div>
       )
     }),
     columnHelper.display({
       id: 'price', size: 80,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Price</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Price</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#D1D4DC', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{row.original.price.toFixed(2)}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#D1D4DC', fontFamily: 'var(--font-family-sans)' }}>₹{row.original.price.toFixed(2)}</span>
         </div>
       )
     }),
     columnHelper.display({
       id: 'currLtp', size: 80,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>LTP</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>LTP</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>₹{getLegEffectiveLtp(row.original).toFixed(2)}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: 'var(--font-family-sans)' }}>₹{getLegEffectiveLtp(row.original).toFixed(2)}</span>
         </div>
       )
     }),
     columnHelper.display({
       id: 'spot', size: 80,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Spot</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Spot</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{row.original.entrySpot > 0 ? row.original.entrySpot.toFixed(2) : '—'}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', fontFamily: 'var(--font-family-sans)' }}>{row.original.entrySpot > 0 ? row.original.entrySpot.toFixed(2) : '—'}</span>
         </div>
       )
     }),
     columnHelper.display({
       id: 'time', size: 72,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Time</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Time</span>,
       cell: ({ row }) => (
         <div style={{ height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: 13, fontWeight: 500, color: '#6B7280' }}>{row.original.entryTime}</span>
@@ -1856,26 +1856,26 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     }),
     columnHelper.display({
       id: 'mtm', size: 88,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>MTM</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>MTM</span>,
       cell: ({ row }) => {
         const leg = row.original;
         const mtm = getLegMtm(leg);
         const pos = mtm >= 0;
         return (
           <div style={{ height: 26, borderRadius: 5, background: pos ? 'rgba(38,166,154,0.1)' : 'rgba(242,54,69,0.1)', border: `1px solid ${pos ? 'rgba(38,166,154,0.25)' : 'rgba(242,54,69,0.25)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: pos ? '#26a69a' : '#f23645', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{fmtMtm(mtm)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: pos ? '#26a69a' : '#f23645', fontFamily: 'var(--font-family-sans)' }}>{fmtMtm(mtm)}</span>
           </div>
         );
       }
     }),
     columnHelper.display({
       id: 'sl', size: 170,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Stop Loss</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Stop Loss</span>,
       cell: ({ row }) => <StopLossEditor leg={row.original} updateLeg={updateLeg} compact />,
     }),
     columnHelper.display({
       id: 'manage', size: 112,
-      header: () => <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>Manage</span>,
+      header: () => <span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, fontFamily: 'var(--font-family-sans)', letterSpacing: '0.02em' }}>Manage</span>,
       cell: ({ row }) => <SquareOffCell leg={row.original} updateLeg={updateLeg} removeLeg={removeLeg} />,
     }),
     columnHelper.display({
@@ -1893,8 +1893,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   ], [updateLeg, removeLeg]);
 
   const greeksColumns = useMemo(() => [
-    columnHelper.display({ id: 'position', header: () => <div style={{ width: 90, paddingLeft: 10, flexShrink: 0, display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>Position</span></div>, cell: ({ row }) => { const leg = row.original; const isBuy = leg.action === 'B'; return <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6, padding: '8px 10px', borderRight: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, width: 90, background: 'rgba(0,0,0,0.12)' }}><div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div onClick={() => updateLeg(leg.id, { checked: !leg.checked })} style={{ width: 14, height: 14, borderRadius: 3, background: leg.checked ? 'rgba(129,140,248,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${leg.checked ? 'rgba(129,140,248,0.6)' : 'rgba(255,255,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>{leg.checked && <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div onClick={() => updateLeg(leg.id, { action: leg.action === 'B' ? 'S' : 'B' })} style={{ padding: '0px 6px', height: 18, borderRadius: 3, background: isBuy ? 'rgba(38,166,154,0.15)' : 'rgba(242,54,69,0.15)', border: `1px solid ${isBuy ? 'rgba(38,166,154,0.4)' : 'rgba(242,54,69,0.4)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 11, fontWeight: 800, color: isBuy ? '#26a69a' : '#f23645' }}>{leg.action}</span></div><span style={{ fontSize: 11, fontWeight: 800, color: leg.type === 'CE' ? '#facc15' : '#c084fc', letterSpacing: '0.02em' }}>{leg.type}</span></div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 13, fontWeight: 800, color: '#E2E8F0', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', lineHeight: 1 }}>{leg.strike}</span><div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 700, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', lineHeight: 1 }}>{leg.lots}x</span></div></div></div>; } }),
-    ...greekItems.map((gk, gi) => columnHelper.display({ id: gk.key, header: () => <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, padding: '0 6px', alignItems: 'center' }}><div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}><span style={{ fontSize: 13, color: gk.color, fontWeight: 800, letterSpacing: '0.02em' }}>{gk.label}</span><span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>{gk.name}</span></div><div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', padding: '0 2px' }}><span style={{ fontSize: 10, color: 'rgba(156,163,175,0.5)', fontWeight: 600, letterSpacing: '0.03em' }}>Ent</span><span style={{ fontSize: 10, color: 'rgba(156,163,175,0.7)', fontWeight: 700, letterSpacing: '0.03em' }}>Live</span></div></div>, cell: ({ row }) => { const leg = row.original; const isIv = gk.key === 'iv'; const lots = leg.lots || 1; const rawCurr = leg.currGreeks[gk.key]; const rawEntry = leg.entryGreeks[gk.key]; const curr = isIv ? rawCurr * 100 : rawCurr * lots; const entry = isIv ? rawEntry * 100 : rawEntry * lots; const chg = curr - entry; const chgColor = chg > 0 ? '#26a69a' : chg < 0 ? '#f23645' : '#6B7280'; return <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 6px', borderRight: gi < 4 ? '1px solid rgba(255,255,255,0.12)' : 'none', height: '100%', gap: 2 }}><div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', fontWeight: 600 }}>{fmtG(entry, gk.dec)}{isIv ? '%' : ''}</span><span style={{ fontSize: 14, fontWeight: 800, color: gk.color, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{fmtG(curr, gk.dec)}{isIv ? '%' : ''}</span></div><div style={{ display: 'flex', justifyContent: 'center' }}><span style={{ fontSize: 13, fontWeight: 700, color: chgColor, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>{entry !== 0 ? `${chg >= 0 ? '+' : ''}${parseFloat(chg.toFixed(gk.dec))}${isIv ? '%' : ''}` : '—'}</span></div></div>; } })),
+    columnHelper.display({ id: 'position', header: () => <div style={{ width: 90, paddingLeft: 10, flexShrink: 0, display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 11, color: '#9DA6B5', fontWeight: 600, letterSpacing: '0.03em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>Position</span></div>, cell: ({ row }) => { const leg = row.original; const isBuy = leg.action === 'B'; return <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6, padding: '8px 10px', borderRight: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, width: 90, background: 'rgba(0,0,0,0.12)' }}><div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div onClick={() => updateLeg(leg.id, { checked: !leg.checked })} style={{ width: 14, height: 14, borderRadius: 3, background: leg.checked ? 'rgba(129,140,248,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${leg.checked ? 'rgba(129,140,248,0.6)' : 'rgba(255,255,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>{leg.checked && <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div onClick={() => updateLeg(leg.id, { action: leg.action === 'B' ? 'S' : 'B' })} style={{ padding: '0px 6px', height: 18, borderRadius: 3, background: isBuy ? 'rgba(38,166,154,0.15)' : 'rgba(242,54,69,0.15)', border: `1px solid ${isBuy ? 'rgba(38,166,154,0.4)' : 'rgba(242,54,69,0.4)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 11, fontWeight: 700, color: isBuy ? '#26a69a' : '#f23645' }}>{leg.action}</span></div><span style={{ fontSize: 11, fontWeight: 700, color: leg.type === 'CE' ? '#facc15' : '#c084fc', letterSpacing: '0.02em' }}>{leg.type}</span></div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', fontFamily: 'var(--font-family-sans)', lineHeight: 1 }}>{leg.strike}</span><div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, fontFamily: 'var(--font-family-sans)', lineHeight: 1 }}>{leg.lots}x</span></div></div></div>; } }),
+    ...greekItems.map((gk, gi) => columnHelper.display({ id: gk.key, header: () => <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, padding: '0 6px', alignItems: 'center' }}><div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}><span style={{ fontSize: 13, color: gk.color, fontWeight: 700, letterSpacing: '0.02em' }}>{gk.label}</span><span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>{gk.name}</span></div><div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', padding: '0 2px' }}><span style={{ fontSize: 10, color: 'rgba(156,163,175,0.5)', fontWeight: 600, letterSpacing: '0.03em' }}>Ent</span><span style={{ fontSize: 10, color: 'rgba(156,163,175,0.72)', fontWeight: 600, letterSpacing: '0.02em' }}>Live</span></div></div>, cell: ({ row }) => { const leg = row.original; const isIv = gk.key === 'iv'; const lots = leg.lots || 1; const rawCurr = leg.currGreeks[gk.key]; const rawEntry = leg.entryGreeks[gk.key]; const curr = isIv ? rawCurr * 100 : rawCurr * lots; const entry = isIv ? rawEntry * 100 : rawEntry * lots; const chg = curr - entry; const chgColor = chg > 0 ? '#26a69a' : chg < 0 ? '#f23645' : '#6B7280'; return <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 6px', borderRight: gi < 4 ? '1px solid rgba(255,255,255,0.12)' : 'none', height: '100%', gap: 2 }}><div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'var(--font-family-sans)', fontWeight: 600 }}>{fmtG(entry, gk.dec)}{isIv ? '%' : ''}</span><span style={{ fontSize: 14, fontWeight: 800, color: gk.color, fontFamily: 'var(--font-family-sans)' }}>{fmtG(curr, gk.dec)}{isIv ? '%' : ''}</span></div><div style={{ display: 'flex', justifyContent: 'center' }}><span style={{ fontSize: 13, fontWeight: 700, color: chgColor, fontFamily: 'var(--font-family-sans)' }}>{entry !== 0 ? `${chg >= 0 ? '+' : ''}${parseFloat(chg.toFixed(gk.dec))}${isIv ? '%' : ''}` : '—'}</span></div></div>; } })),
     columnHelper.display({ id: 'delete', header: () => <div style={{ width: 34, flexShrink: 0 }} />, cell: ({ row }) => <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px', borderLeft: '1px solid rgba(255,255,255,0.03)', flexShrink: 0, height: '100%' }}><button onClick={() => removeLeg(row.original.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#1f2937', display: 'flex', alignItems: 'center', padding: 2, borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#f23645')} onMouseLeave={e => (e.currentTarget.style.color = '#1f2937')}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg></button></div> })
   ], [updateLeg, removeLeg]);
 
@@ -2515,7 +2515,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     {headerTable.getHeaderGroups().map(hg => (
                       <tr key={hg.id} style={{ background: '#333333', borderRadius: 6 }}>
                         {hg.headers.map(h => (
-                          <th key={h.id} style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#9CA3AF', letterSpacing: '0.04em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>
+                          <th key={h.id} style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: '#9DA6B5', letterSpacing: '0.03em', whiteSpace: 'nowrap', fontFamily: 'var(--font-family-sans)' }}>
                             {flexRender(h.column.columnDef.header, h.getContext())}
                           </th>
                         ))}
@@ -3934,8 +3934,8 @@ export default function App() {
 
             {/* Footer */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
-              <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>↵</kbd> select</span>
-              <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}>Esc</kbd> close</span>
+              <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: 'var(--font-family-sans)' }}>↵</kbd> select</span>
+              <span style={{ fontSize: 11, color: '#4A4E5C' }}><kbd style={{ fontFamily: 'var(--font-family-sans)' }}>Esc</kbd> close</span>
             </div>
           </div>
         </div>
