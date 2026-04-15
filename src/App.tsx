@@ -37,6 +37,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  SidebarInset,
   useSidebar,
 } from './components/ui/sidebar';
 import {
@@ -422,7 +423,7 @@ function getLegProfitPoints(leg: Leg, ltp = getLegEffectiveLtp(leg)): number {
   return leg.action === 'B' ? Math.max(0, ltp - leg.price) : Math.max(0, leg.price - ltp);
 }
 
-function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' = 'manual', tickAt?: number): Leg {
+function squareOffLeg(leg: Leg, ltp?: number, reason: 'manual' | 'sl' | 'tp' = 'manual', tickAt?: number): Leg {
   const exitLtp = (ltp ?? 0) > 0 ? ltp! : getLegLiveLtp(leg);
   return {
     ...leg,
@@ -1569,7 +1570,13 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   
   useEffect(() => {
     const sessionToken = localStorage.getItem('nubra_session_token');
-    if (!sessionToken || legs.length === 0) {
+    const allLegs = [
+      ...legs,
+      ...Object.entries(strategyLegsRef.current)
+        .filter(([k]) => Number(k) !== activeStrategyRef.current)
+        .flatMap(([, tabLegs]) => tabLegs),
+    ];
+    if (!sessionToken || allLegs.length === 0) {
       if (mtmWsRef.current) { mtmWsRef.current.close(); mtmWsRef.current = null; }
       return;
     }
@@ -1577,39 +1584,40 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     // Historical mode: only connect WS when market is open
     if (isHistoricalModeRef.current && !isMarketOpen()) return;
 
-    // Collect refIds from ALL strategy tabs so inactive tabs also get live updates
-    const allLegs = [
-      ...legs,
-      ...Object.entries(strategyLegsRef.current)
-        .filter(([k]) => Number(k) !== activeStrategyRef.current)
-        .flatMap(([, tabLegs]) => tabLegs),
-    ];
     const refIds = Array.from(new Set(allLegs.map(l => l.refId).filter((id): id is number => id !== undefined)));
     if (refIds.length === 0) return;
+
+    const sendSubs = () => {
+      if (!mtmWsRef.current || mtmWsRef.current.readyState !== WebSocket.OPEN) return;
+      mtmWsRef.current.send(JSON.stringify({
+        action: 'subscribe',
+        session_token: sessionToken,
+        data_type: 'greeks',
+        symbols: [],
+        ref_ids: refIds,
+        exchange: 'NSE',
+      }));
+    };
 
     if (!mtmWsRef.current || mtmWsRef.current.readyState !== WebSocket.OPEN) {
       if (mtmWsRef.current) mtmWsRef.current.close();
       const ws = new WebSocket('ws://localhost:8765');
       mtmWsRef.current = ws;
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          action: 'subscribe',
-          session_token: sessionToken,
-          data_type: 'greeks',
-          symbols: [],
-          ref_ids: refIds,
-          exchange: 'NSE', // Using NSE by default for options
-        }));
-      };
+      ws.onopen = () => { sendSubs(); };
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+          if (msg.type === 'connected') {
+            sendSubs();
+            return;
+          }
           if (msg.type === 'greeks' && msg.data) {
             const d = msg.data;
             if (!d.ref_id) return;
             const newLtpVal = d.ltp !== undefined && d.ltp > 0 ? (d.ltp / 100) : null;
+            const tickAt = d.timestamp ? Math.floor((Number(d.timestamp) > 1e12 ? Number(d.timestamp) / 1000 : Number(d.timestamp))) : undefined;
             // Update active tab legs
             setLegs(prev => {
               let changed = false;
@@ -1624,37 +1632,36 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                   gamma: d.gamma ?? leg.currGreeks.gamma,
                   iv: d.iv !== undefined && d.iv > 0 ? d.iv : leg.currGreeks.iv,
                 };
-                return applyLegLiveUpdate(leg, newLtp, newGreeks);
+                return applyLegLiveUpdate(leg, newLtp, newGreeks, tickAt);
               });
               return changed ? next : prev;
             });
             // Also update inactive strategy tabs
-            if (newLtpVal !== null) {
-              setStrategyLegs(prev => {
-                let anyChanged = false;
-                const next: Record<number, Leg[]> = {};
-                for (const [k, tabLegs] of Object.entries(prev)) {
-                  const kn = Number(k);
-                  if (kn === activeStrategyRef.current) { next[kn] = tabLegs; continue; }
-                  let tabChanged = false;
-                  const updated = tabLegs.map(leg => {
-                    if (leg.refId !== d.ref_id) return leg;
-                    tabChanged = true;
-                    const newGreeks = {
-                      delta: d.delta ?? leg.currGreeks.delta,
-                      theta: d.theta ?? leg.currGreeks.theta,
-                      vega: d.vega ?? leg.currGreeks.vega,
-                      gamma: d.gamma ?? leg.currGreeks.gamma,
-                      iv: d.iv !== undefined && d.iv > 0 ? d.iv : leg.currGreeks.iv,
-                    };
-                    return applyLegLiveUpdate(leg, newLtpVal, newGreeks);
-                  });
-                  next[kn] = tabChanged ? updated : tabLegs;
-                  if (tabChanged) anyChanged = true;
-                }
-                return anyChanged ? next : prev;
-              });
-            }
+            setStrategyLegs(prev => {
+              let anyChanged = false;
+              const next: Record<number, Leg[]> = {};
+              for (const [k, tabLegs] of Object.entries(prev)) {
+                const kn = Number(k);
+                if (kn === activeStrategyRef.current) { next[kn] = tabLegs; continue; }
+                let tabChanged = false;
+                const updated = tabLegs.map(leg => {
+                  if (leg.refId !== d.ref_id) return leg;
+                  tabChanged = true;
+                  const nextLtp = newLtpVal ?? leg.currLtp;
+                  const newGreeks = {
+                    delta: d.delta ?? leg.currGreeks.delta,
+                    theta: d.theta ?? leg.currGreeks.theta,
+                    vega: d.vega ?? leg.currGreeks.vega,
+                    gamma: d.gamma ?? leg.currGreeks.gamma,
+                    iv: d.iv !== undefined && d.iv > 0 ? d.iv : leg.currGreeks.iv,
+                  };
+                  return applyLegLiveUpdate(leg, nextLtp, newGreeks, tickAt);
+                });
+                next[kn] = tabChanged ? updated : tabLegs;
+                if (tabChanged) anyChanged = true;
+              }
+              return anyChanged ? next : prev;
+            });
           }
         } catch { /**/ }
       };
@@ -1663,14 +1670,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       ws.onclose = () => { mtmWsRef.current = null; };
     } else {
       // If already connected, just send new subscription
-      mtmWsRef.current.send(JSON.stringify({
-        action: 'subscribe',
-        session_token: sessionToken,
-        data_type: 'greeks',
-        symbols: [],
-        ref_ids: refIds,
-        exchange: 'NSE',
-      }));
+      sendSubs();
     }
 
     // Note: We intentionally don't close the WS on every dependency change to avoid rapid reconnects.
@@ -1704,6 +1704,9 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     const unsubs = mcxLegs.map(leg =>
       wsManager.subscribe(leg.instrumentKey!, md => {
         if (!md.ltp) return;
+        // md.ltt is epoch ms from Upstox protobuf; squareOffAt is stored in seconds
+        const lttNum = md.ltt ? Number(md.ltt) : 0;
+        const tickAt = lttNum > 0 ? Math.floor(lttNum > 1e12 ? lttNum / 1000 : lttNum) : undefined;
         // Update active tab
         setLegs(prev => {
           const idx = prev.findIndex(l => l.id === leg.id);
@@ -1711,9 +1714,6 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           const cur = prev[idx];
           const newGreeks = { delta: md.delta ?? cur.currGreeks.delta, theta: md.theta ?? cur.currGreeks.theta, vega: md.vega ?? cur.currGreeks.vega, gamma: md.gamma ?? cur.currGreeks.gamma, iv: md.iv ?? cur.currGreeks.iv };
           if (cur.currLtp === md.ltp && cur.currGreeks.delta === newGreeks.delta) return prev;
-          // md.ltt is epoch ms from Upstox protobuf; squareOffAt is stored in seconds
-          const lttNum = md.ltt ? Number(md.ltt) : 0;
-          const tickAt = lttNum > 0 ? Math.floor(lttNum > 1e12 ? lttNum / 1000 : lttNum) : undefined;
           const next = [...prev];
           next[idx] = applyLegLiveUpdate(cur, md.ltp, newGreeks, tickAt);
           return next;
@@ -1967,7 +1967,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
     const ws = new WebSocket('ws://localhost:8765');
     spotWsRef.current = ws;
 
-    ws.onopen = () => {
+    const sendSubs = () => {
+      if (ws.readyState !== WebSocket.OPEN) return;
       for (const { sym, expiry, exchange } of combos) {
         ws.send(JSON.stringify({
           action: 'subscribe',
@@ -1979,9 +1980,14 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       }
     };
 
+    ws.onopen = () => { sendSubs(); };
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
+        if (msg.type === 'connected') {
+          sendSubs();
+          return;
+        }
         if (msg.type !== 'option' || !msg.data) return;
         const d = msg.data;
         const asset: string = (d.asset ?? '').toUpperCase();
@@ -1991,6 +1997,63 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
           // Also update ocSpotRef if this matches the active OC symbol
           if (asset === (ocSymbol ?? '').toUpperCase()) ocSpotRef.current = price;
         }
+
+        const tickAtRaw = Number((d.ce?.[0]?.timestamp ?? d.pe?.[0]?.timestamp ?? 0));
+        const tickAt = tickAtRaw > 0
+          ? Math.floor((tickAtRaw > 1e12 ? tickAtRaw / 1000 : tickAtRaw))
+          : undefined;
+
+        const byRefId = new Map<number, { ltp?: number; greeks: Partial<Greeks> }>();
+        for (const side of [...(Array.isArray(d.ce) ? d.ce : []), ...(Array.isArray(d.pe) ? d.pe : [])]) {
+          const refId = Number(side?.ref_id ?? 0);
+          if (!(refId > 0)) continue;
+          byRefId.set(refId, {
+            ltp: typeof side?.last_traded_price === 'number' && side.last_traded_price > 0 ? side.last_traded_price : undefined,
+            greeks: {
+              delta: typeof side?.delta === 'number' ? side.delta : undefined,
+              theta: typeof side?.theta === 'number' ? side.theta : undefined,
+              vega: typeof side?.vega === 'number' ? side.vega : undefined,
+              gamma: typeof side?.gamma === 'number' ? side.gamma : undefined,
+              iv: typeof side?.iv === 'number' ? side.iv : undefined,
+            },
+          });
+        }
+        if (byRefId.size === 0) return;
+
+        setLegs(prev => {
+          let changed = false;
+          const next = prev.map(leg => {
+            const refId = Number(leg.refId ?? 0);
+            const live = refId > 0 ? byRefId.get(refId) : undefined;
+            if (!live) return leg;
+            changed = true;
+            return applyLegLiveUpdate(leg, live.ltp ?? leg.currLtp, live.greeks, tickAt);
+          });
+          return changed ? next : prev;
+        });
+
+        setStrategyLegs(prev => {
+          let anyChanged = false;
+          const next: Record<number, Leg[]> = {};
+          for (const [k, tabLegs] of Object.entries(prev)) {
+            const kn = Number(k);
+            if (kn === activeStrategyRef.current) {
+              next[kn] = tabLegs;
+              continue;
+            }
+            let tabChanged = false;
+            const updated = tabLegs.map(leg => {
+              const refId = Number(leg.refId ?? 0);
+              const live = refId > 0 ? byRefId.get(refId) : undefined;
+              if (!live) return leg;
+              tabChanged = true;
+              return applyLegLiveUpdate(leg, live.ltp ?? leg.currLtp, live.greeks, tickAt);
+            });
+            next[kn] = tabChanged ? updated : tabLegs;
+            if (tabChanged) anyChanged = true;
+          }
+          return anyChanged ? next : prev;
+        });
       } catch { /**/ }
     };
 
@@ -2769,17 +2832,19 @@ export default function App() {
     if (!sessionToken) return;
 
     let destroyed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let healthTimer: ReturnType<typeof setInterval> | null = null;
+    let lastIndexTickAt = 0;
 
     // ── WebSocket only — index feed ticks every second, no REST needed ─────────
-    if (nubraNavWsRef.current) {
-      nubraNavWsRef.current.close();
-      nubraNavWsRef.current = null;
-    }
+    const clearReconnect = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
 
-    const ws = new WebSocket('ws://localhost:8765');
-    nubraNavWsRef.current = ws;
-
-    const sendSubs = () => {
+    const sendSubs = (ws: WebSocket) => {
       if (destroyed || ws.readyState !== WebSocket.OPEN) return;
       const tgts = nubraNavTargetsRef.current;
       const tok = nubraNavSessionRef.current;
@@ -2787,6 +2852,14 @@ export default function App() {
       const bse = tgts.filter(t => t.exchange === 'BSE').map(t => t.symbol);
       if (nse.length) ws.send(JSON.stringify({ action: 'subscribe', session_token: tok, data_type: 'index', symbols: nse, exchange: 'NSE' }));
       if (bse.length) ws.send(JSON.stringify({ action: 'subscribe', session_token: tok, data_type: 'index', symbols: bse, exchange: 'BSE' }));
+    };
+
+    const scheduleReconnect = (delayMs = 1800) => {
+      if (destroyed || reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delayMs);
     };
 
     // ── REST snapshot — seeds the ticker before first WS tick arrives ──────────
@@ -2814,28 +2887,77 @@ export default function App() {
     };
     void fetchSnapshot();
 
-    ws.onopen = () => { sendSubs(); };
-    ws.onmessage = (e) => {
-      if (destroyed) return;
-      try {
-        const msg = JSON.parse(e.data as string);
-        if (msg.type === 'connected') { sendSubs(); return; }
-        if (msg.type !== 'index') return;
-        const d = msg.data;
-        const label = NAV_LABEL_MAP[(d?.indexname ?? '').toUpperCase()];
-        if (!label) return;
-        const ltp = (d.index_value ?? 0) / 100;
-        if (ltp <= 0) return;
-        // changepercent comes directly from Nubra — use it for change display
-        const changePct = d.changepercent ?? 0;
-        const pointChange = ltp * changePct / (100 + changePct);
-        setNubraNavIndex(prev => { const next = new Map(prev); next.set(label, { ltp, changePct, pointChange }); return next; });
-      } catch { /* silent */ }
-    };
-    ws.onerror = () => {};
-    ws.onclose = () => {};
+    const connect = () => {
+      if (destroyed || !nubraNavSessionRef.current) return;
+      clearReconnect();
+      if (nubraNavWsRef.current) {
+        try { nubraNavWsRef.current.close(); } catch { /* ignore */ }
+        nubraNavWsRef.current = null;
+      }
 
-    return () => { destroyed = true; ws.close(); nubraNavWsRef.current = null; };
+      const ws = new WebSocket('ws://localhost:8765');
+      nubraNavWsRef.current = ws;
+
+      ws.onopen = () => {
+        if (destroyed) return;
+        lastIndexTickAt = Date.now();
+        sendSubs(ws);
+      };
+      ws.onmessage = (e) => {
+        if (destroyed) return;
+        try {
+          const msg = JSON.parse(e.data as string);
+          if (msg.type === 'connected') {
+            lastIndexTickAt = Date.now();
+            sendSubs(ws);
+            return;
+          }
+          if (msg.type !== 'index') return;
+          const d = msg.data;
+          const label = NAV_LABEL_MAP[(d?.indexname ?? '').toUpperCase()];
+          if (!label) return;
+          const ltp = (d.index_value ?? 0) / 100;
+          if (ltp <= 0) return;
+          lastIndexTickAt = Date.now();
+          const changePct = d.changepercent ?? 0;
+          const pointChange = ltp * changePct / (100 + changePct);
+          setNubraNavIndex(prev => { const next = new Map(prev); next.set(label, { ltp, changePct, pointChange }); return next; });
+        } catch { /* silent */ }
+      };
+      ws.onerror = () => {
+        if (destroyed) return;
+        try { ws.close(); } catch { /* ignore */ }
+      };
+      ws.onclose = () => {
+        if (nubraNavWsRef.current === ws) nubraNavWsRef.current = null;
+        if (!destroyed) scheduleReconnect();
+      };
+    };
+
+    connect();
+
+    healthTimer = setInterval(() => {
+      if (destroyed) return;
+      const ws = nubraNavWsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        scheduleReconnect(300);
+        return;
+      }
+      if (!isMarketOpen()) return;
+      if (lastIndexTickAt > 0 && Date.now() - lastIndexTickAt > 45_000) {
+        try { ws.close(); } catch { /* ignore */ }
+      }
+    }, 10_000);
+
+    return () => {
+      destroyed = true;
+      clearReconnect();
+      if (healthTimer) clearInterval(healthTimer);
+      if (nubraNavWsRef.current) {
+        try { nubraNavWsRef.current.close(); } catch { /* ignore */ }
+      }
+      nubraNavWsRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nubraNavTargetsKey, nubraSession]);
 
@@ -3452,7 +3574,7 @@ export default function App() {
       </Sidebar>
 
       {/* ── Main area ───────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col min-w-0 h-screen" style={{ marginLeft: 'var(--sidebar-w)', transition: 'margin-left 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}>
+      <SidebarInset className="flex flex-1 flex-col min-w-0 min-h-0">
         {/* Top bar */}
         <header className="glass-navbar flex h-16 shrink-0 items-center px-4" style={{ minHeight: 64, fontFamily: 'var(--font-family-sans)', textTransform: 'none', gap: 0 }}>
           {/* Left: sidebar trigger + logo */}
@@ -3542,7 +3664,7 @@ export default function App() {
             - Heavy pages (OI Profile, Backtest) stay on-demand: mount on
               visit, unmount on leave, to avoid 300+ idle WS subscriptions.
         */}
-        <main className="flex-1 overflow-hidden relative" style={{ background: '#171717' }}>
+        <main className="flex-1 min-h-0 overflow-hidden relative" style={{ background: '#171717' }}>
           {/* Keep-alive pattern: every page is absolute inset-0.
               - display:none  → safe for pages with no Ant Design (Chart, Straddle)
               - visibility:hidden → for pages with Ant Design (Nubra, Historical)
@@ -3634,7 +3756,7 @@ export default function App() {
           )}
 
         </main>
-      </div>
+      </SidebarInset>
 
       {/* ── Basket Order (draggable) ───────────────────────────────── */}
       {showBasket && (

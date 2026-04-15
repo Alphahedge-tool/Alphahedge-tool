@@ -6,6 +6,7 @@ import * as am5percent from '@amcharts/amcharts5/percent';
 import { createChart, LineSeries, type IChartApi, type ISeriesApi, type LineData, type Time } from 'lightweight-charts';
 import { useInstrumentsCtx } from './AppContext';
 import type { NubraInstrument } from './useNubraInstruments';
+import { nubraBridge } from './lib/NubraBridgeManager';
 import s from './CumulativeOiChain.module.css';
 
 interface Props {
@@ -60,7 +61,6 @@ const EMPTY_SIDE: OptionSide = {
   volume: 0,
 };
 
-const BRIDGE = 'ws://localhost:8765';
 const DEFAULT_SCRIP = 'NIFTY';
 const STRIKE_WINDOW_OPTIONS = [5, 10, 15, 20];
 const METRIC_OPTIONS = ['oi', 'iv', 'delta', 'theta', 'vega', 'gamma'] as const;
@@ -1791,7 +1791,6 @@ export default function CumulativeOiChain({ visible }: Props) {
   const [histData, setHistData] = useState<Record<string, StrikeHistorySeries>>({});
   const [popupCell, setPopupCell] = useState<{ strike: number; expiry: string } | null>(null);
   const [allExpiryOi, setAllExpiryOi] = useState<Record<number, { totalCeOi: number; totalPeOi: number; pcr: number } | 'loading'>>({});
-  const wsRef = useRef<WebSocket | null>(null);
   const histDataRef = useRef<Record<string, StrikeHistorySeries>>({});
   const histPendingRef = useRef<Set<string>>(new Set());
   const histDateRef = useRef<string>(histDate);
@@ -1907,34 +1906,22 @@ export default function CumulativeOiChain({ visible }: Props) {
   }, [symbol, pickedExpiries, nubraInstruments]);
 
   useEffect(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
     const session = getSession();
     const resolved = resolveNubra(symbol, nubraInstruments);
     if (!session || !resolved.nubraSym || pickedExpiries.length === 0 || !isMarketOpen()) return;
 
-    const ws = new WebSocket(BRIDGE);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        action: 'subscribe',
-        session_token: session,
-        data_type: 'option',
-        symbols: pickedExpiries.map(expiry => `${resolved.nubraSym}:${expiry}`),
-        exchange: resolved.exchange,
-      }));
-    };
-    ws.onmessage = event => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type !== 'option' || !msg.data?.expiry) return;
-        const expiry = String(msg.data.expiry);
-        const live = buildChainSnapshotWs(msg.data.ce ?? [], msg.data.pe ?? [], msg.data.at_the_money_strike ?? 0, msg.data.current_price ?? 0);
+    const unsub = nubraBridge.subscribe({
+      session,
+      symbols: pickedExpiries.map(expiry => `${resolved.nubraSym}:${expiry}`),
+      exchange: resolved.exchange,
+      dataType: 'option',
+      onMessage: (msg) => {
+        if (msg.type !== 'option' || !(msg.data as any)?.expiry) return;
+        const data = msg.data as any;
+        const expiry = String(data.expiry);
+        const live = buildChainSnapshotWs(data.ce ?? [], data.pe ?? [], data.at_the_money_strike ?? 0, data.current_price ?? 0);
         setChains(prev => {
           const next = { ...prev, [expiry]: mergeChainSnapshot(prev[expiry], live) };
-          // Append OI / vol / delta trend from merged chains
           const totalCe  = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.ce.oi, 0), 0);
           const totalPe  = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.pe.oi, 0), 0);
           const totalCeV = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.ce.volume, 0), 0);
@@ -1946,14 +1933,9 @@ export default function CumulativeOiChain({ visible }: Props) {
           if (totalCeD > 0 || totalPeD > 0) setSummaryDeltaTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeD, totalPeD));
           return next;
         });
-      } catch {
-        // ignore malformed frames
-      }
-    };
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
+      },
+    });
+    return unsub;
   }, [symbol, pickedExpiries, nubraInstruments]);
 
   // ── Historical delta×OI fetch ───────────────────────────────────────────────

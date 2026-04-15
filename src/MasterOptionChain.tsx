@@ -13,6 +13,7 @@ import {
 } from 'lightweight-charts';
 import { useInstrumentsCtx } from './AppContext';
 import type { NubraInstrument } from './useNubraInstruments';
+import { nubraBridge } from './lib/NubraBridgeManager';
 import s from './MasterOptionChain.module.css';
 
 interface Props {
@@ -65,7 +66,6 @@ const EMPTY_SIDE: OptionSide = {
   gamma: 0,
 };
 
-const BRIDGE = 'ws://localhost:8765';
 const DEFAULT_SCRIP = 'NIFTY';
 const STRIKE_WINDOW_OPTIONS = [5, 10, 15, 20];
 const AVAILABLE_COLUMNS = [
@@ -640,7 +640,11 @@ async function fetchNubraChainOiHistory(
       ],
     }),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const err = new Error(`nubra-timeseries ${res.status}`) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
 
   const json = await res.json();
   const totals = new Map<number, SummaryTrendPoint>();
@@ -1081,14 +1085,6 @@ function SummaryMetricTrend({
     }
     setChgHistory([{ ts: Math.floor(Date.now() / 60000) * 60000, call: callChgValue, put: putChgValue }]);
   }, [initialChgHistory]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    setHistory(prev => appendSummaryTrendPoint(prev, callValue, putValue));
-  }, [callValue, putValue]);
-
-  useEffect(() => {
-    setChgHistory(prev => appendSummaryTrendPoint(prev, callChgValue, putChgValue));
-  }, [callChgValue, putChgValue]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1718,11 +1714,9 @@ export default function MasterOptionChain({ visible }: Props) {
       put:  p.put  - base.put,
     }));
   }, [summaryOiTrendHistory]);
-  const wsRef = useRef<WebSocket | null>(null);
   const straddleHistoryCacheRef = useRef(new Map<string, { straddle: LineData[]; call: LineData[]; put: LineData[]; spot: LineData[]; iv: LineData[]; oi: LineData[]; pcr: LineData[]; rv: LineData[] }>());
   const butterflyHistoryCacheRef = useRef(new Map<string, { net: LineData[]; spot: LineData[] }>());
   const ratioHistoryCacheRef = useRef(new Map<string, { pd: LineData[]; spot: LineData[] }>());
-  const summaryOiHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
   const straddleChartHostRef = useRef<HTMLDivElement | null>(null);
   const straddleChartRef = useRef<IChartApi | null>(null);
   const straddlePremiumSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -1827,44 +1821,27 @@ export default function MasterOptionChain({ visible }: Props) {
   }, [symbol, pickedExpiries, nubraInstruments]);
 
   useEffect(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
     const session = getSession();
     const resolved = resolveNubra(symbol, nubraInstruments);
     if (!session || !resolved.nubraSym || pickedExpiries.length === 0 || !isMarketOpen()) return;
 
-    const ws = new WebSocket(BRIDGE);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        action: 'subscribe',
-        session_token: session,
-        data_type: 'option',
-        symbols: pickedExpiries.map(expiry => `${resolved.nubraSym}:${expiry}`),
-        exchange: resolved.exchange,
-      }));
-    };
-    ws.onmessage = event => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type !== 'option' || !msg.data?.expiry) return;
-        const expiry = String(msg.data.expiry);
-        const data = msg.data;
+    const unsub = nubraBridge.subscribe({
+      session,
+      symbols: pickedExpiries.map(expiry => `${resolved.nubraSym}:${expiry}`),
+      exchange: resolved.exchange,
+      dataType: 'option',
+      onMessage: (msg) => {
+        if (msg.type !== 'option' || !(msg.data as any)?.expiry) return;
+        const data = msg.data as any;
+        const expiry = String(data.expiry);
         const liveSnap = buildChainSnapshotWs(data.ce ?? [], data.pe ?? [], data.at_the_money_strike ?? 0, data.current_price ?? 0);
         setChains(prev => ({
           ...prev,
           [expiry]: mergeChainSnapshot(prev[expiry], liveSnap),
         }));
-      } catch {
-        // ignore malformed bridge frames
-      }
-    };
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
+      },
+    });
+    return unsub;
   }, [symbol, pickedExpiries, nubraInstruments]);
 
   const baseExpiry = pickedExpiries[0] ?? '';
@@ -2701,52 +2678,51 @@ export default function MasterOptionChain({ visible }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
 
     const resolved = resolveNubra(symbol, nubraInstruments);
     const scopeExpiries = viewMode === 'chain'
       ? pickedExpiries
       : [viewMode === 'straddle' ? straddleExpiry : viewMode === 'butterfly' ? butterflyExpiry : ratioExpiry].filter(Boolean);
 
-    const loadSummaryOiHistory = async () => {
+    const pollOiHistory = async () => {
+      if (cancelled) return;
       if (!resolved.nubraSym || !resolved.exchange || scopeExpiries.length === 0) {
         setSummaryOiTrendHistory([]);
         return;
       }
-      const chainValues = scopeExpiries.map(expiry => buildNubraChainValue(resolved.nubraSym, expiry));
 
-      const now = toIstDateTime();
+      const chainValues = scopeExpiries.map(expiry => buildNubraChainValue(resolved.nubraSym, expiry));
       const tradingDate = resolveIntradayTradingDate();
       const startDate = istToUtcIso(tradingDate, '09:15');
-      const endDate = istToUtcIso(now.date, now.time);
-      // Include current minute in cache key so each new page-load gets fresh
-      // history up to now, not stale history from the last load time.
-      const cacheKey = [
-        resolved.nubraSym,
-        resolved.exchange,
-        viewMode,
-        scopeExpiries.join(','),
-        tradingDate,
-        now.time.slice(0, 5), // HH:MM
-      ].join('|');
+      const endDate = new Date().toISOString(); // always "now" so each poll fetches up to current minute
 
-      const cached = summaryOiHistoryCacheRef.current.get(cacheKey);
-      if (cached) {
-        setSummaryOiTrendHistory(cached);
-        return;
-      }
-
+      let backoff = 0;
       try {
         const merged = await fetchNubraChainOiHistory(resolved.exchange, chainValues, startDate, endDate);
-        if (cancelled) return;
-        summaryOiHistoryCacheRef.current.set(cacheKey, merged);
-        setSummaryOiTrendHistory(merged);
-      } catch {
-        if (!cancelled) setSummaryOiTrendHistory([]);
+        if (!cancelled) setSummaryOiTrendHistory(merged);
+      } catch (e: any) {
+        // on 403/429 back off 30 s so we don't keep hammering and stay blocked
+        if (e?.status === 403 || e?.status === 429) backoff = 30_000;
+        // keep existing data on error — don't clear the chart
+      }
+
+      // schedule next poll
+      if (!cancelled) {
+        const now = toIstDateTime();
+        const [hh, mm] = now.time.split(':').map(Number);
+        const istMin = hh * 60 + mm;
+        const isMarketHours = istMin >= 9 * 60 + 15 && istMin <= 15 * 60 + 30;
+        const base = isMarketHours ? 5_000 : 60_000; // 5 s during market, 1 min outside
+        timerId = setTimeout(pollOiHistory, base + backoff);
       }
     };
 
-    loadSummaryOiHistory();
-    return () => { cancelled = true; };
+    pollOiHistory();
+    return () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+    };
   }, [butterflyExpiry, nubraInstruments, pickedExpiries, ratioExpiry, straddleExpiry, symbol, viewMode]);
 
   useEffect(() => {

@@ -31,6 +31,7 @@ const MARKET_OPEN_MIN = 9 * 60 + 15;
 const MARKET_CLOSE_MIN = 15 * 60 + 30;
 const MAX_OPTION_BATCH_CALLS = 3;
 const KEYS_PER_BATCH_CALL = 12;
+const NUBRA_BRIDGE = 'ws://localhost:8765';
 
 function snapToBarTime(tsMs: number, intervalMinutes: number): number {
   const intervalSec = intervalMinutes * 60;
@@ -392,6 +393,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const strikeSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const unsubsRef = useRef<(() => void)[]>([]);
+  const nubraWsRef = useRef<WebSocket | null>(null);
   const activeKeysRef = useRef<string[]>([]);
   const activeStrikesRef = useRef<number[]>([]);
   const liveSpotRef = useRef(0);
@@ -524,6 +526,11 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     liveLtpByStrikeRef.current = new Map();
     activeStrikesRef.current = [];
     liveSpotRef.current = 0;
+    // Close Nubra WS
+    if (nubraWsRef.current) {
+      try { nubraWsRef.current.close(); } catch { /* ignore */ }
+      nubraWsRef.current = null;
+    }
   }, []);
 
   const clearSeries = useCallback(() => {
@@ -712,7 +719,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       const spotLine: LineData[] = spotResampled.map(c => ({ time: Math.floor(c[0] / 1000) as Time, value: c[4] }));
       const spotSer = chart.addSeries(LineSeries, {
-        color: '#93c5fd',
+        color: '#d1d5db',
         lineWidth: 1,
         lineStyle: 1,
         title: 'Spot',
@@ -820,6 +827,94 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       unsubsRef.current = unsubs;
       liveSpotRef.current = wsManager.get(spotKey)?.ltp ?? spotResampled.at(-1)?.[4] ?? 0;
       applyLive();
+
+      // ── Nubra WS: live ATM IV updates ───────────────────────────────────────
+      const nubraToken = localStorage.getItem('nubra_session_token') ?? '';
+      const nubraExpiryStr = new Date(expiry)
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        .replace(/-/g, '');
+      if (nubraToken) {
+        if (nubraWsRef.current) {
+          try { nubraWsRef.current.close(); } catch { /* ignore */ }
+          nubraWsRef.current = null;
+        }
+        const ws = new WebSocket(NUBRA_BRIDGE);
+        nubraWsRef.current = ws;
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            action: 'subscribe',
+            session_token: nubraToken,
+            data_type: 'option',
+            symbols: [`${underlying}:${nubraExpiryStr}`],
+            exchange: nubraExchange,
+          }));
+        };
+        ws.onmessage = evt => {
+          try {
+            const msg = JSON.parse(evt.data as string);
+            if (msg.type !== 'option' || !msg.data) return;
+            const d = msg.data;
+            // at_the_money_strike comes directly from WS
+            const atmStrike = Number(d.at_the_money_strike ?? 0);
+            const currentPrice = Number(d.current_price ?? 0);
+            const spot = currentPrice > 0 ? currentPrice : atmStrike;
+
+            // Find IV for the ATM strike from CE array (avg CE+PE if both present)
+            let atmIv = 0;
+            const ceArr: any[] = d.ce ?? [];
+            const peArr: any[] = d.pe ?? [];
+            if (atmStrike > 0) {
+              const ceItem = ceArr.find((x: any) => Math.abs(Number(x.strike_price ?? 0) - atmStrike) < 0.01);
+              const peItem = peArr.find((x: any) => Math.abs(Number(x.strike_price ?? 0) - atmStrike) < 0.01);
+              const ceIv = ceItem ? Number(ceItem.iv ?? 0) : 0;
+              const peIv = peItem ? Number(peItem.iv ?? 0) : 0;
+              if (ceIv > 0 && peIv > 0) atmIv = (ceIv + peIv) / 2;
+              else atmIv = ceIv || peIv;
+            } else if (spot > 0) {
+              // Fallback: find nearest strike in ce array
+              let bestDist = Infinity;
+              for (const x of ceArr) {
+                const sp = Number(x.strike_price ?? 0);
+                const dist = Math.abs(sp - spot);
+                if (dist < bestDist && Number(x.iv ?? 0) > 0) {
+                  bestDist = dist;
+                  atmIv = Number(x.iv);
+                }
+              }
+            }
+
+            if (atmIv > 0) {
+              // Lazily create IV series if historical load returned nothing
+              if (!ivSeriesRef.current && chartRef.current) {
+                try {
+                  const ivSer = chartRef.current.addSeries(LineSeries, {
+                    priceScaleId: 'iv-top-hidden',
+                    color: '#22d3ee',
+                    lineWidth: 2,
+                    lineStyle: 1,
+                    title: 'Rolling IV % (Nubra)',
+                    lastValueVisible: true,
+                    priceLineVisible: false,
+                  }, 0);
+                  ivSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+                  ivSeriesRef.current = ivSer;
+                } catch { /* chart may be disposed */ }
+              }
+              if (ivSeriesRef.current) {
+                // WS iv is decimal (0.15 = 15%) — multiply by 100 to match historical series
+                const t = snapToBarTime(Date.now(), intervalRef.current.min) as Time;
+                try { ivSeriesRef.current.update({ time: t, value: atmIv * 100 }); } catch { /* ignore */ }
+              }
+            }
+          } catch {
+            // ignore malformed
+          }
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+          if (nubraWsRef.current === ws) nubraWsRef.current = null;
+        };
+      }
     } catch (e) {
       setError(String(e));
     } finally {
