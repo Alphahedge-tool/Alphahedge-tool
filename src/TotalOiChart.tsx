@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
   LineSeries,
+  HistogramSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
   type LineData,
+  type HistogramData,
   type Time,
 } from 'lightweight-charts';
 import type { NubraInstrument } from './useNubraInstruments';
@@ -372,8 +374,8 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
   // crosshair tooltip state
   const [tooltip, setTooltip] = useState<{
     visible: boolean; x: number; y: number;
-    time: string; call: number; put: number; spot: number;
-  }>({ visible: false, x: 0, y: 0, time: '', call: 0, put: 0, spot: 0 });
+    time: string; call: number; put: number; spot: number; spread: number;
+  }>({ visible: false, x: 0, y: 0, time: '', call: 0, put: 0, spot: 0, spread: 0 });
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const expiryDropRef = useRef<HTMLDivElement | null>(null);
@@ -393,6 +395,8 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
   const callSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const spotSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const spreadSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const fittedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spotWsRef = useRef<WebSocket | null>(null);
   const cancelledRef = useRef(false);
@@ -429,6 +433,7 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
     if (!symbol || !selectedExpiries.size || !exchange) return;
     cancelledRef.current = false;
     backoffRef.current = 0;
+    fittedRef.current = false;
     setData([]);
     setSpotData([]);
     setSpotHistoryReady(false);
@@ -653,9 +658,10 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
         setTooltip(t => t.visible ? { ...t, visible: false } : t);
         return;
       }
-      const callVal = callSeries ? (param.seriesData.get(callSeries) as any)?.value ?? 0 : 0;
-      const putVal  = putSeries  ? (param.seriesData.get(putSeries)  as any)?.value ?? 0 : 0;
-      const spotVal = spotSeries ? (param.seriesData.get(spotSeries) as any)?.value ?? 0 : 0;
+      const callVal   = callSeries   ? (param.seriesData.get(callSeries)   as any)?.value ?? 0 : 0;
+      const putVal    = putSeries    ? (param.seriesData.get(putSeries)    as any)?.value ?? 0 : 0;
+      const spotVal   = spotSeries   ? (param.seriesData.get(spotSeries)   as any)?.value ?? 0 : 0;
+      const spreadVal = (Number.isFinite(putVal) && Number.isFinite(callVal)) ? putVal - callVal : 0;
       const tx = Math.max(8, Math.min(host.clientWidth - 200, x + 14));
       const ty = Math.max(8, Math.min(host.clientHeight - 100, y + 14));
       setTooltip({
@@ -665,13 +671,28 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
         call: callVal,
         put: putVal,
         spot: spotVal,
+        spread: spreadVal,
       });
+    });
+
+    // ── Pane 1: OI Spread (Put − Call) histogram ─────────────────────────────
+    chart.addPane(); // pane index 1
+    const spreadSeries = chart.addSeries(HistogramSeries, {
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'Spread',
+      base: 0,
+    }, 1);
+    spreadSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+      borderColor: 'rgba(255,255,255,0.08)',
     });
 
     chartRef.current = chart;
     callSeriesRef.current = callSeries;
     putSeriesRef.current = putSeries;
     spotSeriesRef.current = spotSeries;
+    spreadSeriesRef.current = spreadSeries;
 
     return () => {
       chartRef.current?.remove();
@@ -679,6 +700,7 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
       callSeriesRef.current = null;
       putSeriesRef.current = null;
       spotSeriesRef.current = null;
+      spreadSeriesRef.current = null;
     };
   }, []);
 
@@ -699,11 +721,21 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
     const callData: LineData[] = activeData.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.call }));
     const putData: LineData[]  = activeData.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.put  }));
     const spotLineData: LineData[] = spotData.map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.value }));
+    const spreadData: HistogramData[] = activeData.map(p => {
+      const spread = p.put - p.call;
+      return {
+        time: Math.floor(p.ts / 1000) as Time,
+        value: spread,
+        color: spread >= 0 ? 'rgba(34,197,94,0.65)' : 'rgba(239,68,68,0.65)',
+      };
+    });
     callSeriesRef.current?.setData(callData);
     putSeriesRef.current?.setData(putData);
     spotSeriesRef.current?.setData(spotLineData);
-    if (callData.length || putData.length || spotLineData.length) {
+    spreadSeriesRef.current?.setData(spreadData);
+    if (!fittedRef.current && (callData.length || putData.length || spotLineData.length)) {
       chartRef.current?.timeScale().fitContent();
+      fittedRef.current = true;
     }
   }, [activeData, spotData]);
 
@@ -823,6 +855,11 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
             <span style={{ width: 20, borderTop: '2px dotted #93c5fd', display: 'inline-block' }} />
             Spot
           </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 10, height: 10, background: 'rgba(34,197,94,0.35)', border: '1px solid #22c55e', display: 'inline-block', borderRadius: 2 }} />
+            <span style={{ width: 10, height: 10, background: 'rgba(239,68,68,0.35)', border: '1px solid #ef4444', display: 'inline-block', borderRadius: 2 }} />
+            Spread
+          </span>
         </div>
 
         {/* PCR + last values */}
@@ -891,6 +928,10 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
                 <b style={{ color: '#f1f5f9' }}>{tooltip.spot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
               </div>
             )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 4 }}>
+              <span style={{ color: tooltip.spread >= 0 ? '#22c55e' : '#ef4444' }}>Spread</span>
+              <b style={{ color: tooltip.spread >= 0 ? '#22c55e' : '#ef4444' }}>{mode === 'chg' ? fmtChg(tooltip.spread) : fmtLakhs(tooltip.spread)}</b>
+            </div>
           </div>
         )}
 
