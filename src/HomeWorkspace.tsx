@@ -1264,12 +1264,14 @@ export default function HomeWorkspace() {
       counter.current = Math.max(0, ...savedRef.current.panels.map(p => parseInt(p.id.split('-').pop() ?? '0', 10)));
       return savedRef.current.panels;
     }
-    return [];
+    // Default: single ATM Rolling Straddle panel for NIFTY
+    return [{ id: 'default-panel-0', minimized: false, content: 'atm-rolling-straddle', symbol: 'NIFTY', exchange: 'NSE', expiries: [], instrument: null }];
   });
 
   const [rows, setRows] = useState<GridRow[]>(() => {
     if (savedRef.current?.rows?.length) return savedRef.current.rows;
-    return [];
+    // Default: single row with single column for the default panel
+    return [{ id: 'default-row-0', size: 1, cols: [{ panelId: 'default-panel-0' }], colSizes: [1] }];
   });
 
   const [sidebarLayout, setSidebarLayout] = useState<SidebarLayout>(() => {

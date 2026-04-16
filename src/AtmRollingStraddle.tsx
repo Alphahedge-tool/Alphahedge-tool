@@ -430,6 +430,25 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const underlyings = useMemo(() => getUnderlyings(instruments), [instruments]);
   const expiries = useMemo(() => underlying ? getExpiries(instruments, underlying) : [], [instruments, underlying]);
 
+  // Auto-select NIFTY (or first available) on first load
+  useEffect(() => {
+    if (underlying || underlyings.length === 0) return;
+    const def = underlyings.includes('NIFTY') ? 'NIFTY' : underlyings[0];
+    setUnderlying(def);
+  }, [underlyings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select nearest expiry when underlying loads or changes
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!underlying || expiries.length === 0) return;
+    setExpiry(prev => {
+      if (prev && expiries.includes(prev)) return prev; // keep if still valid
+      const now = Date.now();
+      const nearest = expiries.filter(e => e >= now).sort((a, b) => a - b)[0] ?? expiries[0];
+      return nearest ?? null;
+    });
+  }, [underlying, expiries]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => { intervalRef.current = interval; }, [interval]);
 
   const applyPaneHeights = useCallback((ratio: number) => {
@@ -922,6 +941,15 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoading(false);
     }
   }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, underlying]);
+
+  // Auto-trigger load once underlying + expiry are both set for the first time
+  // Must be placed AFTER handleLoad to avoid temporal dead-zone error
+  useEffect(() => {
+    if (autoLoadedRef.current || !underlying || !expiry) return;
+    autoLoadedRef.current = true;
+    const t = setTimeout(() => { handleLoad(); }, 120);
+    return () => clearTimeout(t);
+  }, [underlying, expiry, handleLoad]);
 
   useEffect(() => () => cleanupLive(), [cleanupLive]);
 
