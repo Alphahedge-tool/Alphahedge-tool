@@ -1321,7 +1321,21 @@ function StrikeMultiPaneChart({
     ceOi.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.1, bottom: 0.1 } });
     peOi.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.1, bottom: 0.1 } });
     pcr.priceScale().applyOptions({ visible: true, borderColor: 'rgba(148,163,184,0.14)', scaleMargins: { top: 0.12, bottom: 0.12 } });
-    try { chart.panes()[1]?.setHeight(120); chart.panes()[2]?.setHeight(90); } catch {}
+    // Set pane heights proportionally — use setTimeout so the popup has fully painted
+    let rafId = 0;
+    const applyPaneHeights = () => {
+      const totalH = el.clientHeight || 480;
+      try {
+        chart.panes()[0]?.setHeight(Math.round(totalH * 0.42));
+        chart.panes()[1]?.setHeight(Math.round(totalH * 0.38));
+        chart.panes()[2]?.setHeight(Math.round(totalH * 0.20));
+      } catch {}
+    };
+    rafId = requestAnimationFrame(() => {
+      applyPaneHeights();
+      // second pass after browser paints the popup fully
+      setTimeout(applyPaneHeights, 80);
+    });
 
     seriesRefsRef.current = { ceDeltaOi, peDeltaOi, ceOi, peOi, pcr };
     chartRef.current = chart;
@@ -1360,6 +1374,7 @@ function StrikeMultiPaneChart({
     });
 
     return () => {
+      cancelAnimationFrame(rafId); // rafId is captured via closure
       seriesRefsRef.current = { ceDeltaOi: null, peDeltaOi: null, ceOi: null, peOi: null, pcr: null };
       chartRef.current = null;
       initialFitDoneRef.current = false;
