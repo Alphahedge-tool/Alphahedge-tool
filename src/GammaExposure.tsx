@@ -82,6 +82,34 @@ function todayYmdIst() {
   return `${y}${m}${day}`;
 }
 
+// ── Local market schedule (mirrors IvChart — no API call needed) ──────────────
+function lastTradingDay(): string {
+  const istMs = Date.now() + 5.5 * 3600 * 1000;
+  const d = new Date(istMs);
+  const istMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const OPEN = 9 * 60 + 15;
+  if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && istMin < OPEN) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function getLocalMarketSchedule() {
+  const istMs = Date.now() + 5.5 * 3600 * 1000;
+  const istNow = new Date(istMs);
+  const istMin = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+  const OPEN = 9 * 60 + 15, CLOSE = 15 * 60 + 30;
+  const isWeekday = istNow.getUTCDay() >= 1 && istNow.getUTCDay() <= 5;
+  return {
+    isMarketOpen: isWeekday && istMin >= OPEN && istMin <= CLOSE,
+    tradingDate: lastTradingDay(),
+    nowUtcIso: new Date().toISOString(),
+  };
+}
+
 function buildTimeseriesWindow(startDateStr: string, isLive: boolean): TimeseriesWindow {
   return {
     startDate: `${startDateStr}T03:45:00.000Z`,
@@ -91,46 +119,9 @@ function buildTimeseriesWindow(startDateStr: string, isLive: boolean): Timeserie
   };
 }
 
-function nubraHeadersFromAuth(auth: NubraAuth) {
-  return {
-    'x-session-token': auth.sessionToken,
-    'x-device-id': auth.deviceId || 'web',
-    'x-raw-cookie': auth.rawCookie || '',
-  };
-}
-
-interface MarketScheduleResponse {
-  is_trading_on_today_nse?: boolean;
-  exchange_calendar_info?: Record<string, {
-    is_trading_on_now?: boolean;
-    previous_trading_day_slot?: Array<{ StartTime?: string; EndTime?: string }>;
-  }>;
-}
-
-async function fetchTradingWindowFromSchedule(auth: NubraAuth, exchange: string): Promise<TimeseriesWindow> {
-  const ex = normalizeExchange(exchange);
-  const res = await fetch('/api/nubra-market-schedule', { headers: nubraHeadersFromAuth(auth) });
-  if (!res.ok) throw new Error(`market-schedule ${res.status}`);
-  const json = await res.json() as MarketScheduleResponse;
-
-  const exInfo = json.exchange_calendar_info?.[ex] ?? json.exchange_calendar_info?.NSE;
-  const isTradingToday = ex === 'NSE'
-    ? !!json.is_trading_on_today_nse
-    : !!(exInfo && (exInfo.is_trading_on_now || (exInfo.previous_trading_day_slot?.length ?? 0) >= 0));
-  const isNowLive = !!exInfo?.is_trading_on_now;
-
-  if (isTradingToday) {
-    const todayDate = new Date(Date.now() + 5.5 * 3600 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    return buildTimeseriesWindow(todayDate, isNowLive);
-  }
-
-  const prevStart = exInfo?.previous_trading_day_slot?.[0]?.StartTime;
-  if (prevStart) {
-    const prevDate = new Date(prevStart).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    return buildTimeseriesWindow(prevDate, false);
-  }
-
-  throw new Error('market-schedule has no usable trading date');
+function getTradingWindow(): TimeseriesWindow {
+  const { isMarketOpen, tradingDate } = getLocalMarketSchedule();
+  return buildTimeseriesWindow(tradingDate, isMarketOpen);
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -673,18 +664,32 @@ export default function GammaExposure({ nubraInstruments, initialSymbol = 'NIFTY
     setError('');
     setWsLive(false);
 
-    fetch(`/api/nubra-optionchain?session_token=${encodeURIComponent(token)}&instrument=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(expiry)}`)
-      .then(async r => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/nubra-optionchain?session_token=${encodeURIComponent(token)}&instrument=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(expiry)}`);
         if (!r.ok) throw new Error(`optionchain ${r.status}`);
-        return r.json();
-      })
-      .then(json => {
+        const json = await r.json();
         const chain = json.chain ?? json;
-        const cp = Number(chain.cp ?? chain.current_price ?? 0) / 100;
+        let cp = Number(chain.cp ?? chain.current_price ?? 0) / 100;
+        // Fallback: fetch spot separately if chain didn't include current price
+        if (cp <= 0) {
+          try {
+            const priceRes = await fetch(`/api/nubra-price?session_token=${encodeURIComponent(token)}&symbol=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}`);
+            if (priceRes.ok) {
+              const priceJson = await priceRes.json();
+              cp = Number(priceJson.price ?? priceJson.current_price ?? priceJson.cp ?? 0) / 100;
+            }
+          } catch {
+            // ignore fallback failure — bar chart will show base GEX (no spot scaling)
+          }
+        }
         mergeChainToRows(chain.ce ?? [], chain.pe ?? [], cp, false);
-      })
-      .catch((e: any) => setError(e?.message ?? 'Failed to load API snapshot'))
-      .finally(() => setLoading(false));
+      } catch (e: any) {
+        setError(e?.message ?? 'Failed to load API snapshot');
+      } finally {
+        setLoading(false);
+      }
+    })();
 
     const ws = new WebSocket(BRIDGE);
     wsRef.current = ws;
@@ -756,7 +761,7 @@ export default function GammaExposure({ nubraInstruments, initialSymbol = 'NIFTY
         if (!optionDefs.length) throw new Error('Intraday trend unavailable: could not resolve CE/PE instruments for this expiry');
 
         const optionSymbols = [...new Set(optionDefs.map(d => d.symbol))];
-        const window = await fetchTradingWindowFromSchedule(auth, exchange);
+        const window = getTradingWindow();
         if (!cancelled) setTradingDate(window.startDate.slice(0, 10));
 
         const optionSeries = await fetchHistoricalOptionSeriesBatched(auth, exchange, optionSymbols, window);

@@ -774,7 +774,7 @@ app.post('/api/nubra-timeseries', async (req, reply) => {
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'same-site',
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ chart, query }),
       dispatcher: nubraAgent,
     } as any);
 

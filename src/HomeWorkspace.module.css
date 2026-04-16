@@ -281,10 +281,14 @@
   border-radius: 8px;
   padding: 4px;
   min-width: 160px;
+  max-height: 280px;
+  overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0,0,0,0.6);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
 .menuItem {
   display: flex;

@@ -558,6 +558,12 @@ export default function IvChart({ instruments, nubraInstruments, workerRef, init
   const nubraCbRef    = useRef<NubraCallback | null>(null);
   const latestIvRef   = useRef<Map<number, number>>(new Map()); // refId → iv
   const liveBarRef    = useRef<LineData | null>(null);           // live IV bar
+  // track current load params so spot WS can reconnect on ATM strike change
+  const liveSymRef    = useRef('');
+  const liveExchRef   = useRef('');
+  const liveExpRef    = useRef('');
+  const liveAtmRef    = useRef(0); // last connected ATM strike
+  const connectNubraWsRef = useRef<typeof connectNubraWs | null>(null);
 
   // Live spot candlestick bar (mirrors CandleChart's liveBarRef)
   const spotLiveBarRef   = useRef<CandlestickData | null>(null);
@@ -763,6 +769,9 @@ export default function IvChart({ instruments, nubraInstruments, workerRef, init
   }, [nubraInstruments, disconnectNubraWs]);
 
   // ── Connect Upstox WS for live spot candlestick (mirrors CandleChart exactly)
+  // keep ref updated so the spot WS closure always calls the latest version
+  useEffect(() => { connectNubraWsRef.current = connectNubraWs; }, [connectNubraWs]);
+
   const connectSpot = useCallback((
     sym: string,
     _exch: string,
@@ -787,6 +796,16 @@ export default function IvChart({ instruments, nubraInstruments, workerRef, init
       setSpot(ltp);
 
       if (!firstFired && onFirstSpot) { firstFired = true; onFirstSpot(ltp); }
+
+      // Reconnect Nubra WS if ATM strike has changed
+      if (liveSymRef.current && liveExpRef.current) {
+        const newAtm = calcATMStrike(ltp, nubraInstruments, liveSymRef.current, liveExpRef.current);
+        if (newAtm > 0 && newAtm !== liveAtmRef.current) {
+          liveAtmRef.current = newAtm;
+          setAtmStrike(newAtm);
+          connectNubraWsRef.current?.(liveSymRef.current, liveExchRef.current, liveExpRef.current, newAtm);
+        }
+      }
 
       const wallBarSec = snapToMinBar(Date.now()) as Time;
 
@@ -878,6 +897,12 @@ export default function IvChart({ instruments, nubraInstruments, workerRef, init
     allSpotRef.current = [];
     spotPrevTsRef.current = null;
     initialZoomDoneRef.current = false;
+
+    // Store load params so spot WS can reconnect Nubra when ATM strike shifts
+    liveSymRef.current  = sym;
+    liveExchRef.current = exch;
+    liveExpRef.current  = exp;
+    liveAtmRef.current  = 0; // force reconnect on first tick
 
     // New session — stale WS ticks for old symbol are discarded
     const mySession = ++sessionRef.current;
