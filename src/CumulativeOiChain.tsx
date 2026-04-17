@@ -864,7 +864,11 @@ async function fetchChainOiHistory(
       query: [{ exchange, type: 'CHAIN', values: chainValues, fields: ['cumulative_call_oi', 'cumulative_put_oi'], startDate, endDate, interval: '1m', intraDay: false, realTime: false }],
     }),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const err = new Error(`nubra-timeseries ${res.status}`) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
   const json = await res.json();
   const totals = new Map<number, SummaryTrendPoint>();
   for (const entry of json?.result ?? []) {
@@ -906,7 +910,11 @@ async function fetchChainVolHistory(
       query: [{ exchange, type: 'CHAIN', values: chainValues, fields: ['cumulative_call_vol', 'cumulative_put_vol'], startDate, endDate, interval: '1m', intraDay: false, realTime: false }],
     }),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const err = new Error(`nubra-timeseries ${res.status}`) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
   const json = await res.json();
   const totals = new Map<number, SummaryTrendPoint>();
   for (const entry of json?.result ?? []) {
@@ -1793,8 +1801,6 @@ export default function CumulativeOiChain({ visible }: Props) {
   const [summaryOiTrendHistory, setSummaryOiTrendHistory] = useState<SummaryTrendPoint[]>([]);
   const [summaryVolTrendHistory, setSummaryVolTrendHistory] = useState<SummaryTrendPoint[]>([]);
   const [summaryDeltaTrendHistory, setSummaryDeltaTrendHistory] = useState<SummaryTrendPoint[]>([]);
-  const summaryOiHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
-  const summaryVolHistoryCacheRef = useRef(new Map<string, SummaryTrendPoint[]>());
   const summaryOiChgHistory = useMemo<SummaryCardTrendPoint[]>(() => {
     if (summaryOiTrendHistory.length === 0) return [];
     const base = summaryOiTrendHistory[0];
@@ -1907,9 +1913,10 @@ export default function CumulativeOiChain({ visible }: Props) {
         const totalPeV = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + r.pe.volume, 0), 0);
         const totalCeD = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.ce.delta || 0) * (r.ce.oi || 0)), 0), 0);
         const totalPeD = entries.reduce((sum, [, snap]) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.pe.delta || 0) * (r.pe.oi || 0)), 0), 0);
-        if (totalCe > 0 || totalPe > 0)   setSummaryOiTrendHistory(prev => appendSummaryTrendPoint(prev, totalCe, totalPe));
+        // OI trend is driven by the polled chain-OI timeseries only — do not overwrite it here.
         if (totalCeV > 0 || totalPeV > 0) setSummaryVolTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeV, totalPeV));
         if (totalCeD > 0 || totalPeD > 0) setSummaryDeltaTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeD, totalPeD));
+        void totalCe; void totalPe;
       } catch (err: any) {
         if (!cancelled) setError(err?.message ?? 'Failed to load cumulative chain');
       } finally {
@@ -1943,9 +1950,10 @@ export default function CumulativeOiChain({ visible }: Props) {
           const totalPeV = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + r.pe.volume, 0), 0);
           const totalCeD = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.ce.delta || 0) * (r.ce.oi || 0)), 0), 0);
           const totalPeD = Object.values(next).reduce((sum, snap) => sum + snap.rows.reduce((s, r) => s + Math.abs((r.pe.delta || 0) * (r.pe.oi || 0)), 0), 0);
-          if (totalCe > 0 || totalPe > 0)   setSummaryOiTrendHistory(prev => appendSummaryTrendPoint(prev, totalCe, totalPe));
+          // OI trend is driven by the polled chain-OI timeseries only — do not overwrite it here.
           if (totalCeV > 0 || totalPeV > 0) setSummaryVolTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeV, totalPeV));
           if (totalCeD > 0 || totalPeD > 0) setSummaryDeltaTrendHistory(prev => appendSummaryTrendPoint(prev, totalCeD, totalPeD));
+          void totalCe; void totalPe;
           return next;
         });
       },
@@ -2012,51 +2020,74 @@ export default function CumulativeOiChain({ visible }: Props) {
     setSummaryDeltaTrendHistory([]);
   }, [symbol, pickedExpiries.join(',')]);
 
-  // Fetch OI + vol history from Nubra timeseries on mount / symbol / expiry change
+  // Fetch OI + vol history from Nubra timeseries — poll on an interval like TotalOiChart
   useEffect(() => {
     let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let backoffMs = 0;
+
     const resolved2 = resolveNubra(symbol, nubraInstruments);
     if (!resolved2.nubraSym || !resolved2.exchange || pickedExpiries.length === 0) return;
 
     const chainValues = pickedExpiries.map(exp => buildNubraChainValue(resolved2.nubraSym, exp));
-    const now = toIstNow();
-    // Match MasterOptionChain: startDate = 09:15 IST, endDate = current minute IST
-    const startDate = istToUtcIsoLocal(histDate, '09:15');
-    const endDate   = istToUtcIsoLocal(now.date, now.time);
-    const cacheKey  = [resolved2.nubraSym, resolved2.exchange, pickedExpiries.join(','), histDate, now.time.slice(0, 5)].join('|');
 
-    const load = async () => {
-      // OI history
-      const oiCached = summaryOiHistoryCacheRef.current.get(cacheKey);
-      if (oiCached) {
-        if (!cancelled) setSummaryOiTrendHistory(oiCached);
+    const isMarketOpenNow = (): boolean => {
+      const f = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false,
+      });
+      const parts = Object.fromEntries(f.formatToParts(new Date()).map(p => [p.type, p.value]));
+      const hh = Number(parts.hour ?? '0');
+      const mm = Number(parts.minute ?? '0');
+      const istMin = hh * 60 + mm;
+      const isWeekend = parts.weekday === 'Sun' || parts.weekday === 'Sat';
+      return !isWeekend && istMin >= 9 * 60 + 15 && istMin <= 15 * 60 + 30;
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+      const now = toIstNow();
+      const startDate = istToUtcIsoLocal(histDate, '09:15');
+      const endDate   = istToUtcIsoLocal(now.date, now.time);
+
+      const [oiRes, volRes] = await Promise.allSettled([
+        fetchChainOiHistory(resolved2.exchange, chainValues, startDate, endDate),
+        fetchChainVolHistory(resolved2.exchange, chainValues, startDate, endDate),
+      ]);
+      if (cancelled) return;
+
+      let rateLimited = false;
+      if (oiRes.status === 'fulfilled') {
+        if (oiRes.value.length > 0) setSummaryOiTrendHistory(oiRes.value);
       } else {
-        try {
-          const oiHist = await fetchChainOiHistory(resolved2.exchange, chainValues, startDate, endDate);
-          if (!cancelled) {
-            summaryOiHistoryCacheRef.current.set(cacheKey, oiHist);
-            setSummaryOiTrendHistory(oiHist);
-          }
-        } catch { /* ignore */ }
+        const e: any = oiRes.reason;
+        if (e?.status === 400 || e?.status === 403 || e?.status === 429) rateLimited = true;
+      }
+      if (volRes.status === 'fulfilled') {
+        if (volRes.value.length > 0) setSummaryVolTrendHistory(volRes.value);
+      } else {
+        const e: any = volRes.reason;
+        if (e?.status === 400 || e?.status === 403 || e?.status === 429) rateLimited = true;
       }
 
-      // Vol history
-      const volCached = summaryVolHistoryCacheRef.current.get(cacheKey);
-      if (volCached) {
-        if (!cancelled) setSummaryVolTrendHistory(volCached);
+      if (rateLimited) {
+        // exponential backoff: 10s → 20s → 40s, cap at 40s so recovery is quick
+        backoffMs = Math.min((backoffMs || 10_000) * 2, 40_000);
       } else {
-        try {
-          const volHist = await fetchChainVolHistory(resolved2.exchange, chainValues, startDate, endDate);
-          if (!cancelled) {
-            summaryVolHistoryCacheRef.current.set(cacheKey, volHist);
-            setSummaryVolTrendHistory(volHist);
-          }
-        } catch { /* ignore */ }
+        backoffMs = 0; // reset whenever nothing was rate-limited
+      }
+
+      if (!cancelled) {
+        const base = isMarketOpenNow() ? 10_000 : 60_000;
+        timerId = setTimeout(poll, base + backoffMs);
       }
     };
 
-    load();
-    return () => { cancelled = true; };
+    poll();
+    return () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, pickedExpiries.join(','), histDate, histIsLive, nubraInstruments]);
 
@@ -2183,19 +2214,24 @@ export default function CumulativeOiChain({ visible }: Props) {
   }, [primaryChain, strikeCount]);
 
   const summaryTotals = useMemo(() => {
-    let callOi = 0; let putOi = 0;
+    let rowCallOi = 0; let rowPutOi = 0;
     let callVolume = 0; let putVolume = 0;
     let callDelta = 0; let putDelta = 0;
     for (const snap of Object.values(chains)) {
       for (const row of snap.rows) {
-        callOi     += row.ce.oi;
-        putOi      += row.pe.oi;
+        rowCallOi  += row.ce.oi;
+        rowPutOi   += row.pe.oi;
         callVolume += row.ce.volume;
         putVolume  += row.pe.volume;
         callDelta  += Math.abs((row.ce.delta || 0) * (row.ce.oi || 0));
         putDelta   += Math.abs((row.pe.delta || 0) * (row.pe.oi || 0));
       }
     }
+    // Prefer the last point from the chain-OI timeseries (same source as TotalOiChart —
+    // full-chain cumulative OI), fall back to summed visible rows until history loads.
+    const lastTrend = summaryOiTrendHistory[summaryOiTrendHistory.length - 1];
+    const callOi = lastTrend?.call ?? rowCallOi;
+    const putOi  = lastTrend?.put  ?? rowPutOi;
     const baseCall = summaryOiTrendHistory[0]?.call ?? callOi;
     const basePut  = summaryOiTrendHistory[0]?.put  ?? putOi;
     const callOiChg = callOi - baseCall;

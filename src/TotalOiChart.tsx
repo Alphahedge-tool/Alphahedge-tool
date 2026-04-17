@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
   LineSeries,
@@ -48,6 +48,12 @@ function prevTradingDate(yyyyMmDd: string): string {
   do { d.setUTCDate(d.getUTCDate() - 1); }
   while ([0, 6].includes(d.getUTCDay()));
   return d.toISOString().slice(0, 10);
+}
+
+function nthPrevTradingDate(yyyyMmDd: string, n: number): string {
+  let date = yyyyMmDd;
+  for (let i = 0; i < n; i++) date = prevTradingDate(date);
+  return date;
 }
 
 function resolveIntradayTradingDate(): string {
@@ -305,7 +311,7 @@ function OiDonut({ call, put, mode }: { call: number; put: number; mode: 'oi' | 
 
   return (
     <div style={{
-      position: 'absolute', top: 8, left: 8,
+      position: 'absolute', top: 8, left: 90,
       pointerEvents: 'none', zIndex: 5,
       display: 'flex', alignItems: 'center', gap: 10,
     }}>
@@ -367,6 +373,7 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
   const [data, setData] = useState<OiPoint[]>([]);
   const [spotData, setSpotData] = useState<SpotPoint[]>([]);
   const [mode, setMode] = useState<'oi' | 'chg'>('oi');
+  const [daysBack, setDaysBack] = useState(0); // 0 = today only, 1/2/3/5 = include N prev trading days
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [spotHistoryReady, setSpotHistoryReady] = useState(false);
@@ -374,8 +381,8 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
   // crosshair tooltip state
   const [tooltip, setTooltip] = useState<{
     visible: boolean; x: number; y: number;
-    time: string; call: number; put: number; spot: number; spread: number;
-  }>({ visible: false, x: 0, y: 0, time: '', call: 0, put: 0, spot: 0, spread: 0 });
+    time: string; call: number; put: number; spot: number; spread: number; pcr: number;
+  }>({ visible: false, x: 0, y: 0, time: '', call: 0, put: 0, spot: 0, spread: 0, pcr: 0 });
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const expiryDropRef = useRef<HTMLDivElement | null>(null);
@@ -396,16 +403,15 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
   const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const spotSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const spreadSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const pcrSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const fittedRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spotWsRef = useRef<WebSocket | null>(null);
   const cancelledRef = useRef(false);
   const dataRef = useRef<OiPoint[]>([]);
   const spotDataRef = useRef<SpotPoint[]>([]);
-  const backoffRef = useRef(0);
   const spotSubKeyRef = useRef('');
 
-  // keep dataRef in sync for use inside poll closure
+  // keep dataRef in sync for use inside closures
   useEffect(() => { dataRef.current = data; }, [data]);
   useEffect(() => { spotDataRef.current = spotData; }, [spotData]);
 
@@ -423,16 +429,10 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
     setError('');
   }, [symbol, nubraInstruments]);
 
-  // ── Poll loop ─────────────────────────────────────────────────────────────
-  const stopPoll = useCallback(() => {
-    cancelledRef.current = true;
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-  }, []);
-
+  // ── Initial load: fetch OI history + spot history once via REST (no polling) ─
   useEffect(() => {
     if (!symbol || !selectedExpiries.size || !exchange) return;
     cancelledRef.current = false;
-    backoffRef.current = 0;
     fittedRef.current = false;
     setData([]);
     setSpotData([]);
@@ -441,46 +441,85 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
 
     const chainValues = [...selectedExpiries].map(exp => buildNubraChainValue(symbol, exp));
 
-    const poll = async () => {
+    const loadOnce = async () => {
       if (cancelledRef.current) return;
       const tradingDate = resolveIntradayTradingDate();
-      const startDate = istToUtcIso(tradingDate, '09:15');
+      const startTradingDate = daysBack > 0 ? nthPrevTradingDate(tradingDate, daysBack) : tradingDate;
+      const startDate = istToUtcIso(startTradingDate, '09:15');
       const endDate = new Date().toISOString();
 
-      try {
-        const spotType = getSpotType(nubraInstruments, symbol);
-        const [pts, spotPts] = await Promise.all([
-          fetchOiHistory(exchange, chainValues, startDate, endDate),
-          fetchSpotHistory(exchange, symbol, spotType, startDate, endDate),
-        ]);
-        if (cancelledRef.current) return;
-        backoffRef.current = 0; // reset on success
-        if (pts.length > 0) {
-          setData(pts);
-        }
-        setSpotData(spotPts);
-        setSpotHistoryReady(spotPts.length > 0);
+      const spotType = getSpotType(nubraInstruments, symbol);
+      const [oiRes, spotRes] = await Promise.allSettled([
+        fetchOiHistory(exchange, chainValues, startDate, endDate),
+        fetchSpotHistory(exchange, symbol, spotType, startDate, endDate),
+      ]);
+      if (cancelledRef.current) return;
+
+      if (oiRes.status === 'fulfilled') {
+        if (oiRes.value.length > 0) setData(oiRes.value);
         setLastUpdated(Date.now());
         setError('');
-      } catch (e: any) {
-        if (cancelledRef.current) return;
-        if (e?.status === 403 || e?.status === 429) {
-          // exponential backoff: 30s → 60s → 120s, cap at 120s
-          backoffRef.current = Math.min((backoffRef.current || 30_000) * 2, 120_000);
-        } else {
+      } else {
+        const e: any = oiRes.reason;
+        if (!(e?.status === 400 || e?.status === 403 || e?.status === 429)) {
           setError(`Error ${e?.status ?? ''}: ${e?.message ?? 'fetch failed'}`);
         }
       }
 
-      if (!cancelledRef.current) {
-        const base = isMarketOpen() ? 15_000 : 60_000;
-        timerRef.current = setTimeout(poll, base + backoffRef.current);
+      if (spotRes.status === 'fulfilled') {
+        setSpotData(spotRes.value);
+        setSpotHistoryReady(spotRes.value.length > 0);
       }
     };
 
-    poll();
-    return stopPoll;
-  }, [symbol, selectedExpiries, exchange, stopPoll, nubraInstruments]);
+    loadOnce();
+    return () => { cancelledRef.current = true; };
+  }, [symbol, selectedExpiries, exchange, nubraInstruments, daysBack]);
+
+  // ── Live OI polling — dedicated REST call every 15s during market hours ───
+  // Separate from the initial load effect so it only re-fetches OI (not spot)
+  // and runs on a fixed interval without backoff delays.
+  useEffect(() => {
+    if (!symbol || !selectedExpiries.size || !exchange) return;
+    if (!isMarketOpen()) return;
+
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const chainValues = [...selectedExpiries].map(exp => buildNubraChainValue(symbol, exp));
+
+    const pollOi = async () => {
+      if (cancelled) return;
+      const tradingDate = resolveIntradayTradingDate();
+      const startTradingDate = daysBack > 0 ? nthPrevTradingDate(tradingDate, daysBack) : tradingDate;
+      const startDate = istToUtcIso(startTradingDate, '09:15');
+      const endDate = new Date().toISOString();
+
+      try {
+        const pts = await fetchOiHistory(exchange, chainValues, startDate, endDate);
+        if (cancelled) return;
+        if (pts.length > 0) {
+          setData(pts);
+          setLastUpdated(Date.now());
+          setError('');
+        }
+      } catch {
+        // keep existing data on error — do not clear the chart
+      }
+
+      if (!cancelled) {
+        timerId = setTimeout(pollOi, 15_000);
+      }
+    };
+
+    // first tick fires 15s after initial REST load already seeded the chart
+    timerId = setTimeout(pollOi, 15_000);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+    };
+  }, [symbol, selectedExpiries, exchange, daysBack]);
 
   useEffect(() => {
     const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
@@ -662,6 +701,7 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
       const putVal    = putSeries    ? (param.seriesData.get(putSeries)    as any)?.value ?? 0 : 0;
       const spotVal   = spotSeries   ? (param.seriesData.get(spotSeries)   as any)?.value ?? 0 : 0;
       const spreadVal = (Number.isFinite(putVal) && Number.isFinite(callVal)) ? putVal - callVal : 0;
+      const pcrVal = Number.isFinite(callVal) && callVal !== 0 ? putVal / callVal : 0;
       const tx = Math.max(8, Math.min(host.clientWidth - 200, x + 14));
       const ty = Math.max(8, Math.min(host.clientHeight - 100, y + 14));
       setTooltip({
@@ -672,6 +712,7 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
         put: putVal,
         spot: spotVal,
         spread: spreadVal,
+        pcr: pcrVal,
       });
     });
 
@@ -688,11 +729,26 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
       borderColor: 'rgba(255,255,255,0.08)',
     });
 
+    // ── Pane 2: PCR (Put OI / Call OI) line ──────────────────────────────────
+    chart.addPane(); // pane index 2
+    const pcrSeries = chart.addSeries(LineSeries, {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'PCR',
+    }, 2);
+    pcrSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+      borderColor: 'rgba(255,255,255,0.08)',
+    });
+
     chartRef.current = chart;
     callSeriesRef.current = callSeries;
     putSeriesRef.current = putSeries;
     spotSeriesRef.current = spotSeries;
     spreadSeriesRef.current = spreadSeries;
+    pcrSeriesRef.current = pcrSeries;
 
     return () => {
       chartRef.current?.remove();
@@ -701,19 +757,27 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
       putSeriesRef.current = null;
       spotSeriesRef.current = null;
       spreadSeriesRef.current = null;
+      pcrSeriesRef.current = null;
     };
   }, []);
 
-  // ── Derive OI change series — subtract first (9:15) point as base ────────
+  // ── Derive OI change series — per-day base: first point at/after 9:15 IST ─
+  // IST day key (YYYY-MM-DD) for a ms timestamp — handles IST offset without TZ libs
+  const istDayKey = (ts: number) => new Date(ts + 5.5 * 3600_000).toISOString().slice(0, 10);
+
   const activeData = useMemo<OiPoint[]>(() => {
     if (!data.length) return [];
     if (mode === 'oi') return data;
-    const base = data[0];
-    return data.map(p => ({
-      ts:   p.ts,
-      call: p.call - base.call,
-      put:  p.put  - base.put,
-    }));
+    // Pick the earliest point of each IST day as that day's base
+    const bases = new Map<string, OiPoint>();
+    for (const p of data) {
+      const key = istDayKey(p.ts);
+      if (!bases.has(key)) bases.set(key, p);
+    }
+    return data.map(p => {
+      const base = bases.get(istDayKey(p.ts)) ?? data[0];
+      return { ts: p.ts, call: p.call - base.call, put: p.put - base.put };
+    });
   }, [data, mode]);
 
   // ── Push data to chart whenever activeData / mode changes ─────────────────
@@ -729,10 +793,32 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
         color: spread >= 0 ? 'rgba(34,197,94,0.65)' : 'rgba(239,68,68,0.65)',
       };
     });
+    // PCR: raw OI in 'oi' mode, ΔOI / ΔOI (vs per-day 9:15 base) in 'chg' mode
+    const pcrData: LineData[] = (() => {
+      if (mode === 'oi') {
+        return data
+          .filter(p => p.call > 0)
+          .map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.put / p.call }));
+      }
+      if (!data.length) return [];
+      const bases = new Map<string, OiPoint>();
+      for (const p of data) {
+        const key = istDayKey(p.ts);
+        if (!bases.has(key)) bases.set(key, p);
+      }
+      return data
+        .map(p => {
+          const base = bases.get(istDayKey(p.ts))!;
+          return { ts: p.ts, cChg: p.call - base.call, pChg: p.put - base.put };
+        })
+        .filter(p => p.cChg !== 0)
+        .map(p => ({ time: Math.floor(p.ts / 1000) as Time, value: p.pChg / p.cChg }));
+    })();
     callSeriesRef.current?.setData(callData);
     putSeriesRef.current?.setData(putData);
     spotSeriesRef.current?.setData(spotLineData);
     spreadSeriesRef.current?.setData(spreadData);
+    pcrSeriesRef.current?.setData(pcrData);
     if (!fittedRef.current && (callData.length || putData.length || spotLineData.length)) {
       chartRef.current?.timeScale().fitContent();
       fittedRef.current = true;
@@ -772,6 +858,25 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
             style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', background: mode === 'chg' ? '#2563eb' : 'transparent', color: mode === 'chg' ? '#fff' : '#94a3b8' }}>
             OI Chg
           </button>
+        </div>
+
+        {/* Days back selector — include N previous trading days */}
+        <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: '2px 3px' }}>
+          {[0, 1, 2, 3, 5].map(n => {
+            const label = n === 0 ? 'Today' : `${n}d`;
+            const active = daysBack === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setDaysBack(n)}
+                title={n === 0 ? 'Today only' : `Include previous ${n} trading day${n > 1 ? 's' : ''}`}
+                style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', background: active ? '#f59e0b' : 'transparent', color: active ? '#0b1218' : '#94a3b8' }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Symbol picker */}
@@ -841,27 +946,6 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
           )}
         </div>
 
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 12, marginLeft: 8, fontSize: 12 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 20, height: 2, background: '#22c55e', display: 'inline-block', borderRadius: 1 }} />
-            Call
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 20, height: 2, background: '#ef4444', display: 'inline-block', borderRadius: 1 }} />
-            Put
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 20, borderTop: '2px dotted #93c5fd', display: 'inline-block' }} />
-            Spot
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, background: 'rgba(34,197,94,0.35)', border: '1px solid #22c55e', display: 'inline-block', borderRadius: 2 }} />
-            <span style={{ width: 10, height: 10, background: 'rgba(239,68,68,0.35)', border: '1px solid #ef4444', display: 'inline-block', borderRadius: 2 }} />
-            Spread
-          </span>
-        </div>
-
         {/* PCR + last values */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, alignItems: 'center' }}>
           <span style={{ color: '#22c55e', fontWeight: 600 }}>
@@ -928,6 +1012,12 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
                 <b style={{ color: '#f1f5f9' }}>{tooltip.spot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
               </div>
             )}
+            {Number.isFinite(tooltip.pcr) && tooltip.pcr !== 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}>
+                <span style={{ color: '#f59e0b' }}>PCR</span>
+                <b style={{ color: '#f59e0b' }}>{tooltip.pcr.toFixed(2)}</b>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 4 }}>
               <span style={{ color: tooltip.spread >= 0 ? '#22c55e' : '#ef4444' }}>Spread</span>
               <b style={{ color: tooltip.spread >= 0 ? '#22c55e' : '#ef4444' }}>{mode === 'chg' ? fmtChg(tooltip.spread) : fmtLakhs(tooltip.spread)}</b>
@@ -941,6 +1031,40 @@ export default function TotalOiChart({ nubraInstruments, initialSymbol = 'NIFTY'
             Loading OI data…
           </div>
         )}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        gap: 14,
+        padding: '8px 12px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.02)',
+        fontSize: 12,
+        flexShrink: 0,
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+          <span style={{ width: 22, height: 2, background: '#22c55e', display: 'inline-block', borderRadius: 999 }} />
+          Call OI
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+          <span style={{ width: 22, height: 2, background: '#ef4444', display: 'inline-block', borderRadius: 999 }} />
+          Put OI
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+          <span style={{ width: 22, borderTop: '2px dotted #93c5fd', display: 'inline-block' }} />
+          Spot
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+          <span style={{ width: 11, height: 11, background: 'rgba(34,197,94,0.35)', border: '1px solid #22c55e', display: 'inline-block', borderRadius: 2 }} />
+          Spread +
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+          <span style={{ width: 11, height: 11, background: 'rgba(239,68,68,0.35)', border: '1px solid #ef4444', display: 'inline-block', borderRadius: 2 }} />
+          Spread -
+        </span>
       </div>
 
       {/* ── Y-axis label ── */}

@@ -2679,11 +2679,25 @@ export default function MasterOptionChain({ visible }: Props) {
   useEffect(() => {
     let cancelled = false;
     let timerId: ReturnType<typeof setTimeout> | null = null;
+    let backoffMs = 0;
 
     const resolved = resolveNubra(symbol, nubraInstruments);
     const scopeExpiries = viewMode === 'chain'
       ? pickedExpiries
       : [viewMode === 'straddle' ? straddleExpiry : viewMode === 'butterfly' ? butterflyExpiry : ratioExpiry].filter(Boolean);
+
+    const isMarketOpen = (): boolean => {
+      const f = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false,
+      });
+      const parts = Object.fromEntries(f.formatToParts(new Date()).map(p => [p.type, p.value]));
+      const hh = Number(parts.hour ?? '0');
+      const mm = Number(parts.minute ?? '0');
+      const istMin = hh * 60 + mm;
+      const isWeekend = parts.weekday === 'Sun' || parts.weekday === 'Sat';
+      return !isWeekend && istMin >= 9 * 60 + 15 && istMin <= 15 * 60 + 30;
+    };
 
     const pollOiHistory = async () => {
       if (cancelled) return;
@@ -2697,24 +2711,24 @@ export default function MasterOptionChain({ visible }: Props) {
       const startDate = istToUtcIso(tradingDate, '09:15');
       const endDate = new Date().toISOString(); // always "now" so each poll fetches up to current minute
 
-      let backoff = 0;
       try {
         const merged = await fetchNubraChainOiHistory(resolved.exchange, chainValues, startDate, endDate);
-        if (!cancelled) setSummaryOiTrendHistory(merged);
+        if (cancelled) return;
+        backoffMs = 0; // reset on success
+        if (merged.length > 0) setSummaryOiTrendHistory(merged); // keep last good data on empty response
       } catch (e: any) {
-        // on 403/429 back off 30 s so we don't keep hammering and stay blocked
-        if (e?.status === 403 || e?.status === 429) backoff = 30_000;
+        if (cancelled) return;
+        if (e?.status === 400 || e?.status === 403 || e?.status === 429) {
+          // exponential backoff: 10s → 20s → 40s, cap at 40s so recovery is quick
+          backoffMs = Math.min((backoffMs || 10_000) * 2, 40_000);
+        }
         // keep existing data on error — don't clear the chart
       }
 
       // schedule next poll
       if (!cancelled) {
-        const now = toIstDateTime();
-        const [hh, mm] = now.time.split(':').map(Number);
-        const istMin = hh * 60 + mm;
-        const isMarketHours = istMin >= 9 * 60 + 15 && istMin <= 15 * 60 + 30;
-        const base = isMarketHours ? 5_000 : 60_000; // 5 s during market, 1 min outside
-        timerId = setTimeout(pollOiHistory, base + backoff);
+        const base = isMarketOpen() ? 10_000 : 60_000;
+        timerId = setTimeout(pollOiHistory, base + backoffMs);
       }
     };
 
@@ -2815,8 +2829,8 @@ export default function MasterOptionChain({ visible }: Props) {
       : [viewMode === 'straddle' ? straddleChain : viewMode === 'butterfly' ? butterflyChain : ratioChain]
         .filter((chain): chain is ChainSnapshot => Boolean(chain));
 
-    let callOi = 0;
-    let putOi = 0;
+    let rowCallOi = 0;
+    let rowPutOi = 0;
     let callVolume = 0;
     let putVolume = 0;
     let callDelta = 0;
@@ -2824,14 +2838,20 @@ export default function MasterOptionChain({ visible }: Props) {
 
     for (const chain of scopeChains) {
       for (const row of chain.rows) {
-        callOi += row.ce.oi || 0;
-        putOi += row.pe.oi || 0;
+        rowCallOi += row.ce.oi || 0;
+        rowPutOi += row.pe.oi || 0;
         callVolume += row.ce.volume || 0;
         putVolume += row.pe.volume || 0;
         callDelta += Math.abs((row.ce.delta || 0) * (row.ce.oi || 0));
         putDelta += Math.abs((row.pe.delta || 0) * (row.pe.oi || 0));
       }
     }
+
+    // Prefer the last point from the chain-OI timeseries (same source as TotalOiChart —
+    // full-chain cumulative OI), fall back to summed visible rows until history loads.
+    const lastTrend = summaryOiTrendHistory[summaryOiTrendHistory.length - 1];
+    const callOi = lastTrend?.call ?? rowCallOi;
+    const putOi  = lastTrend?.put  ?? rowPutOi;
 
     // OI change from start of day = current - first historical point
     const baseCall = summaryOiTrendHistory[0]?.call ?? callOi;
