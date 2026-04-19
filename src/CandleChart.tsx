@@ -72,6 +72,12 @@ interface OIRow {
   strike: number;
   callOI: number;
   putOI: number;
+  callBaseOI: number;
+  putBaseOI: number;
+  callRecentOiChg: number;
+  putRecentOiChg: number;
+  callRecentVolChg: number;
+  putRecentVolChg: number;
   callVol: number;
   putVol: number;
   callIV: number;
@@ -83,9 +89,32 @@ interface OIRow {
   lotSize: number;
   callKey: string;
   putKey: string;
+  callKeys: string[];
+  putKeys: string[];
+  expiries: number[];
+  expiryData: OIExpirySlice[];
 }
 
-type OIMode = 'oi' | 'volume' | 'iv' | 'gex_raw' | 'gex_spot' | 'dex';
+type OIExpirySlice = {
+  expiry: number;
+  callKey: string;
+  putKey: string;
+  callOI: number;
+  putOI: number;
+  callBaseOI: number;
+  putBaseOI: number;
+  callVol: number;
+  putVol: number;
+  callIV: number;
+  putIV: number;
+  callGamma: number;
+  putGamma: number;
+  callDelta: number;
+  putDelta: number;
+};
+
+type OIMode = 'all' | 'oi' | 'oi_change' | 'volume' | 'volume_change' | 'iv' | 'gex_raw' | 'gex_spot' | 'dex';
+type OIChangeRange = '5m' | '10m' | '30m' | '2h' | '4h' | 'sod' | 'custom';
 
 
 interface OITooltip {
@@ -101,9 +130,41 @@ interface OITooltip {
   putIV: number;
 }
 
+type OIWidgetSeriesPoint = { time: Time; value: number };
+
+type OIChangeSummary = {
+  call: number;
+  put: number;
+  pcr: number | null;
+};
+
+type OILegendPlacement = {
+  left: number;
+};
+type OIChangeWidgetState = {
+  open: boolean;
+  loading: boolean;
+  error: string;
+  strike: number;
+  x: number;
+  y: number;
+  side: 'left' | 'right';
+  ceData: OIWidgetSeriesPoint[];
+  peData: OIWidgetSeriesPoint[];
+  netData: OIWidgetSeriesPoint[];
+};
+
+const OI_WIDGET_W = 420;
+const OI_WIDGET_H = 260;
+
 const OI_BAR_H = 9;
 const OI_BAR_GAP = 1;
 const OI_BAR_FILL = 0.22;
+const OI_CHANGE_BAR_FILL = 0.56;
+const VOL_CHANGE_BAR_FILL = 0.4;
+const OI_MULTI_BAR_FILL = 0.46;
+const OI_MULTI_BAR_GAP = 18;
+const OI_BAR_RIGHT_SHIFT = 12;
 
 function fmtOI(n: number) {
   if (n === 0) return '—';
@@ -111,6 +172,148 @@ function fmtOI(n: number) {
   if (n >= 1_00_000) return (n / 1_00_000).toFixed(2) + ' L';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+
+function fmtSignedOI(n: number) {
+  if (n === 0) return '—';
+  return `${n > 0 ? '+' : '-'}${fmtOI(Math.abs(n))}`;
+}
+
+function fmtOiChangeEquation(baseOi: number, currentOi: number) {
+  const change = currentOi - baseOi;
+  const baseLabel = fmtOI(baseOi);
+  const currentLabel = fmtOI(currentOi);
+  if (change === 0) return `${baseLabel} + 0 = ${currentLabel}`;
+  const changeLabel = change > 0
+    ? fmtOI(change)
+    : `(-${fmtOI(Math.abs(change))})`;
+  return `${baseLabel} + ${changeLabel} = ${currentLabel}`;
+}
+
+const OI_CHANGE_RANGE_OPTIONS: Array<{ id: OIChangeRange; label: string }> = [
+  { id: '5m', label: 'Last 5 min' },
+  { id: '10m', label: 'Last 10 min' },
+  { id: '30m', label: 'Last 30 min' },
+  { id: '2h', label: 'Last 2 hr' },
+  { id: '4h', label: 'Last 4 hr' },
+  { id: 'sod', label: 'Start of day' },
+  { id: 'custom', label: 'Custom' },
+];
+
+function getOiChangeRangeLabel(range: OIChangeRange) {
+  return OI_CHANGE_RANGE_OPTIONS.find(option => option.id === range)?.label ?? 'Custom';
+}
+
+function getOiChangeRangeMinutes(range: OIChangeRange) {
+  if (range === '5m') return 5;
+  if (range === '10m') return 10;
+  if (range === '30m') return 30;
+  if (range === '2h') return 120;
+  if (range === '4h') return 240;
+  return null;
+}
+
+function clampOiMinute(minute: number) {
+  return Math.max(MARKET_START_MIN, Math.min(MARKET_END_MIN, minute));
+}
+
+function getDefaultOiChangeMinute() {
+  const { minute, day } = getIstMinuteNow();
+  if (day < 1 || day > 5) return MARKET_END_MIN;
+  return clampOiMinute(minute);
+}
+
+function fmtOiChangeMinute(minute: number) {
+  const safeMinute = clampOiMinute(minute);
+  const hours = Math.floor(safeMinute / 60);
+  const mins = safeMinute % 60;
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+function fmtOiChangeWindow(fromMinute: number, toMinute: number) {
+  return `${fmtOiChangeMinute(fromMinute)}-${fmtOiChangeMinute(toMinute)}`;
+}
+
+function getOiMinutePercent(minute: number) {
+  return ((clampOiMinute(minute) - MARKET_START_MIN) / (MARKET_END_MIN - MARKET_START_MIN)) * 100;
+}
+
+function getOIAnchor(chartWidth: number, priceScaleWidth: number) {
+  return chartWidth - priceScaleWidth + OI_BAR_RIGHT_SHIFT;
+}
+
+function summarizeOiChange(rows: OIRow[]): OIChangeSummary {
+  const call = rows.reduce((sum, row) => sum + row.callRecentOiChg, 0);
+  const put = rows.reduce((sum, row) => sum + row.putRecentOiChg, 0);
+  const pcr = Math.abs(call) > 0 ? put / call : null;
+  return { call, put, pcr };
+}
+
+function formatUpstoxExpiryDate(expiryMs: number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(expiryMs));
+  const year = parts.find(p => p.type === 'year')?.value ?? '1970';
+  const month = parts.find(p => p.type === 'month')?.value ?? '01';
+  const day = parts.find(p => p.type === 'day')?.value ?? '01';
+  return `${year}-${month}-${day}`;
+}
+
+function formatNubraExpiryDate(expiryMs: number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(expiryMs));
+  const year = parts.find(p => p.type === 'year')?.value ?? '1970';
+  const month = parts.find(p => p.type === 'month')?.value ?? '01';
+  const day = parts.find(p => p.type === 'day')?.value ?? '01';
+  return `${year}${month}${day}`;
+}
+
+function nubraHeaders() {
+  if (typeof window === 'undefined') return { 'x-session-token': '', 'x-device-id': 'web', 'x-raw-cookie': '' };
+  return {
+    'x-session-token': localStorage.getItem('nubra_session_token') ?? '',
+    'x-device-id': localStorage.getItem('nubra_device_id') ?? 'web',
+    'x-raw-cookie': localStorage.getItem('nubra_raw_cookie') ?? '',
+  };
+}
+
+function normalizeNubraExchange(exchange?: string) {
+  if (!exchange) return 'NSE';
+  if (exchange.startsWith('BSE')) return 'BSE';
+  if (exchange.startsWith('MCX')) return 'MCX';
+  return 'NSE';
+}
+
+const MARKET_START_MIN = 9 * 60 + 15;
+const MARKET_END_MIN = 15 * 60 + 30;
+
+function getIstMinuteNow() {
+  const now = new Date(Date.now() + 5.5 * 3600 * 1000);
+  return { minute: now.getUTCHours() * 60 + now.getUTCMinutes(), day: now.getUTCDay() };
+}
+
+function lastTradingDate() {
+  const d = new Date(Date.now() + 5.5 * 3600 * 1000);
+  const { minute, day } = getIstMinuteNow();
+  if (day >= 1 && day <= 5 && minute < MARKET_START_MIN) d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function istMinuteToUtcIso(istMinute: number) {
+  const date = lastTradingDate();
+  const utcMinute = istMinute - 330;
+  const normalized = ((utcMinute % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`;
 }
 
 function instrumentDisplayLabel(ins: { name: string; trading_symbol: string; instrument_type: string; strike_price: number | null; expiry: number | null; underlying_symbol: string }): string {
@@ -151,13 +354,344 @@ function hexToRgb(hex: string) {
   return `${r},${g},${b}`;
 }
 
+function fmtExposure(v: number) {
+  if (v === 0) return '—';
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+  return v.toFixed(2);
+}
+
+function getOverlayVolume(md?: InstrumentMarketData) {
+  if (!md) return 0;
+  const tradedVol = Number(md.vtt ?? 0);
+  if (tradedVol > 0) return tradedVol;
+  const i1Vol = Number(md.ohlc?.find(bar => bar.interval === 'I1')?.vol ?? 0);
+  if (i1Vol > 0) return i1Vol;
+  return md.ohlc?.reduce((sum, bar) => sum + Number(bar.vol || 0), 0) ?? 0;
+}
+
+function getPercentileCap(values: number[], percentile: number) {
+  const sorted = values.filter(v => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+  if (!sorted.length) return 1;
+  const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * percentile)));
+  return Math.max(1, sorted[idx]);
+}
+
+function weightedMean(values: Array<{ weight: number; value: number }>) {
+  const weighted = values.filter(item => Number.isFinite(item.value) && item.weight > 0);
+  const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+  if (totalWeight > 0) return weighted.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight;
+  const plain = values.filter(item => Number.isFinite(item.value));
+  if (!plain.length) return 0;
+  return plain.reduce((sum, item) => sum + item.value, 0) / plain.length;
+}
+
+function recomputeOIRowTotals(row: OIRow) {
+  row.callOI = row.expiryData.reduce((sum, slice) => sum + slice.callOI, 0);
+  row.putOI = row.expiryData.reduce((sum, slice) => sum + slice.putOI, 0);
+  row.callBaseOI = row.expiryData.reduce((sum, slice) => sum + slice.callBaseOI, 0);
+  row.putBaseOI = row.expiryData.reduce((sum, slice) => sum + slice.putBaseOI, 0);
+  row.callVol = row.expiryData.reduce((sum, slice) => sum + slice.callVol, 0);
+  row.putVol = row.expiryData.reduce((sum, slice) => sum + slice.putVol, 0);
+  row.callIV = weightedMean(row.expiryData.map(slice => ({ weight: slice.callOI, value: slice.callIV })));
+  row.putIV = weightedMean(row.expiryData.map(slice => ({ weight: slice.putOI, value: slice.putIV })));
+  row.callGamma = weightedMean(row.expiryData.map(slice => ({ weight: slice.callOI, value: slice.callGamma })));
+  row.putGamma = weightedMean(row.expiryData.map(slice => ({ weight: slice.putOI, value: slice.putGamma })));
+  row.callDelta = weightedMean(row.expiryData.map(slice => ({ weight: slice.callOI, value: slice.callDelta })));
+  row.putDelta = weightedMean(row.expiryData.map(slice => ({ weight: slice.putOI, value: slice.putDelta })));
+}
+
+type OIBarMetric = {
+  id: 'oi' | 'oi_change' | 'volume_change' | 'gex' | 'dex' | 'volume' | 'iv';
+  label: string;
+  callVals: number[];
+  putVals: number[];
+  maxVal: number;
+  callRgb: string;
+  putRgb: string;
+};
+
+type OILegendItem = {
+  id: string;
+  label: string;
+  callColor: string;
+  putColor: string;
+};
+
+function formatLegendExpiry(ts: number) {
+  return new Date(ts).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+function getOILegendItems(mode: OIMode, callColor: string, putColor: string, selectedExpiries: number[] = []): OILegendItem[] {
+  if (mode === 'all') {
+    return [
+      { id: 'oi', label: 'OI', callColor, putColor },
+      { id: 'dex', label: 'Delta Exposure', callColor: '#38d4c8', putColor: '#f87171' },
+      { id: 'gex', label: 'GEX', callColor: '#818cf8', putColor: '#ff9800' },
+    ];
+  }
+  if (mode === 'gex_raw' || mode === 'gex_spot') {
+    return [{ id: 'gex', label: 'GEX', callColor: '#818cf8', putColor: '#ff9800' }];
+  }
+  if (mode === 'dex') {
+    return [{ id: 'dex', label: 'Delta Exposure', callColor: '#38d4c8', putColor: '#f87171' }];
+  }
+  if (mode === 'volume') {
+    return [{ id: 'volume', label: 'Volume', callColor, putColor }];
+  }
+  if (mode === 'volume_change') {
+    return [{ id: 'volume_change', label: 'Volume Change', callColor, putColor }];
+  }
+  if (mode === 'iv') {
+    return [{ id: 'iv', label: 'IV', callColor, putColor }];
+  }
+  if (mode === 'oi_change') {
+    return [{ id: 'oi_change', label: 'OI Change', callColor, putColor }];
+  }
+  if (mode === 'oi' && selectedExpiries.length > 1) {
+    return selectedExpiries.map(expiry => ({
+      id: `oi-${expiry}`,
+      label: formatLegendExpiry(expiry),
+      callColor,
+      putColor,
+    }));
+  }
+  return [{ id: 'oi', label: 'OI', callColor, putColor }];
+}
+
+function buildOIMetric(rows: OIRow[], mode: OIMode, callColor: string, putColor: string, spot: number): OIBarMetric {
+  if (mode === 'gex_raw' || mode === 'gex_spot') {
+    const multiplier = (mode === 'gex_spot' && spot > 0) ? spot * spot : 1;
+    const callVals = rows.map(r => Math.abs(r.callGamma * r.callOI * r.lotSize * multiplier));
+    const putVals = rows.map(r => Math.abs(r.putGamma * r.putOI * r.lotSize * multiplier));
+    return { id: 'gex', label: 'GEX', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: '129,140,248', putRgb: '255,152,0' };
+  }
+  if (mode === 'dex') {
+    const callVals = rows.map(r => Math.abs(r.callDelta) * r.callOI * r.lotSize);
+    const putVals = rows.map(r => Math.abs(r.putDelta) * r.putOI * r.lotSize);
+    return { id: 'dex', label: 'DEX', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: '56,212,200', putRgb: '248,113,113' };
+  }
+  if (mode === 'volume') {
+    const callVals = rows.map(r => r.callVol);
+    const putVals = rows.map(r => r.putVol);
+    return { id: 'volume', label: 'VOL', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: hexToRgb(callColor), putRgb: hexToRgb(putColor) };
+  }
+  if (mode === 'iv') {
+    const callVals = rows.map(r => r.callIV);
+    const putVals = rows.map(r => r.putIV);
+    return { id: 'iv', label: 'IV', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: hexToRgb(callColor), putRgb: hexToRgb(putColor) };
+  }
+  if (mode === 'oi_change') {
+    const callVals = rows.map(r => Math.abs(r.callRecentOiChg));
+    const putVals = rows.map(r => Math.abs(r.putRecentOiChg));
+    return { id: 'oi_change', label: 'OI Change', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: hexToRgb(callColor), putRgb: hexToRgb(putColor) };
+  }
+  if (mode === 'volume_change') {
+    const callVals = rows.map(r => Math.abs(r.callRecentVolChg));
+    const putVals = rows.map(r => Math.abs(r.putRecentVolChg));
+    return { id: 'volume_change', label: 'Volume Change', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: hexToRgb(callColor), putRgb: hexToRgb(putColor) };
+  }
+  const callVals = rows.map(r => r.callOI);
+  const putVals = rows.map(r => r.putOI);
+  return { id: 'oi', label: 'OI', callVals, putVals, maxVal: Math.max(...callVals, ...putVals, 1), callRgb: hexToRgb(callColor), putRgb: hexToRgb(putColor) };
+}
+
+function getOIMetrics(rows: OIRow[], mode: OIMode, callColor: string, putColor: string, spot: number) {
+  if (mode === 'all') {
+    return [
+      buildOIMetric(rows, 'gex_raw', callColor, putColor, spot),
+      buildOIMetric(rows, 'dex', callColor, putColor, spot),
+      buildOIMetric(rows, 'oi', callColor, putColor, spot),
+    ];
+  }
+  return [buildOIMetric(rows, mode, callColor, putColor, spot)];
+}
+
+function getOIBarLayout(anchor: number, mode: OIMode, slotCount = 1) {
+  if (mode === 'all') {
+    const totalW = anchor * OI_MULTI_BAR_FILL;
+    const slotW = Math.max(20, (totalW - OI_MULTI_BAR_GAP * 2) / 3);
+    const usedW = slotW * 3 + OI_MULTI_BAR_GAP * 2;
+    return { slotW, gap: OI_MULTI_BAR_GAP, leftEdge: anchor - usedW };
+  }
+  if (mode === 'oi' && slotCount > 1) {
+    const gap = 10;
+    const totalW = anchor * Math.min(0.72, Math.max(0.32, 0.16 * slotCount + 0.08));
+    const slotW = Math.max(18, (totalW - gap * (slotCount - 1)) / slotCount);
+    const usedW = slotW * slotCount + gap * (slotCount - 1);
+    return { slotW, gap, leftEdge: anchor - usedW };
+  }
+  const slotW = anchor * ((mode === 'oi_change' || mode === 'volume_change') ? OI_CHANGE_BAR_FILL : OI_BAR_FILL);
+  return { slotW, gap: 0, leftEdge: anchor - slotW };
+}
+
+function getOiHoverAnchorX(chartWidth: number, priceScaleWidth: number, mode: OIMode, row?: OIRow | null) {
+  const anchor = getOIAnchor(chartWidth, priceScaleWidth);
+  if (mode === 'all') {
+    const layout = getOIBarLayout(anchor, 'all');
+    return anchor - layout.slotW * 0.5;
+  }
+  if (mode === 'oi' && row && row.expiryData.length > 1) {
+    const layout = getOIBarLayout(anchor, 'oi', row.expiryData.length);
+    return layout.leftEdge + layout.slotW * row.expiryData.length + layout.gap * Math.max(0, row.expiryData.length - 1) - 8;
+  }
+  if (mode === 'oi_change' || mode === 'volume_change') {
+    return anchor - 6;
+  }
+  return anchor - 8;
+}
+
+type GammaLevels = {
+  callWall: number | null;
+  putWall: number | null;
+  gammaFlip: number | null;
+};
+
+function computeGammaLevels(rows: OIRow[], spot: number): GammaLevels {
+  if (!rows.length) return { callWall: null, putWall: null, gammaFlip: null };
+  const multiplier = spot > 0 ? spot * spot : 1;
+  const exposures = rows
+    .map(row => ({
+      strike: row.strike,
+      call: Math.max(0, row.callGamma * row.callOI * row.lotSize * multiplier),
+      put: Math.max(0, row.putGamma * row.putOI * row.lotSize * multiplier),
+      net: (row.callGamma * row.callOI * row.lotSize * multiplier) - (row.putGamma * row.putOI * row.lotSize * multiplier),
+    }))
+    .sort((a, b) => a.strike - b.strike);
+
+  const callWall = exposures.reduce((best, row) => row.call > best.call ? row : best, { strike: exposures[0].strike, call: -Infinity }).strike;
+  const putWall = exposures.reduce((best, row) => row.put > best.put ? row : best, { strike: exposures[0].strike, put: -Infinity }).strike;
+
+  let gammaFlip: number | null = null;
+  const cumulative = exposures.map((row, index) => ({
+    strike: row.strike,
+    net: exposures.slice(0, index + 1).reduce((sum, item) => sum + item.net, 0),
+  }));
+  const epsilon = Math.max(...cumulative.map(row => Math.abs(row.net)), 1) * 1e-6;
+  let lastNegative: typeof cumulative[number] | null = null;
+  let closestToZero = cumulative[0] ?? null;
+
+  for (let i = 0; i < cumulative.length; i += 1) {
+    const curr = cumulative[i];
+    if (!closestToZero || Math.abs(curr.net) < Math.abs(closestToZero.net)) {
+      closestToZero = curr;
+    }
+    if (Math.abs(curr.net) <= epsilon) {
+      gammaFlip = curr.strike;
+      break;
+    }
+    if (curr.net < -epsilon) {
+      lastNegative = curr;
+      continue;
+    }
+    if (curr.net > epsilon && lastNegative) {
+      const span = curr.strike - lastNegative.strike;
+      if (span <= 0) {
+        gammaFlip = curr.strike;
+        break;
+      }
+      const weight = Math.abs(lastNegative.net) / (Math.abs(lastNegative.net) + Math.abs(curr.net));
+      gammaFlip = lastNegative.strike + span * weight;
+      break;
+    }
+  }
+
+  if (gammaFlip == null && closestToZero) {
+    gammaFlip = closestToZero.strike;
+  }
+
+  return { callWall, putWall, gammaFlip };
+}
+
+function findOiRowAtPoint(
+  point: { x: number; y: number },
+  chart: IChartApi,
+  series: ISeriesApi<'Candlestick'>,
+  rows: OIRow[],
+  chartWidth: number,
+  mode: OIMode,
+) {
+  if (!rows.length) return null;
+  const priceScaleW = chart.priceScale('right').width();
+  const anchor = getOIAnchor(chartWidth, priceScaleW);
+  const slotCount = mode === 'oi' ? Math.max(1, ...rows.map(row => row.expiryData.length || 1)) : 1;
+  const layout = getOIBarLayout(anchor, mode, slotCount);
+  if (point.x < layout.leftEdge) return null;
+
+  const isProfileHoverMode = mode === 'oi_change' || mode === 'volume_change';
+  const hit = isProfileHoverMode ? OI_BAR_H + 4 : 3;
+  const maxW = anchor * (mode === 'oi_change' ? OI_CHANGE_BAR_FILL : mode === 'volume_change' ? VOL_CHANGE_BAR_FILL : OI_BAR_FILL);
+  let profileScaleMax = 1;
+  if (isProfileHoverMode) {
+    const baseVals = rows.flatMap(row => {
+      const callCurrent = mode === 'oi_change' ? row.callOI : row.callVol;
+      const putCurrent = mode === 'oi_change' ? row.putOI : row.putVol;
+      const callChange = mode === 'oi_change' ? row.callRecentOiChg : row.callRecentVolChg;
+      const putChange = mode === 'oi_change' ? row.putRecentOiChg : row.putRecentVolChg;
+      return [
+        Math.max(callCurrent, Math.max(0, callCurrent - callChange)),
+        Math.max(putCurrent, Math.max(0, putCurrent - putChange)),
+      ];
+    });
+    const maxBaseVal = Math.max(...baseVals, 1);
+    profileScaleMax = mode === 'volume_change'
+      ? Math.min(maxBaseVal, getPercentileCap(baseVals, 0.82))
+      : maxBaseVal;
+  }
+  let closest: OIRow | null = null;
+  let closestDist = Infinity;
+
+  for (const row of rows) {
+    const yc = series.priceToCoordinate(row.strike);
+    if (yc == null) continue;
+    if (isProfileHoverMode) {
+      const top = yc - OI_BAR_H - OI_BAR_GAP / 2 - 2;
+      const bottom = yc + OI_BAR_H + OI_BAR_GAP / 2 + 2;
+      if (point.y < top || point.y > bottom) continue;
+      const centerX = anchor - maxW / 2;
+      const singleDirectionProfile = mode === 'oi_change';
+      const profileRightEdge = singleDirectionProfile ? anchor : centerX;
+      const scaleProfileWidth = (value: number) => {
+        if (value <= 0 || profileScaleMax <= 0) return 0;
+        const ratio = Math.max(0, Math.min(1, value / profileScaleMax));
+        const eased = mode === 'volume_change' ? Math.pow(ratio, 0.55) : ratio;
+        return eased * (maxW / 2);
+      };
+      const callCurrentW = scaleProfileWidth(mode === 'oi_change' ? row.callOI : row.callVol);
+      const putCurrentW = scaleProfileWidth(mode === 'oi_change' ? row.putOI : row.putVol);
+      const callPrevW = scaleProfileWidth(Math.max(0, (mode === 'oi_change' ? row.callOI : row.callVol) - (mode === 'oi_change' ? row.callRecentOiChg : row.callRecentVolChg)));
+      const putPrevW = scaleProfileWidth(Math.max(0, (mode === 'oi_change' ? row.putOI : row.putVol) - (mode === 'oi_change' ? row.putRecentOiChg : row.putRecentVolChg)));
+      const leftBound = singleDirectionProfile
+        ? profileRightEdge - Math.max(callCurrentW, putCurrentW, callPrevW, putPrevW) - 6
+        : centerX - Math.max(callCurrentW, callPrevW) - 6;
+      const rightBound = singleDirectionProfile
+        ? profileRightEdge + 4
+        : centerX + Math.max(putCurrentW, putPrevW) + 6;
+      if (point.x < leftBound || point.x > rightBound) continue;
+      const d = Math.abs(point.y - yc);
+      if (d < closestDist) { closestDist = d; closest = row; }
+    } else {
+      const d = Math.abs(point.y - yc);
+      if (d < hit && d < closestDist) { closestDist = d; closest = row; }
+    }
+  }
+
+  return closest;
+}
+
 function drawOIBars(
   canvas: HTMLCanvasElement,
   chart: IChartApi,
   series: ISeriesApi<'Candlestick'>,
   rows: OIRow[],
   hoveredStrike: number | null,
-  mode: OIMode = 'oi',
+  mode: OIMode = 'all',
   callColor = '#2ebd85',
   putColor = '#f23645',
   opacity = 75,
@@ -176,16 +710,24 @@ function drawOIBars(
   ctx.clearRect(0, 0, cssW, cssH);
 
   const priceScaleW = chart.priceScale('right').width();
-  const anchor = cssW - priceScaleW;
-  const maxW = anchor * OI_BAR_FILL;
+  const anchor = getOIAnchor(cssW, priceScaleW);
   const alpha = opacity / 100;
   const alphaHover = Math.min(1, alpha + 0.2);
+  const multiExpiryOi = mode === 'oi' && rows.some(row => row.expiryData.length > 1);
+  const oiSlotCount = multiExpiryOi ? Math.max(...rows.map(row => row.expiryData.length || 1), 1) : 1;
+  const metrics = mode === 'all' ? getOIMetrics(rows, mode, callColor, putColor, spot) : null;
+  const layout = mode === 'all' || multiExpiryOi ? getOIBarLayout(anchor, mode, multiExpiryOi ? oiSlotCount : 1) : null;
 
   const isGex = mode === 'gex_raw' || mode === 'gex_spot';
   const isDex = mode === 'dex';
+  const isOiChange = mode === 'oi_change';
+  const isVolumeChange = mode === 'volume_change';
+  const isProfileChange = isOiChange || isVolumeChange;
+  const maxW = anchor * (isOiChange ? OI_CHANGE_BAR_FILL : isVolumeChange ? VOL_CHANGE_BAR_FILL : OI_BAR_FILL);
 
   let callVals: number[], putVals: number[], maxVal: number;
   let callRgb: string, putRgb: string;
+  let callBaseVals: number[] = [], putBaseVals: number[] = [], maxBaseVal = 1, profileScaleMax = 1;
 
   if (isGex) {
     const multiplier = (mode === 'gex_spot' && spot > 0) ? spot * spot : 1;
@@ -205,6 +747,26 @@ function drawOIBars(
     maxVal = Math.max(...callVals, ...putVals, 1);
     callRgb = '56,212,200';  // teal
     putRgb = '248,113,113';  // red
+  } else if (isProfileChange) {
+    callVals = rows.map(r => isOiChange ? r.callRecentOiChg : r.callRecentVolChg);
+    putVals = rows.map(r => isOiChange ? r.putRecentOiChg : r.putRecentVolChg);
+    callBaseVals = rows.map(r => {
+      const current = isOiChange ? r.callOI : r.callVol;
+      const change = isOiChange ? r.callRecentOiChg : r.callRecentVolChg;
+      return Math.max(current, Math.max(0, current - change));
+    });
+    putBaseVals = rows.map(r => {
+      const current = isOiChange ? r.putOI : r.putVol;
+      const change = isOiChange ? r.putRecentOiChg : r.putRecentVolChg;
+      return Math.max(current, Math.max(0, current - change));
+    });
+    maxBaseVal = Math.max(...callBaseVals, ...putBaseVals, 1);
+    profileScaleMax = isVolumeChange
+      ? Math.min(maxBaseVal, getPercentileCap([...callBaseVals, ...putBaseVals], 0.82))
+      : maxBaseVal;
+    maxVal = Math.max(...callVals.map(Math.abs), ...putVals.map(Math.abs), 1);
+    callRgb = hexToRgb(callColor);
+    putRgb = hexToRgb(putColor);
   } else {
     callVals = rows.map(r => mode === 'volume' ? r.callVol : mode === 'iv' ? r.callIV : r.callOI);
     putVals = rows.map(r => mode === 'volume' ? r.putVol : mode === 'iv' ? r.putIV : r.putOI);
@@ -216,16 +778,124 @@ function drawOIBars(
   rows.forEach((row, i) => {
     const yCenter = series.priceToCoordinate(row.strike);
     if (yCenter == null) return;
-    const callW = (callVals[i] / maxVal) * maxW;
-    const putW = (putVals[i] / maxVal) * maxW;
     const isHovered = hoveredStrike === row.strike;
-    if (callW > 0) {
-      ctx.fillStyle = `rgba(${callRgb},${isHovered ? alphaHover : alpha})`;
-      ctx.fillRect(anchor - callW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callW, OI_BAR_H);
-    }
-    if (putW > 0) {
-      ctx.fillStyle = `rgba(${putRgb},${isHovered ? alphaHover : alpha})`;
-      ctx.fillRect(anchor - putW, yCenter + OI_BAR_GAP / 2, putW, OI_BAR_H);
+    if (multiExpiryOi && layout) {
+      const expiryMaxVal = Math.max(
+        ...rows.flatMap(r => r.expiryData.flatMap(slice => [slice.callOI, slice.putOI])),
+        1,
+      );
+      row.expiryData.forEach((slice, expiryIndex) => {
+        const slotRight = layout.leftEdge + (expiryIndex + 1) * layout.slotW + expiryIndex * layout.gap;
+        const callW = (slice.callOI / expiryMaxVal) * layout.slotW;
+        const putW = (slice.putOI / expiryMaxVal) * layout.slotW;
+        if (callW > 0) {
+          ctx.fillStyle = `rgba(${hexToRgb(callColor)},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(slotRight - callW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callW, OI_BAR_H);
+        }
+        if (putW > 0) {
+          ctx.fillStyle = `rgba(${hexToRgb(putColor)},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(slotRight - putW, yCenter + OI_BAR_GAP / 2, putW, OI_BAR_H);
+        }
+      });
+    } else if (metrics && layout) {
+      metrics.forEach((metric, metricIndex) => {
+        const slotRight = anchor - metricIndex * (layout.slotW + layout.gap);
+        const callW = (metric.callVals[i] / metric.maxVal) * layout.slotW;
+        const putW = (metric.putVals[i] / metric.maxVal) * layout.slotW;
+        if (callW > 0) {
+          ctx.fillStyle = `rgba(${metric.callRgb},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(slotRight - callW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callW, OI_BAR_H);
+        }
+        if (putW > 0) {
+          ctx.fillStyle = `rgba(${metric.putRgb},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(slotRight - putW, yCenter + OI_BAR_GAP / 2, putW, OI_BAR_H);
+        }
+      });
+    } else {
+      if (isProfileChange) {
+        const centerX = anchor - maxW / 2;
+        const callRaw = callVals[i];
+        const putRaw = putVals[i];
+        const callCurrent = isOiChange ? row.callOI : row.callVol;
+        const putCurrent = isOiChange ? row.putOI : row.putVol;
+        const callChange = isOiChange ? row.callRecentOiChg : row.callRecentVolChg;
+        const putChange = isOiChange ? row.putRecentOiChg : row.putRecentVolChg;
+        const scaleProfileWidth = (value: number) => {
+          if (value <= 0 || profileScaleMax <= 0) return 0;
+          const ratio = Math.max(0, Math.min(1, value / profileScaleMax));
+          const eased = isVolumeChange ? Math.pow(ratio, 0.55) : ratio;
+          return eased * (maxW / 2);
+        };
+        const ensureVisibleChangeWidth = (width: number, raw: number) => {
+          if (raw === 0 || width <= 0) return 0;
+          return Math.max(width, isVolumeChange ? 6 : 3);
+        };
+        const callCurrentW = scaleProfileWidth(callCurrent);
+        const putCurrentW = scaleProfileWidth(putCurrent);
+        const callPrevOi = Math.max(0, callCurrent - callChange);
+        const putPrevOi = Math.max(0, putCurrent - putChange);
+        const callPrevW = scaleProfileWidth(callPrevOi);
+        const putPrevW = scaleProfileWidth(putPrevOi);
+        const callBaseW = Math.min(callCurrentW, callPrevW);
+        const putBaseW = Math.min(putCurrentW, putPrevW);
+        const callAddedW = callRaw > 0 ? ensureVisibleChangeWidth(Math.max(0, callCurrentW - callPrevW), callRaw) : 0;
+        const putAddedW = putRaw > 0 ? ensureVisibleChangeWidth(Math.max(0, putCurrentW - putPrevW), putRaw) : 0;
+        const callReducedW = callRaw < 0 ? ensureVisibleChangeWidth(Math.max(0, callPrevW - callCurrentW), callRaw) : 0;
+        const putReducedW = putRaw < 0 ? ensureVisibleChangeWidth(Math.max(0, putPrevW - putCurrentW), putRaw) : 0;
+        const callBaseColor = '46,189,133';
+        const putBaseColor = '242,54,69';
+        const totalAlpha = isHovered ? Math.min(1, alpha + 0.22) : Math.min(0.92, alpha + 0.16);
+        const hollowAlpha = isHovered ? 0.96 : 0.8;
+        const callAddedColor = '112,255,72';
+        const putAddedColor = '255,84,182';
+        const singleDirectionProfile = isOiChange;
+        const profileRightEdge = singleDirectionProfile ? anchor : centerX;
+        if (!singleDirectionProfile) {
+          ctx.strokeStyle = `rgba(255,255,255,${isHovered ? 0.32 : 0.16})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(centerX, yCenter - OI_BAR_H - 1);
+          ctx.lineTo(centerX, yCenter + OI_BAR_H + 1);
+          ctx.stroke();
+        }
+        if (callBaseW > 0) {
+          ctx.fillStyle = `rgba(${callBaseColor},${totalAlpha})`;
+          ctx.fillRect(profileRightEdge - callBaseW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callBaseW, OI_BAR_H);
+        }
+        if (callAddedW > 0) {
+          ctx.fillStyle = `rgba(${callAddedColor},${isHovered ? 1 : 0.95})`;
+          ctx.fillRect(profileRightEdge - callCurrentW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callAddedW, OI_BAR_H);
+        }
+        if (callReducedW > 0) {
+          ctx.strokeStyle = `rgba(${callAddedColor},${hollowAlpha})`;
+          ctx.lineWidth = 1.25;
+          ctx.strokeRect(profileRightEdge - callPrevW + 0.5, yCenter - OI_BAR_H - OI_BAR_GAP / 2 + 0.5, Math.max(0, callReducedW - 1), Math.max(0, OI_BAR_H - 1));
+        }
+        if (putBaseW > 0) {
+          ctx.fillStyle = `rgba(${putBaseColor},${totalAlpha})`;
+          ctx.fillRect(singleDirectionProfile ? profileRightEdge - putBaseW : centerX, yCenter + OI_BAR_GAP / 2, putBaseW, OI_BAR_H);
+        }
+        if (putAddedW > 0) {
+          ctx.fillStyle = `rgba(${putAddedColor},${isHovered ? 1 : 0.95})`;
+          ctx.fillRect(singleDirectionProfile ? profileRightEdge - putCurrentW : centerX + putCurrentW - putAddedW, yCenter + OI_BAR_GAP / 2, putAddedW, OI_BAR_H);
+        }
+        if (putReducedW > 0) {
+          ctx.strokeStyle = `rgba(${putAddedColor},${hollowAlpha})`;
+          ctx.lineWidth = 1.25;
+          ctx.strokeRect(singleDirectionProfile ? profileRightEdge - putPrevW + 0.5 : centerX + putCurrentW + 0.5, yCenter + OI_BAR_GAP / 2 + 0.5, Math.max(0, putReducedW - 1), Math.max(0, OI_BAR_H - 1));
+        }
+      } else {
+        const callW = (callVals[i] / maxVal) * maxW;
+        const putW = (putVals[i] / maxVal) * maxW;
+        if (callW > 0) {
+          ctx.fillStyle = `rgba(${callRgb},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(anchor - callW, yCenter - OI_BAR_H - OI_BAR_GAP / 2, callW, OI_BAR_H);
+        }
+        if (putW > 0) {
+          ctx.fillStyle = `rgba(${putRgb},${isHovered ? alphaHover : alpha})`;
+          ctx.fillRect(anchor - putW, yCenter + OI_BAR_GAP / 2, putW, OI_BAR_H);
+        }
+      }
     }
     if (isHovered) {
       ctx.save();
@@ -1106,7 +1776,7 @@ function OISettingsModal({
   callColor, onCallColor,
   putColor, onPutColor,
   opacity, onOpacity,
-  expiries, selectedExpiry, onExpiry,
+  expiries, selectedExpiries, onToggleExpiry,
   onClose,
 }: {
   anchorRef: RefObject<HTMLButtonElement | null>;
@@ -1115,7 +1785,7 @@ function OISettingsModal({
   callColor: string; onCallColor: (c: string) => void;
   putColor: string; onPutColor: (c: string) => void;
   opacity: number; onOpacity: (v: number) => void;
-  expiries: number[]; selectedExpiry: number | null; onExpiry: (e: number) => void;
+  expiries: number[]; selectedExpiries: number[]; onToggleExpiry: (e: number) => void;
   onClose: () => void;
 }) {
   const fmtExpiry = (ts: number) => {
@@ -1146,12 +1816,24 @@ function OISettingsModal({
   type ModeItem = { id: OIMode; label: string; sub: string; icon: React.ReactNode; hasChildren?: boolean };
   const modes: ModeItem[] = [
     {
+      id: 'all', label: 'Combined Profile', sub: 'GEX, DEX and OI side by side',
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="8" width="4" height="12" rx="1" /><rect x="10" y="4" width="4" height="16" rx="1" /><rect x="18" y="10" width="4" height="10" rx="1" /></svg>,
+    },
+    {
       id: 'oi', label: 'Open Interest', sub: 'Call & Put OI per strike',
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>,
     },
     {
+      id: 'oi_change', label: 'OI Change', sub: 'Nubra OI change with selectable range',
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v16" /><path d="m7 9 5-5 5 5" /><path d="m17 15-5 5-5-5" /></svg>,
+    },
+    {
       id: 'volume', label: 'Volume', sub: 'Traded volume per strike',
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="6" height="13" rx="1" /><rect x="9" y="3" width="6" height="17" rx="1" /><rect x="16" y="10" width="6" height="10" rx="1" /></svg>,
+    },
+    {
+      id: 'volume_change', label: 'Volume Change', sub: 'Nubra volume change with selectable range',
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18h16" /><path d="M7 18V8" /><path d="M12 18V5" /><path d="M17 18v-7" /><path d="m14 8 3 3 3-3" /></svg>,
     },
     {
       id: 'iv', label: 'Implied Volatility', sub: 'IV per strike',
@@ -1194,14 +1876,14 @@ function OISettingsModal({
         {/* Expiry Picker */}
         {expiries.length > 0 && (
           <div>
-            <div className={s.oiSectionLabel}>Expiry</div>
+            <div className={s.oiSectionLabel}>Expiries (Multi-Select)</div>
             <div className={s.oiExpiryWrap}>
               {expiries.map(exp => {
-                const active = exp === selectedExpiry;
+                const active = selectedExpiries.includes(exp);
                 return (
                   <button
                     key={exp}
-                    onClick={() => onExpiry(exp)}
+                    onClick={() => onToggleExpiry(exp)}
                     className={cx(s.oiExpiryBtn, active ? s.oiExpiryBtnActive : s.oiExpiryBtnInactive)}
                   >
                     {fmtExpiry(exp)}
@@ -1332,6 +2014,97 @@ function OISettingsModal({
   );
 }
 
+function OiChangeMiniChart({
+  ceData,
+  peData,
+  netData,
+}: {
+  ceData: OIWidgetSeriesPoint[];
+  peData: OIWidgetSeriesPoint[];
+  netData: OIWidgetSeriesPoint[];
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const chart = createChart(el, {
+      autoSize: true,
+      layout: { background: { color: '#0b1118' }, textColor: '#93a4bc' },
+      grid: {
+        vertLines: { color: 'rgba(148,163,184,0.07)' },
+        horzLines: { color: 'rgba(148,163,184,0.07)' },
+      },
+      crosshair: { mode: 1 },
+      rightPriceScale: { borderColor: 'rgba(148,163,184,0.14)' },
+      timeScale: {
+        borderColor: 'rgba(148,163,184,0.14)',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 2,
+        tickMarkFormatter: (ts: number) =>
+          new Date(ts * 1000).toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+      },
+      localization: {
+        timeFormatter: (ts: number) =>
+          new Date(ts * 1000).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+      },
+    });
+
+    const ceSeries = chart.addSeries(LineSeries, {
+      color: '#38d4c8',
+      lineWidth: 2,
+      title: 'CE OI CHG',
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerRadius: 3,
+    });
+    const peSeries = chart.addSeries(LineSeries, {
+      color: '#ff5ab6',
+      lineWidth: 2,
+      title: 'PE OI CHG',
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerRadius: 3,
+    });
+    chart.addPane();
+    const spreadSeries = chart.addSeries(HistogramSeries, {
+      title: 'PUT - CALL',
+      base: 0,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    }, 1);
+    spreadSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.16, bottom: 0.16 },
+      borderColor: 'rgba(148,163,184,0.14)',
+    });
+
+    ceSeries.setData(ceData);
+    peSeries.setData(peData);
+    spreadSeries.setData(netData.map(point => ({
+      time: point.time,
+      value: -point.value,
+      color: point.value <= 0 ? 'rgba(34,197,94,0.68)' : 'rgba(239,68,68,0.68)',
+    })));
+    chart.timeScale().fitContent();
+
+    return () => chart.remove();
+  }, [ceData, peData, netData]);
+
+  return <div ref={containerRef} className={s.oiMiniChartCanvas} />;
+}
+
 // ── VWAP Settings Panel ───────────────────────────────────────────────────────
 function VwapSettingsPanel({
   anchorRef,
@@ -1419,6 +2192,9 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   const vwapB3pRef = useRef<ISeriesApi<'Line'> | null>(null);
   const vwapB3nRef = useRef<ISeriesApi<'Line'> | null>(null);
   const twapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const callWallLineRef = useRef<any>(null);
+  const putWallLineRef = useRef<any>(null);
+  const gammaFlipLineRef = useRef<any>(null);
   const vwapRafRef = useRef<number | null>(null);
   const oiRowsRef = useRef<OIRow[]>([]);
   const hoveredStrikeRef = useRef<number | null>(null);
@@ -1497,16 +2273,36 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
   useEffect(() => { if (oiShowProp !== undefined) setOiShowInternal(oiShowProp); }, [oiShowProp]);
   useEffect(() => { if (optionChainOpenProp !== undefined) setOptionChainOpenInternal(optionChainOpenProp); }, [optionChainOpenProp]);
   const [oiTooltip, setOiTooltip] = useState<OITooltip>({ visible: false, x: 0, y: 0, strike: 0, callOI: 0, putOI: 0, callVol: 0, putVol: 0, callIV: 0, putIV: 0 });
+  const [gammaLevels, setGammaLevels] = useState<GammaLevels>({ callWall: null, putWall: null, gammaFlip: null });
   const [crosshairOHLC, setCrosshairOHLC] = useState<{ open: number; high: number; low: number; close: number; change: number; changePct: number } | null>(null);
+  const [chartViewportWidth, setChartViewportWidth] = useState(0);
   const setCrosshairOHLCRef = useRef(setCrosshairOHLC);
   setCrosshairOHLCRef.current = setCrosshairOHLC;
   const oiTooltipVisRef = useRef(false);
   const [oiSettingsOpen, setOiSettingsOpen] = useState(false);
-  const [oiMode, setOiMode] = useState<OIMode>('oi');
+  const [oiMode, setOiMode] = useState<OIMode>('all');
+  const [oiChangeSummary, setOiChangeSummary] = useState<OIChangeSummary>({ call: 0, put: 0, pcr: null });
+  const [oiChangeRange, setOiChangeRange] = useState<OIChangeRange>('sod');
+  const [oiChangeFromMinute, setOiChangeFromMinute] = useState<number>(MARKET_START_MIN);
+  const [oiChangeToMinute, setOiChangeToMinute] = useState<number>(() => getDefaultOiChangeMinute());
+  const [oiChangeFromMinuteDraft, setOiChangeFromMinuteDraft] = useState<number>(MARKET_START_MIN);
+  const [oiChangeToMinuteDraft, setOiChangeToMinuteDraft] = useState<number>(() => getDefaultOiChangeMinute());
   const [oiCallColor, setOiCallColor] = useState('#2ebd85');
   const [oiPutColor, setOiPutColor] = useState('#f23645');
   const [oiOpacity, setOiOpacity] = useState(75);
-  const [oiExpiry, setOiExpiry] = useState<number | null>(null);
+  const [oiSelectedExpiries, setOiSelectedExpiries] = useState<number[]>([]);
+  const [oiChangeWidget, setOiChangeWidget] = useState<OIChangeWidgetState>({
+    open: false,
+    loading: false,
+    error: '',
+    strike: 0,
+    x: 16,
+    y: 52,
+    side: 'left',
+    ceData: [],
+    peData: [],
+    netData: [],
+  });
   const oiSettingsBtnRef = useRef<HTMLButtonElement>(null);
   const oiSettingsPanelRef = useRef<HTMLDivElement>(null);
   // Expose toggle fn to workspace toolbar via ref
@@ -1558,23 +2354,66 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
   // Auto-select nearest expiry when list loads or instrument changes
   useEffect(() => {
-    if (oiExpiries.length > 0 && (oiExpiry === null || !oiExpiries.includes(oiExpiry))) {
-      setOiExpiry(oiExpiries[0]);
+    if (!oiExpiries.length) {
+      setOiSelectedExpiries([]);
+      return;
     }
-  }, [oiExpiries, oiExpiry]);
+    setOiSelectedExpiries(prev => {
+      const next = prev.filter(exp => oiExpiries.includes(exp));
+      return next.length ? next : [oiExpiries[0]];
+    });
+  }, [oiExpiries]);
 
   // Keep refs in sync so boot-effect closures can read latest values
-  const oiModeRef = useRef<OIMode>('oi');
+  const oiModeRef = useRef<OIMode>('all');
+  const oiChangeRangeRef = useRef<OIChangeRange>('sod');
+  const oiChangeFromMinuteRef = useRef<number>(MARKET_START_MIN);
+  const oiChangeToMinuteRef = useRef<number>(getDefaultOiChangeMinute());
   const oiCallColorRef = useRef('#2ebd85');
   const oiPutColorRef = useRef('#f23645');
   const oiOpacityRef = useRef(75);
   const oiSpotRef = useRef(0);
-  const oiExpiryRef = useRef<number | null>(null);
+  const oiSelectedExpiriesRef = useRef<number[]>([]);
   oiModeRef.current = oiMode;
+  oiChangeRangeRef.current = oiChangeRange;
+  oiChangeFromMinuteRef.current = oiChangeFromMinute;
+  oiChangeToMinuteRef.current = oiChangeToMinute;
   oiCallColorRef.current = oiCallColor;
   oiPutColorRef.current = oiPutColor;
   oiOpacityRef.current = oiOpacity;
-  oiExpiryRef.current = oiExpiry;
+  oiSelectedExpiriesRef.current = oiSelectedExpiries;
+
+  useEffect(() => {
+    setOiChangeFromMinuteDraft(oiChangeFromMinute);
+  }, [oiChangeFromMinute]);
+
+  useEffect(() => {
+    setOiChangeToMinuteDraft(oiChangeToMinute);
+  }, [oiChangeToMinute]);
+
+  const commitOiChangeWindow = useCallback(() => {
+    const draftFrom = clampOiMinute(oiChangeFromMinuteDraft);
+    const draftTo = clampOiMinute(oiChangeToMinuteDraft);
+    const nextFrom = Math.min(draftFrom, draftTo - 5);
+    const nextTo = Math.max(draftTo, nextFrom + 5);
+    setOiChangeFromMinute((prev) => (prev === nextFrom ? prev : nextFrom));
+    setOiChangeToMinute((prev) => (prev === nextTo ? prev : nextTo));
+    setOiChangeFromMinuteDraft(nextFrom);
+    setOiChangeToMinuteDraft(nextTo);
+  }, [oiChangeFromMinuteDraft, oiChangeToMinuteDraft]);
+
+  const applyOiChangePreset = useCallback((range: OIChangeRange, anchorMinute: number) => {
+    const toMinute = clampOiMinute(anchorMinute);
+    const windowMinutes = getOiChangeRangeMinutes(range);
+    const fromMinute = range === 'sod' || windowMinutes == null
+      ? MARKET_START_MIN
+      : Math.max(MARKET_START_MIN, toMinute - windowMinutes);
+    setOiChangeRange(range);
+    setOiChangeFromMinute(fromMinute);
+    setOiChangeToMinute(toMinute);
+    setOiChangeFromMinuteDraft(fromMinute);
+    setOiChangeToMinuteDraft(toMinute);
+  }, []);
 
   // Stable refs — WS callback reads these without needing re-subscription
   const intervalRef = useRef<Interval>(interval);
@@ -1710,6 +2549,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       canvas.height = el.clientHeight * dpr;
       canvas.style.width = el.clientWidth + 'px';
       canvas.style.height = el.clientHeight + 'px';
+      setChartViewportWidth(el.clientWidth);
     };
     resyncCanvas();
 
@@ -1752,14 +2592,6 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onScroll);
 
-    // Crosshair hover → OI tooltip
-    const tooltipVisRef = oiTooltipVisRef;
-
-    const clearOiHover = () => {
-      if (hoveredStrikeRef.current !== null) { hoveredStrikeRef.current = null; redrawOI(); }
-      if (tooltipVisRef.current) { tooltipVisRef.current = false; setOiTooltip(t => ({ ...t, visible: false })); }
-    };
-
     chart.subscribeCrosshairMove((param) => {
       // OHLC crosshair header — update on every crosshair move
       const series = candleSeriesRef.current;
@@ -1772,45 +2604,6 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
         }
       } else if (!param.time) {
         setCrosshairOHLCRef.current(null);
-      }
-
-      // If OI overlay is off, never show tooltip
-      if (!oiShowLiveRef.current) { clearOiHover(); return; }
-      if (!param.point || !candleSeriesRef.current) { clearOiHover(); return; }
-
-      const rows = oiRowsRef.current;
-      if (rows.length === 0) { clearOiHover(); return; }
-
-      // Compute bar zone: bars are anchored to right price scale edge
-      const priceScaleW = chart.priceScale('right').width();
-      const chartW = el.clientWidth;
-      const anchor = chartW - priceScaleW;
-      // Only activate when cursor is right of where bars start
-      if (param.point.x < anchor * (1 - OI_BAR_FILL * 2)) { clearOiHover(); return; }
-
-      // Find closest OI bar row by Y distance
-      const HIT = 3;
-      let closest: OIRow | null = null;
-      let closestDist = Infinity;
-      for (const row of rows) {
-        const yc = candleSeriesRef.current!.priceToCoordinate(row.strike);
-        if (yc == null) continue;
-        const d = Math.abs(param.point.y - yc);
-        if (d < HIT && d < closestDist) { closestDist = d; closest = row; }
-      }
-
-      if (closest) {
-        const prev = hoveredStrikeRef.current;
-        hoveredStrikeRef.current = closest.strike;
-        const wRect = wrapperRef.current!.getBoundingClientRect();
-        const eRect = el.getBoundingClientRect();
-        const ox = eRect.left - wRect.left + param.point.x;
-        const oy = eRect.top - wRect.top + param.point.y;
-        tooltipVisRef.current = true;
-        setOiTooltip({ visible: true, x: ox, y: oy, strike: closest.strike, callOI: closest.callOI, putOI: closest.putOI, callVol: closest.callVol, putVol: closest.putVol, callIV: closest.callIV, putIV: closest.putIV });
-        if (prev !== closest.strike) redrawOI();
-      } else {
-        clearOiHover();
       }
     });
 
@@ -1838,10 +2631,388 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     drawOIBars(canvasRef.current, chartRef.current, candleSeriesRef.current, oiRowsRef.current, hoveredStrikeRef.current, oiModeRef.current, oiCallColorRef.current, oiPutColorRef.current, oiOpacityRef.current, oiSpotRef.current);
   }, []);
 
+  const clearGammaLevelLines = useCallback(() => {
+    const series: any = candleSeriesRef.current;
+    if (!series?.removePriceLine) return;
+    if (callWallLineRef.current) { try { series.removePriceLine(callWallLineRef.current); } catch {} callWallLineRef.current = null; }
+    if (putWallLineRef.current) { try { series.removePriceLine(putWallLineRef.current); } catch {} putWallLineRef.current = null; }
+    if (gammaFlipLineRef.current) { try { series.removePriceLine(gammaFlipLineRef.current); } catch {} gammaFlipLineRef.current = null; }
+    setGammaLevels({ callWall: null, putWall: null, gammaFlip: null });
+  }, []);
+
+  const updateGammaLevelLines = useCallback(() => {
+    const series: any = candleSeriesRef.current;
+    if (!oiShowLiveRef.current || !series?.createPriceLine || !oiRowsRef.current.length) {
+      clearGammaLevelLines();
+      return;
+    }
+    const { callWall, putWall, gammaFlip } = computeGammaLevels(oiRowsRef.current, oiSpotRef.current);
+    clearGammaLevelLines();
+    setGammaLevels({ callWall, putWall, gammaFlip });
+    if (callWall != null) {
+      callWallLineRef.current = series.createPriceLine({
+        price: callWall,
+        color: 'rgba(72, 187, 120, 0.95)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: '',
+      });
+    }
+    if (putWall != null) {
+      putWallLineRef.current = series.createPriceLine({
+        price: putWall,
+        color: 'rgba(245, 101, 101, 0.95)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: '',
+      });
+    }
+    if (gammaFlip != null) {
+      gammaFlipLineRef.current = series.createPriceLine({
+        price: gammaFlip,
+        color: 'rgba(251, 191, 36, 0.98)',
+        lineWidth: 2,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: false,
+        title: '',
+      });
+    }
+  }, [clearGammaLevelLines]);
+
+  const clearOiHover = useCallback(() => {
+    const el = containerRef.current;
+    if (el) el.style.cursor = '';
+    if (hoveredStrikeRef.current !== null) {
+      hoveredStrikeRef.current = null;
+      redrawOI();
+    }
+    if (oiTooltipVisRef.current) {
+      oiTooltipVisRef.current = false;
+      setOiTooltip(t => ({ ...t, visible: false }));
+    }
+  }, [redrawOI]);
+
+  const handleOiPointerMove = useCallback((clientX: number, clientY: number) => {
+    if (!oiShowLiveRef.current) { clearOiHover(); return; }
+    const chart = chartRef.current;
+    const series = candleSeriesRef.current;
+    const el = containerRef.current;
+    const wrap = wrapperRef.current;
+    if (!chart || !series || !el || !wrap) { clearOiHover(); return; }
+    const rect = el.getBoundingClientRect();
+    const point = { x: clientX - rect.left, y: clientY - rect.top };
+    if (point.x < 0 || point.y < 0 || point.x > rect.width || point.y > rect.height) { clearOiHover(); return; }
+    const rows = oiRowsRef.current;
+    if (!rows.length) { clearOiHover(); return; }
+    const closest = findOiRowAtPoint(point, chart, series, rows, el.clientWidth, oiModeRef.current);
+    if (!closest) { clearOiHover(); return; }
+    el.style.cursor = oiModeRef.current === 'oi_change' ? 'pointer' : 'default';
+    const prev = hoveredStrikeRef.current;
+    hoveredStrikeRef.current = closest.strike;
+    const wRect = wrap.getBoundingClientRect();
+    const ox = rect.left - wRect.left + getOiHoverAnchorX(el.clientWidth, chart.priceScale('right').width(), oiModeRef.current, closest);
+    const oy = rect.top - wRect.top + point.y;
+    oiTooltipVisRef.current = true;
+    setOiTooltip({
+      visible: true,
+      x: ox,
+      y: oy,
+      strike: closest.strike,
+      callOI: closest.callOI,
+      putOI: closest.putOI,
+      callVol: closest.callVol,
+      putVol: closest.putVol,
+      callIV: closest.callIV,
+      putIV: closest.putIV,
+    });
+    if (prev !== closest.strike) redrawOI();
+  }, [clearOiHover, redrawOI]);
+
+  const openOiChangeWidget = useCallback(async (row: OIRow, x: number, y: number, side: 'left' | 'right') => {
+    const headers = nubraHeaders();
+    const sessionToken = typeof window !== 'undefined' ? (localStorage.getItem('nubra_session_token') ?? '') : '';
+    const authToken = typeof window !== 'undefined' ? (localStorage.getItem('nubra_auth_token') ?? '') : '';
+    const deviceId = typeof window !== 'undefined' ? (localStorage.getItem('nubra_device_id') ?? 'web') : 'web';
+    const rawCookie = typeof window !== 'undefined' ? (localStorage.getItem('nubra_raw_cookie') ?? '') : '';
+    const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+    const expiryMs = oiSelectedExpiriesRef.current[0] ?? null;
+    if (!sessionToken || !underlying || !expiryMs) return;
+
+    setOiChangeWidget({
+      open: true,
+      loading: true,
+      error: '',
+      strike: row.strike,
+      x,
+      y,
+      side,
+      ceData: [],
+      peData: [],
+      netData: [],
+    });
+
+    try {
+      const exchange = normalizeNubraExchange(instrument.exchange);
+      const expiry = formatNubraExpiryDate(expiryMs);
+      const refRes = await fetch(`/api/nubra-refdata?asset=${encodeURIComponent(underlying)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(expiry)}`, { headers });
+      if (!refRes.ok) throw new Error(`refdata ${refRes.status}`);
+      const refJson = await refRes.json();
+      const refdata = (refJson?.refdata ?? []) as Array<{ StrikePrice: number; OptionType: 'CE' | 'PE'; StockName?: string }>;
+      const strikeKey = Math.round(row.strike * 100);
+      const ceName = refdata.find(r => Number(r.StrikePrice) === strikeKey && r.OptionType === 'CE')?.StockName;
+      const peName = refdata.find(r => Number(r.StrikePrice) === strikeKey && r.OptionType === 'PE')?.StockName;
+      if (!ceName || !peName) throw new Error('strike symbols not found');
+
+      const { minute, day } = getIstMinuteNow();
+      const marketOpen = day >= 1 && day <= 5 && minute >= MARKET_START_MIN && minute <= MARKET_END_MIN;
+      const tradeDate = lastTradingDate();
+      const startDate = `${tradeDate}T03:45:00.000Z`;
+      const endDate = marketOpen ? new Date().toISOString() : `${tradeDate}T10:00:00.000Z`;
+
+      const histRes = await fetch('/api/nubra-historical', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_token: sessionToken,
+          auth_token: authToken,
+          device_id: deviceId,
+          raw_cookie: rawCookie,
+          exchange,
+          type: 'OPT',
+          values: [ceName, peName],
+          fields: ['cumulative_oi'],
+          startDate,
+          endDate,
+          interval: '1m',
+          intraDay: false,
+          realTime: marketOpen,
+        }),
+      });
+      if (!histRes.ok) throw new Error(`history ${histRes.status}`);
+      const histJson = await histRes.json();
+      const valuesArr: any[] = histJson?.result?.[0]?.values ?? [];
+      const chartsByName = new Map<string, any>();
+      for (const dict of valuesArr) {
+        for (const [key, value] of Object.entries(dict ?? {})) chartsByName.set(key, value);
+      }
+
+      const toRebasedLine = (chartObj: any): OIWidgetSeriesPoint[] => {
+        const arr: any[] = chartObj?.cumulative_oi ?? [];
+        const raw = arr
+          .map((p: any) => ({
+            ts: Number(p?.ts ?? p?.timestamp ?? 0),
+            value: Number(p?.v ?? p?.value ?? 0),
+          }))
+          .filter(p => p.ts > 0 && Number.isFinite(p.value))
+          .sort((a, b) => a.ts - b.ts);
+        if (!raw.length) return [];
+        const base = raw[0].value;
+        const byMinute = new Map<number, OIWidgetSeriesPoint>();
+        for (const p of raw) {
+          const sec = Math.round(p.ts / 1e9);
+          byMinute.set(sec, { time: sec as Time, value: p.value - base });
+        }
+        return [...byMinute.values()].sort((a, b) => (a.time as number) - (b.time as number));
+      };
+
+      const ceData = toRebasedLine(chartsByName.get(ceName));
+      const peData = toRebasedLine(chartsByName.get(peName));
+      const netMap = new Map<number, number>();
+      for (const p of ceData) netMap.set(p.time as number, (netMap.get(p.time as number) ?? 0) + p.value);
+      for (const p of peData) netMap.set(p.time as number, (netMap.get(p.time as number) ?? 0) - p.value);
+      const netData = [...netMap.entries()]
+        .map(([time, value]) => ({ time: time as Time, value }))
+        .sort((a, b) => (a.time as number) - (b.time as number));
+
+      setOiChangeWidget({
+        open: true,
+        loading: false,
+        error: '',
+        strike: row.strike,
+        x,
+        y,
+        side,
+        ceData,
+        peData,
+        netData,
+      });
+    } catch (e: any) {
+      setOiChangeWidget({
+        open: true,
+        loading: false,
+        error: e?.message ?? 'Failed to load OI history',
+        strike: row.strike,
+        x,
+        y,
+        side,
+        ceData: [],
+        peData: [],
+        netData: [],
+      });
+    }
+  }, [instrument.exchange, instrument.trading_symbol, instrument.underlying_symbol]);
+
+  const handleOiWidgetClick = useCallback((clientX: number, clientY: number) => {
+    if (!oiShowLiveRef.current || oiModeRef.current !== 'oi_change') return;
+    const chart = chartRef.current;
+    const series = candleSeriesRef.current;
+    const el = containerRef.current;
+    if (!chart || !series || !el) return;
+    const rect = el.getBoundingClientRect();
+    const point = { x: clientX - rect.left, y: clientY - rect.top };
+    if (point.x < 0 || point.y < 0 || point.x > rect.width || point.y > rect.height) return;
+    const layout = getOIBarLayout(getOIAnchor(el.clientWidth, chart.priceScale('right').width()), oiModeRef.current);
+    let row = findOiRowAtPoint(point, chart, series, oiRowsRef.current, el.clientWidth, oiModeRef.current);
+    if (!row && point.x >= layout.leftEdge - 10) {
+      const hoveredStrike = hoveredStrikeRef.current ?? (oiTooltip.visible ? oiTooltip.strike : null);
+      if (hoveredStrike != null) {
+        row = oiRowsRef.current.find(r => r.strike === hoveredStrike) ?? null;
+      }
+    }
+    if (!row) return;
+    const barAnchorX = layout.leftEdge + layout.slotW * 0.72;
+    const side: 'left' | 'right' = barAnchorX + 28 + OI_WIDGET_W <= rect.width - 12 ? 'right' : 'left';
+    const x = side === 'right'
+      ? Math.min(rect.width - OI_WIDGET_W - 12, barAnchorX + 28)
+      : Math.max(12, barAnchorX - OI_WIDGET_W - 28);
+    const y = Math.max(56, Math.min(rect.height - OI_WIDGET_H - 12, point.y - OI_WIDGET_H / 2));
+    void openOiChangeWidget(row, x, y, side);
+  }, [oiTooltip.strike, oiTooltip.visible, openOiChangeWidget]);
+
+  const fetchRecentNubraOiChange = useCallback(async (_range: OIChangeRange, selectedFromMinute: number, selectedToMinute: number) => {
+    const headers = nubraHeaders();
+    if (!headers['x-session-token']) return;
+    const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+    const expiryMs = oiSelectedExpiriesRef.current[0] ?? null;
+    if (!underlying || !expiryMs || oiRowsRef.current.length === 0) return;
+
+    try {
+      const exchange = normalizeNubraExchange(instrument.exchange);
+      const expiry = formatNubraExpiryDate(expiryMs);
+      const refRes = await fetch(`/api/nubra-refdata?asset=${encodeURIComponent(underlying)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(expiry)}`, { headers });
+      if (!refRes.ok) return;
+      const refJson = await refRes.json();
+      const refdata = (refJson?.refdata ?? []) as Array<{ StrikePrice: number; OptionType: 'CE' | 'PE' }>;
+      if (!refdata.length) return;
+
+      const strikes = [...new Set(refdata.map(r => Number(r.StrikePrice)))].sort((a, b) => a - b);
+      if (!strikes.length) return;
+
+      const { minute, day } = getIstMinuteNow();
+      const marketOpen = day >= 1 && day <= 5 && minute >= MARKET_START_MIN && minute <= MARKET_END_MIN;
+      const latestMinute = marketOpen ? minute : MARKET_END_MIN;
+      const fromMinute = clampOiMinute(Math.min(selectedFromMinute, selectedToMinute, latestMinute));
+      const toMinute = clampOiMinute(Math.min(Math.max(selectedFromMinute, selectedToMinute), latestMinute));
+
+      const oiRes = await fetch('/api/nubra-oi-change', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryTemplate: {
+            exchange,
+            asset: underlying,
+            expiries: [expiry],
+            strikes,
+            minStrike: strikes[0],
+            maxStrike: strikes[strikes.length - 1],
+            fields: ['cumulative_oi'],
+          },
+          fromTime: istMinuteToUtcIso(fromMinute),
+          toTime: istMinuteToUtcIso(toMinute),
+        }),
+      });
+      if (!oiRes.ok) return;
+      const oiJson = await oiRes.json();
+      const assetData = oiJson?.result?.[exchange]?.[underlying];
+      const timeKey = assetData ? Object.keys(assetData)[0] : null;
+      const expiryMap = timeKey ? assetData[timeKey]?.[expiry] : null;
+      if (!expiryMap) return;
+
+      for (const row of oiRowsRef.current) {
+        const strikeKey = String(Math.round(row.strike * 100));
+        const changeObj = expiryMap[strikeKey]?.cumulative_oi ?? {};
+        row.callRecentOiChg = Number(changeObj.CE ?? 0);
+        row.putRecentOiChg = Number(changeObj.PE ?? 0);
+      }
+      setOiChangeSummary(summarizeOiChange(oiRowsRef.current));
+      redrawOI();
+    } catch {
+      // Keep existing recent-window values if Nubra fetch fails.
+    }
+  }, [instrument.exchange, instrument.trading_symbol, instrument.underlying_symbol, redrawOI]);
+
+  const fetchRecentNubraVolumeChange = useCallback(async (_range: OIChangeRange, selectedFromMinute: number, selectedToMinute: number) => {
+    const headers = nubraHeaders();
+    if (!headers['x-session-token']) return;
+    const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+    const expiryMs = oiSelectedExpiriesRef.current[0] ?? null;
+    if (!underlying || !expiryMs || oiRowsRef.current.length === 0) return;
+
+    try {
+      const exchange = normalizeNubraExchange(instrument.exchange);
+      const expiry = formatNubraExpiryDate(expiryMs);
+      const refRes = await fetch(`/api/nubra-refdata?asset=${encodeURIComponent(underlying)}&exchange=${encodeURIComponent(exchange)}&expiry=${encodeURIComponent(expiry)}`, { headers });
+      if (!refRes.ok) return;
+      const refJson = await refRes.json();
+      const refdata = (refJson?.refdata ?? []) as Array<{ StrikePrice: number; OptionType: 'CE' | 'PE' }>;
+      if (!refdata.length) return;
+
+      const strikes = [...new Set(refdata.map(r => Number(r.StrikePrice)))].sort((a, b) => a - b);
+      if (!strikes.length) return;
+
+      const { minute, day } = getIstMinuteNow();
+      const marketOpen = day >= 1 && day <= 5 && minute >= MARKET_START_MIN && minute <= MARKET_END_MIN;
+      const latestMinute = marketOpen ? minute : MARKET_END_MIN;
+      const fromMinute = clampOiMinute(Math.min(selectedFromMinute, selectedToMinute, latestMinute));
+      const toMinute = clampOiMinute(Math.min(Math.max(selectedFromMinute, selectedToMinute), latestMinute));
+
+      const volRes = await fetch('/api/nubra-volume-change', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryTemplate: {
+            exchange,
+            asset: underlying,
+            expiries: [expiry],
+            strikes,
+            minStrike: strikes[0],
+            maxStrike: strikes[strikes.length - 1],
+            fields: ['cumulative_volume'],
+          },
+          fromTime: istMinuteToUtcIso(fromMinute),
+          toTime: istMinuteToUtcIso(toMinute),
+        }),
+      });
+      if (!volRes.ok) return;
+      const volJson = await volRes.json();
+      const assetData = volJson?.result?.[exchange]?.[underlying];
+      const timeKey = assetData ? Object.keys(assetData)[0] : null;
+      const expiryMap = timeKey ? assetData[timeKey]?.[expiry] : null;
+      if (!expiryMap) return;
+
+      for (const row of oiRowsRef.current) {
+        const strikeKey = String(Math.round(row.strike * 100));
+        const changeObj = expiryMap[strikeKey]?.cumulative_volume ?? {};
+        row.callRecentVolChg = Number(changeObj.CE ?? 0);
+        row.putRecentVolChg = Number(changeObj.PE ?? 0);
+      }
+      redrawOI();
+    } catch {
+      // Keep existing recent-window values if Nubra fetch fails.
+    }
+  }, [instrument.exchange, instrument.trading_symbol, instrument.underlying_symbol, redrawOI]);
+
   // ── Redraw OI when display settings change ─────────────────────────────────
   useEffect(() => {
     if (oiShow) redrawOI();
   }, [oiMode, oiCallColor, oiPutColor, oiOpacity, oiShow, redrawOI]);
+
+  useEffect(() => {
+    if (oiShow) updateGammaLevelLines();
+    else clearGammaLevelLines();
+  }, [clearGammaLevelLines, oiShow, updateGammaLevelLines]);
 
   // ── VWAP / TWAP callbacks ─────────────────────────────────────────────────
   // Build rgba from hex color with given opacity
@@ -1947,7 +3118,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     let rafId: number | null = null;
     let cancelled = false;
 
-    const tid = window.setTimeout(() => {
+    const tid = window.setTimeout(async () => {
       if (cancelled) return;
 
       const underlying = instrument.underlying_symbol || instrument.trading_symbol;
@@ -1960,41 +3131,153 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           .map(i => i.expiry as number)
       )].sort((a, b) => a - b);
       if (!allExpiries.length) return;
-      const expiry = (oiExpiryRef.current && allExpiries.includes(oiExpiryRef.current)) ? oiExpiryRef.current : allExpiries[0];
+      const selectedExpiries = oiModeRef.current === 'oi'
+        ? oiSelectedExpiriesRef.current.filter(exp => allExpiries.includes(exp))
+        : oiSelectedExpiriesRef.current[0] && allExpiries.includes(oiSelectedExpiriesRef.current[0])
+          ? [oiSelectedExpiriesRef.current[0]]
+          : [allExpiries[0]];
+      const expiriesToUse = selectedExpiries.length ? selectedExpiries : [allExpiries[0]];
 
-      const strikeMetaMap = new Map<number, { ceKey: string | null; peKey: string | null; lotSize: number }>();
+      const strikeMetaMap = new Map<number, { entries: OIExpirySlice[]; lotSize: number }>();
       for (const ins of instruments) {
-        if (ins.underlying_symbol !== underlying || ins.expiry !== expiry) continue;
+        if (ins.underlying_symbol !== underlying || ins.expiry == null || !expiriesToUse.includes(ins.expiry)) continue;
         if (ins.instrument_type !== 'CE' && ins.instrument_type !== 'PE') continue;
         const s = ins.strike_price ?? 0;
-        if (!strikeMetaMap.has(s)) strikeMetaMap.set(s, { ceKey: null, peKey: null, lotSize: ins.lot_size });
+        if (!strikeMetaMap.has(s)) strikeMetaMap.set(s, { entries: [], lotSize: ins.lot_size });
         const meta = strikeMetaMap.get(s)!;
-        if (ins.instrument_type === 'CE') meta.ceKey = ins.instrument_key;
-        else meta.peKey = ins.instrument_key;
+        let slice = meta.entries.find(entry => entry.expiry === ins.expiry);
+        if (!slice) {
+          slice = {
+            expiry: ins.expiry,
+            callKey: '',
+            putKey: '',
+            callOI: 0,
+            putOI: 0,
+            callBaseOI: 0,
+            putBaseOI: 0,
+            callVol: 0,
+            putVol: 0,
+            callIV: 0,
+            putIV: 0,
+            callGamma: 0,
+            putGamma: 0,
+            callDelta: 0,
+            putDelta: 0,
+          };
+          meta.entries.push(slice);
+        }
+        if (ins.instrument_type === 'CE') slice.callKey = ins.instrument_key;
+        else slice.putKey = ins.instrument_key;
       }
 
       const spotSnap = wsManager.get(instrument.instrument_key);
       if (spotSnap?.ltp) oiSpotRef.current = spotSnap.ltp;
 
-      const rows: OIRow[] = [...strikeMetaMap.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .filter(([, { ceKey, peKey }]) => ceKey && peKey)
-        .map(([strike, { ceKey, peKey, lotSize }]) => {
-          const ceSnap = wsManager.get(ceKey!);
-          const peSnap = wsManager.get(peKey!);
-          return {
-            strike, callKey: ceKey!, putKey: peKey!, lotSize,
-            callOI: ceSnap?.oi ?? 0, putOI: peSnap?.oi ?? 0,
-            callVol: ceSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
-            putVol: peSnap?.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0,
-            callIV: ceSnap?.iv ?? 0, putIV: peSnap?.iv ?? 0,
-            callGamma: ceSnap?.gamma ?? 0, putGamma: peSnap?.gamma ?? 0,
-            callDelta: ceSnap?.delta ?? 0, putDelta: peSnap?.delta ?? 0,
-          };
-        });
+      const upstoxUnderlyingKey = (() => {
+        if (instrument.instrument_type === 'INDEX' || instrument.instrument_type === 'EQ') return instrument.instrument_key;
+        const found = instruments.find(i =>
+          (i.instrument_type === 'INDEX' || i.instrument_type === 'EQ') &&
+          (i.trading_symbol === underlying || i.name === underlying)
+        );
+        return found?.instrument_key ?? '';
+      })();
 
-      oiRowsRef.current = rows;
-      const allKeys = rows.flatMap(r => [r.callKey, r.putKey]);
+      const prevOiByKey = new Map<string, number>();
+      if (upstoxUnderlyingKey) {
+        try {
+          for (const expiry of expiriesToUse) {
+            const params = new URLSearchParams({
+              instrument_key: upstoxUnderlyingKey,
+              expiry_date: formatUpstoxExpiryDate(expiry),
+            });
+            const res = await fetch(`/api/upstox-option-chain?${params}`);
+            if (res.ok) {
+              const json = await res.json();
+              for (const entry of json?.data ?? []) {
+                const strike = Number(entry?.strike_price ?? 0);
+                const callKey = entry?.call_options?.instrument_key;
+                const putKey = entry?.put_options?.instrument_key;
+                const callPrevOi = Number(entry?.call_options?.market_data?.prev_oi ?? 0);
+                const putPrevOi = Number(entry?.put_options?.market_data?.prev_oi ?? 0);
+                const meta = strikeMetaMap.get(strike);
+                const slice = meta?.entries.find(item => item.expiry === expiry);
+                if (callKey && slice?.callKey === callKey) prevOiByKey.set(callKey, callPrevOi);
+                if (putKey && slice?.putKey === putKey) prevOiByKey.set(putKey, putPrevOi);
+              }
+            }
+          }
+        } catch {
+          // Fall back to current OI as baseline if option-chain fetch is unavailable.
+        }
+      }
+      if (cancelled) return;
+
+      const rows = [...strikeMetaMap.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([strike, { entries, lotSize }]) => {
+          const expiryData = entries
+            .filter(entry => entry.callKey && entry.putKey)
+            .sort((a, b) => a.expiry - b.expiry)
+            .map(entry => {
+              const ceSnap = wsManager.get(entry.callKey);
+              const peSnap = wsManager.get(entry.putKey);
+              return {
+                ...entry,
+                callOI: ceSnap?.oi ?? 0,
+                putOI: peSnap?.oi ?? 0,
+                callBaseOI: prevOiByKey.get(entry.callKey) ?? ceSnap?.oi ?? 0,
+                putBaseOI: prevOiByKey.get(entry.putKey) ?? peSnap?.oi ?? 0,
+                callVol: getOverlayVolume(ceSnap),
+                putVol: getOverlayVolume(peSnap),
+                callIV: ceSnap?.iv ?? 0,
+                putIV: peSnap?.iv ?? 0,
+                callGamma: ceSnap?.gamma ?? 0,
+                putGamma: peSnap?.gamma ?? 0,
+                callDelta: ceSnap?.delta ?? 0,
+                putDelta: peSnap?.delta ?? 0,
+              };
+            });
+          if (!expiryData.length) return null;
+          const row: OIRow = {
+            strike,
+            lotSize,
+            callKey: expiryData[0].callKey,
+            putKey: expiryData[0].putKey,
+            callKeys: expiryData.map(item => item.callKey),
+            putKeys: expiryData.map(item => item.putKey),
+            expiries: expiryData.map(item => item.expiry),
+            expiryData,
+            callOI: 0,
+            putOI: 0,
+            callBaseOI: 0,
+            putBaseOI: 0,
+            callRecentOiChg: 0,
+            putRecentOiChg: 0,
+            callRecentVolChg: 0,
+            putRecentVolChg: 0,
+            callVol: 0,
+            putVol: 0,
+            callIV: 0,
+            putIV: 0,
+            callGamma: 0,
+            putGamma: 0,
+            callDelta: 0,
+            putDelta: 0,
+          };
+          recomputeOIRowTotals(row);
+          return row;
+        });
+      const filteredRows = rows.filter((row): row is OIRow => row !== null);
+
+      oiRowsRef.current = filteredRows;
+      setOiChangeSummary(summarizeOiChange(filteredRows));
+      updateGammaLevelLines();
+      if (oiModeRef.current === 'oi_change') {
+        void fetchRecentNubraOiChange(oiChangeRangeRef.current, oiChangeFromMinuteRef.current, oiChangeToMinuteRef.current);
+      } else if (oiModeRef.current === 'volume_change') {
+        void fetchRecentNubraVolumeChange(oiChangeRangeRef.current, oiChangeFromMinuteRef.current, oiChangeToMinuteRef.current);
+      }
+      const allKeys = [...new Set(filteredRows.flatMap(r => [...r.callKeys, ...r.putKeys]))];
       wsManager.requestKeys(allKeys);
       setTimeout(() => redrawOI(), 120);
 
@@ -2005,17 +3288,24 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
       unsubs = allKeys.map(key =>
         wsManager.subscribe(key, (md) => {
-          const row = oiRowsRef.current.find(r => r.callKey === key || r.putKey === key);
+          const row = oiRowsRef.current.find(r => r.callKeys.includes(key) || r.putKeys.includes(key));
           if (!row) return;
-          const vol = md.ohlc?.reduce((s, o) => s + Number(o.vol || 0), 0) ?? 0;
-          if (row.callKey === key) { row.callOI = md.oi || 0; row.callVol = vol; row.callIV = md.iv || 0; row.callGamma = md.gamma || 0; row.callDelta = md.delta || 0; }
-          else { row.putOI = md.oi || 0; row.putVol = vol; row.putIV = md.iv || 0; row.putGamma = md.gamma || 0; row.putDelta = md.delta || 0; }
+          const slice = row.expiryData.find(item => item.callKey === key || item.putKey === key);
+          if (!slice) return;
+          const vol = getOverlayVolume(md);
+          if (slice.callKey === key) { slice.callOI = md.oi || 0; slice.callVol = vol; slice.callIV = md.iv || 0; slice.callGamma = md.gamma || 0; slice.callDelta = md.delta || 0; }
+          else { slice.putOI = md.oi || 0; slice.putVol = vol; slice.putIV = md.iv || 0; slice.putGamma = md.gamma || 0; slice.putDelta = md.delta || 0; }
+          recomputeOIRowTotals(row);
+          updateGammaLevelLines();
           scheduleRedraw();
         })
       );
 
       spotUnsub = wsManager.subscribe(instrument.instrument_key, (md) => {
-        if (md.ltp) oiSpotRef.current = md.ltp;
+        if (md.ltp) {
+          oiSpotRef.current = md.ltp;
+          updateGammaLevelLines();
+        }
       });
     }, 0);
 
@@ -2027,7 +3317,22 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oiShow, oiExpiry, instrument.instrument_key, instrument.underlying_symbol, instrument.trading_symbol, instruments, hasOptions]);
+  }, [oiShow, oiSelectedExpiries, oiMode, instrument.instrument_key, instrument.underlying_symbol, instrument.trading_symbol, instruments, hasOptions, fetchRecentNubraOiChange, fetchRecentNubraVolumeChange, updateGammaLevelLines]);
+
+  useEffect(() => {
+    if (!oiShow) return;
+    if (oiMode !== 'oi_change' && oiMode !== 'volume_change') return;
+    if (oiMode === 'oi_change') fetchRecentNubraOiChange(oiChangeRange, oiChangeFromMinute, oiChangeToMinute);
+    else fetchRecentNubraVolumeChange(oiChangeRange, oiChangeFromMinute, oiChangeToMinute);
+    const id = window.setInterval(() => {
+      const { minute, day } = getIstMinuteNow();
+      const marketOpen = day >= 1 && day <= 5 && minute >= MARKET_START_MIN && minute <= MARKET_END_MIN;
+      if (!marketOpen) return;
+      if (oiModeRef.current === 'oi_change') fetchRecentNubraOiChange(oiChangeRangeRef.current, oiChangeFromMinuteRef.current, oiChangeToMinuteRef.current);
+      else if (oiModeRef.current === 'volume_change') fetchRecentNubraVolumeChange(oiChangeRangeRef.current, oiChangeFromMinuteRef.current, oiChangeToMinuteRef.current);
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [oiShow, oiMode, oiChangeRange, oiChangeFromMinute, oiChangeToMinute, oiSelectedExpiries, fetchRecentNubraOiChange, fetchRecentNubraVolumeChange]);
 
 
   // ── VWAP / TWAP toggle effects ────────────────────────────────────────────
@@ -2063,13 +3368,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
     const visible = Math.min(INITIAL_VISIBLE, data.length);
     const containerWidth = containerRef.current?.clientWidth ?? 800;
     const spacing = Math.max(4, Math.floor(containerWidth / visible));
+    const rightOffset = 8;
+    const to = Math.max(data.length - 1 + rightOffset, visible);
+    const from = Math.max(0, to - visible);
     programmaticScrollRef.current = true;
-    ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
-    // fitContent first so LW knows the full data range, then snap to right
-    ts.fitContent();
+    ts.applyOptions({ barSpacing: spacing, rightOffset });
     requestAnimationFrame(() => {
-      ts.applyOptions({ barSpacing: spacing, rightOffset: 8 });
-      ts.scrollToRealTime();
+      ts.applyOptions({ barSpacing: spacing, rightOffset });
+      ts.setVisibleLogicalRange({ from, to });
       requestAnimationFrame(() => { programmaticScrollRef.current = false; });
     });
   }, []);
@@ -2672,7 +3978,30 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
 
   // ── Drawing engine ─────────────────────────────────────────────────────────
   const drawing = useDrawingEngine({ chartRef, seriesRef: candleSeriesRef, wrapperRef, onDrawingsChange: onDrawingsChange });
-
+  const oiLegendItems = useMemo(
+    () => getOILegendItems(oiMode, oiCallColor, oiPutColor, oiSelectedExpiries),
+    [oiMode, oiCallColor, oiPutColor, oiSelectedExpiries]
+  );
+  const oiLegendPlacements = useMemo<OILegendPlacement[] | null>(() => {
+    if (chartViewportWidth <= 0) return null;
+    const priceScaleWidth = chartRef.current?.priceScale('right').width() ?? 64;
+    const anchor = getOIAnchor(chartViewportWidth, priceScaleWidth);
+    if (oiMode === 'all') {
+      const layout = getOIBarLayout(anchor, 'all');
+      return oiLegendItems.map((_, index) => {
+        const metricIndex = oiLegendItems.length - 1 - index;
+        const slotRight = anchor - metricIndex * (layout.slotW + layout.gap);
+        return { left: slotRight - layout.slotW / 2 };
+      });
+    }
+    if (oiMode === 'oi' && oiSelectedExpiries.length > 1) {
+      const layout = getOIBarLayout(anchor, 'oi', oiSelectedExpiries.length);
+      return oiLegendItems.map((_, index) => ({
+        left: layout.leftEdge + index * (layout.slotW + layout.gap) + layout.slotW / 2,
+      }));
+    }
+    return null;
+  }, [chartViewportWidth, oiLegendItems, oiMode, oiSelectedExpiries]);
   // Expose drawing engine to workspace toolbar via ref
   useEffect(() => {
     if (!drawingRef) return;
@@ -2876,7 +4205,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
           callColor={oiCallColor} onCallColor={setOiCallColor}
           putColor={oiPutColor} onPutColor={setOiPutColor}
           opacity={oiOpacity} onOpacity={setOiOpacity}
-          expiries={oiExpiries} selectedExpiry={oiExpiry} onExpiry={setOiExpiry}
+          expiries={oiExpiries}
+          selectedExpiries={oiSelectedExpiries}
+          onToggleExpiry={(exp) => {
+            setOiSelectedExpiries(prev => {
+              if (prev.includes(exp)) return prev.length > 1 ? prev.filter(v => v !== exp) : prev;
+              return [...prev, exp].sort((a, b) => a - b);
+            });
+          }}
           onClose={() => setOiSettingsOpen(false)}
         />
       )}
@@ -2885,7 +4221,14 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
       <div className="flex flex-1 min-h-0">
         {/* Chart container + OI canvas overlay */}
         <div ref={wrapperRef} className={`flex-1 min-w-0 ${s.chartWrapper}`}>
-          <div ref={containerRef} data-chart-container className={s.chartContainer} />
+          <div
+            ref={containerRef}
+            data-chart-container
+            className={s.chartContainer}
+            onMouseMove={(e) => handleOiPointerMove(e.clientX, e.clientY)}
+            onMouseLeave={clearOiHover}
+            onClick={(e) => handleOiWidgetClick(e.clientX, e.clientY)}
+          />
 
           {/* Left-edge loading shimmer — toggled via DOM ref, no React re-render during scroll */}
           <div ref={histLoadBarRef} className={s.histLoadBar} aria-hidden="true">
@@ -2914,6 +4257,143 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             className={s.oiCanvas}
             style={{ display: oiShow ? 'block' : 'none' }}
           />
+
+          {oiShow && (
+            <div className={s.oiLegend}>
+              {oiLegendItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`${s.oiLegendGroup} ${oiLegendPlacements ? s.oiLegendGroupAligned : ''}`}
+                  style={oiLegendPlacements?.[index] ? { left: `${oiLegendPlacements[index].left}px` } : undefined}
+                >
+                  <span className={s.oiLegendTitle}>{item.label}</span>
+                  {(item.id === 'oi_change' || item.id === 'volume_change') && (oiMode === 'oi_change' || oiMode === 'volume_change') && (
+                    <div className={s.oiLegendControl}>
+                      <select
+                        value={oiChangeRange}
+                        onChange={(e) => applyOiChangePreset(e.target.value as OIChangeRange, oiChangeToMinuteDraft)}
+                        className={s.oiLegendSelect}
+                        aria-label="OI change range"
+                      >
+                        {OI_CHANGE_RANGE_OPTIONS.map(option => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                      <div className={s.oiLegendTimeBlock}>
+                        <div className={s.oiLegendTimeLabels}>
+                          <span className={s.oiLegendTimeValue}>From {fmtOiChangeMinute(oiChangeFromMinuteDraft)}</span>
+                          <span className={s.oiLegendTimeValue}>To {fmtOiChangeMinute(oiChangeToMinuteDraft)}</span>
+                        </div>
+                        <div className={s.oiLegendTimeLabels}>
+                          <span>{fmtOiChangeMinute(MARKET_START_MIN)}</span>
+                          <span>{fmtOiChangeWindow(oiChangeFromMinuteDraft, oiChangeToMinuteDraft)}</span>
+                          <span>{fmtOiChangeMinute(MARKET_END_MIN)}</span>
+                        </div>
+                        <div className={s.oiLegendDualSlider}>
+                          <div className={s.oiLegendSliderTrack} />
+                          <div
+                            className={s.oiLegendSliderRange}
+                            style={{
+                              left: `${getOiMinutePercent(oiChangeFromMinuteDraft)}%`,
+                              width: `${Math.max(0, getOiMinutePercent(oiChangeToMinuteDraft) - getOiMinutePercent(oiChangeFromMinuteDraft))}%`,
+                            }}
+                          />
+                          <input
+                            type="range"
+                            min={MARKET_START_MIN}
+                            max={MARKET_END_MIN}
+                            step={5}
+                            value={oiChangeFromMinuteDraft}
+                            onChange={(e) => {
+                              const next = Number(e.target.value);
+                              setOiChangeRange('custom');
+                              setOiChangeFromMinuteDraft(Math.min(next, oiChangeToMinuteDraft - 5));
+                            }}
+                            onMouseUp={commitOiChangeWindow}
+                            onTouchEnd={commitOiChangeWindow}
+                            onKeyUp={(e) => {
+                              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') {
+                                commitOiChangeWindow();
+                              }
+                            }}
+                            className={`${s.oiLegendSlider} ${s.oiLegendSliderInput}`}
+                            aria-label="OI change start time"
+                          />
+                          <input
+                            type="range"
+                            min={MARKET_START_MIN}
+                            max={MARKET_END_MIN}
+                            step={5}
+                            value={oiChangeToMinuteDraft}
+                            onChange={(e) => {
+                              const next = Number(e.target.value);
+                              setOiChangeRange('custom');
+                              setOiChangeToMinuteDraft(Math.max(next, oiChangeFromMinuteDraft + 5));
+                            }}
+                            onMouseUp={commitOiChangeWindow}
+                            onTouchEnd={commitOiChangeWindow}
+                            onKeyUp={(e) => {
+                              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') {
+                                commitOiChangeWindow();
+                              }
+                            }}
+                            className={`${s.oiLegendSlider} ${s.oiLegendSliderInput}`}
+                            aria-label="OI change end time"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className={s.oiLegendKeys}>
+                    <span className={s.oiLegendKey}>
+                      <span className={s.oiLegendSwatch} style={{ background: item.callColor }} />
+                      CE
+                    </span>
+                    <span className={s.oiLegendKey}>
+                      <span className={s.oiLegendSwatch} style={{ background: item.putColor }} />
+                      PE
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {oiChangeWidget.open && oiMode === 'oi_change' && (
+            <div
+              className={s.oiMiniWidget}
+              style={{ left: oiChangeWidget.x, top: oiChangeWidget.y }}
+            >
+              <div className={s.oiMiniWidgetHeader}>
+                <div>
+                  <div className={s.oiMiniWidgetTitle}>OI Change Widget</div>
+                  <div className={s.oiMiniWidgetSub}>{oiChangeWidget.strike.toLocaleString('en-IN')} • Rebased from 09:15</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOiChangeWidget(prev => ({ ...prev, open: false }))}
+                  className={s.oiMiniWidgetClose}
+                >
+                  ×
+                </button>
+              </div>
+              <div className={s.oiMiniWidgetBody}>
+                {oiChangeWidget.loading ? (
+                  <div className={s.oiMiniWidgetState}>Loading OI history…</div>
+                ) : oiChangeWidget.error ? (
+                  <div className={s.oiMiniWidgetError}>{oiChangeWidget.error}</div>
+                ) : (oiChangeWidget.ceData.length || oiChangeWidget.peData.length) ? (
+                  <OiChangeMiniChart
+                    ceData={oiChangeWidget.ceData}
+                    peData={oiChangeWidget.peData}
+                    netData={oiChangeWidget.netData}
+                  />
+                ) : (
+                  <div className={s.oiMiniWidgetState}>No OI history available</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Drawing canvas */}
           <canvas ref={drawing.canvasRef} className={s.drawingCanvas} />
@@ -2965,6 +4445,10 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
             const changeColor = d ? (d.change >= 0 ? '#2ebd85' : '#f23645') : '#D1D4DC';
             const symbolName = instrumentDisplayLabel(instrument);
             const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const showOiChangeSummary = oiShow && oiMode === 'oi_change';
+            const pcrLabel = oiChangeSummary.pcr == null || !Number.isFinite(oiChangeSummary.pcr)
+              ? '—'
+              : oiChangeSummary.pcr.toFixed(2);
             return (
               <div className={s.ohlcOverlay}>
                 {/* Symbol · interval · exchange */}
@@ -2986,17 +4470,82 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                     </span>
                   </span>
                 )}
+                {showOiChangeSummary && (
+                  <div className={s.ohlcOiChangeSummary}>
+                    <span className={s.ohlcOiChangeTitle}>OI CHG {fmtOiChangeWindow(oiChangeFromMinute, oiChangeToMinute)}</span>
+                    <span className={s.ohlcOiChangeChip}>
+                      <span className={s.ohlcOiChangeKey}>CE</span>
+                      <span className={s.ohlcOiChangeCall}>{fmtSignedOI(oiChangeSummary.call)}</span>
+                    </span>
+                    <span className={s.ohlcOiChangeChip}>
+                      <span className={s.ohlcOiChangeKey}>PE</span>
+                      <span className={s.ohlcOiChangePut}>{fmtSignedOI(oiChangeSummary.put)}</span>
+                    </span>
+                    <span className={s.ohlcOiChangeChip}>
+                      <span className={s.ohlcOiChangeKey}>PCR</span>
+                      <span className={s.ohlcOiChangePcr}>{pcrLabel}</span>
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })()}
 
           {/* OI Hover Tooltip */}
           {oiShow && oiTooltip.visible && (() => {
-            const tipW = 170;
-            const left = Math.max(4, oiTooltip.x - tipW - 12);
-            const top = Math.max(4, oiTooltip.y - 60);
+            const tipW = oiMode === 'all' ? 190 : 170;
+            const hostW = containerRef.current?.clientWidth ?? chartViewportWidth ?? 0;
+            const preferRight = oiTooltip.x + tipW + 18 <= hostW - 8;
+            const left = preferRight
+              ? Math.max(4, oiTooltip.x + 14)
+              : Math.max(4, oiTooltip.x - tipW - 14);
+            const top = Math.max(4, oiTooltip.y - 52);
             // Always read live values from ref, not stale state
             const liveRow = oiRowsRef.current.find(r => r.strike === oiTooltip.strike);
+            if (oiMode === 'all') {
+              const callGex = liveRow ? liveRow.callGamma * liveRow.callOI * liveRow.lotSize : 0;
+              const putGex = liveRow ? liveRow.putGamma * liveRow.putOI * liveRow.lotSize : 0;
+              const callDex = liveRow ? Math.abs(liveRow.callDelta) * liveRow.callOI * liveRow.lotSize : 0;
+              const putDex = liveRow ? Math.abs(liveRow.putDelta) * liveRow.putOI * liveRow.lotSize : 0;
+              const callOi = liveRow?.callOI ?? 0;
+              const putOi = liveRow?.putOI ?? 0;
+              return (
+                <div className={s.oiTooltip} style={{ left, top }}>
+                  <div className={s.oiTooltipLabel}>STRIKE</div>
+                  <div className={s.oiTooltipStrike}>{oiTooltip.strike.toLocaleString('en-IN')}</div>
+                  <div className={s.oiTooltipDivider} />
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Call GEX</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: '#818cf8' }}>{fmtExposure(callGex)}</span>
+                  </div>
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Put GEX</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: '#ff9800' }}>{fmtExposure(putGex)}</span>
+                  </div>
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Call DEX</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: '#38d4c8' }}>{fmtExposure(callDex)}</span>
+                  </div>
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Put DEX</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: '#f87171' }}>{fmtExposure(putDex)}</span>
+                  </div>
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Call OI</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: oiCallColor }}>{fmtOI(callOi)}</span>
+                  </div>
+                  <div className={s.oiTooltipRow}>
+                    <span className={s.oiTooltipRowKey}>Put OI</span>
+                    <span className={s.oiTooltipRowVal} style={{ color: oiPutColor }}>{fmtOI(putOi)}</span>
+                  </div>
+                  <div className={s.oiTooltipDivider} />
+                  <div className={s.oiTooltipRowLast}>
+                    <span className={s.oiTooltipRowKey}>PCR</span>
+                    <span className={cx(s.oiTooltipRowVal, s.oiTooltipNeutral)}>{callOi > 0 ? (putOi / callOi).toFixed(2) : '—'}</span>
+                  </div>
+                </div>
+              );
+            }
             const isGexMode = oiMode === 'gex_raw' || oiMode === 'gex_spot';
             let callVal = 0, putVal = 0, modeLabel = 'OI', ratioLabel = 'PCR';
             let callColor = oiCallColor, putColor = oiPutColor;
@@ -3037,11 +4586,23 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               callVal = liveRow?.callVol ?? 0;
               putVal = liveRow?.putVol ?? 0;
               modeLabel = 'VOL'; ratioLabel = 'P/C VOL';
+            } else if (oiMode === 'volume_change') {
+              callVal = liveRow ? liveRow.callRecentVolChg : 0;
+              putVal = liveRow ? liveRow.putRecentVolChg : 0;
+              modeLabel = `VOL CHG ${getOiChangeRangeLabel(oiChangeRange).toUpperCase()} ${fmtOiChangeWindow(oiChangeFromMinute, oiChangeToMinute)}`;
+              ratioLabel = `NET VOL CHG ${fmtOiChangeWindow(oiChangeFromMinute, oiChangeToMinute)}`;
+              fmtVal = fmtSignedOI;
+            } else if (oiMode === 'oi_change') {
+              callVal = liveRow ? liveRow.callRecentOiChg : 0;
+              putVal = liveRow ? liveRow.putRecentOiChg : 0;
+              modeLabel = `OI CHG ${getOiChangeRangeLabel(oiChangeRange).toUpperCase()} ${fmtOiChangeWindow(oiChangeFromMinute, oiChangeToMinute)}`;
+              ratioLabel = `NET OI CHG ${fmtOiChangeWindow(oiChangeFromMinute, oiChangeToMinute)}`;
+              fmtVal = fmtSignedOI;
             } else {
               callVal = liveRow?.callOI ?? 0;
               putVal = liveRow?.putOI ?? 0;
             }
-            const ratio = (isGexMode || oiMode === 'dex')
+            const ratio = (isGexMode || oiMode === 'dex' || oiMode === 'oi_change' || oiMode === 'volume_change')
               ? fmtVal(callVal - putVal)
               : callVal > 0 ? (putVal / callVal).toFixed(2) : '—';
             return (
@@ -3049,14 +4610,48 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
                 <div className={s.oiTooltipLabel}>STRIKE</div>
                 <div className={s.oiTooltipStrike}>{oiTooltip.strike.toLocaleString('en-IN')}</div>
                 <div className={s.oiTooltipDivider} />
-                <div className={s.oiTooltipRow}>
-                  <span className={s.oiTooltipRowKey}>Call {modeLabel}</span>
-                  <span className={s.oiTooltipRowVal} style={{ color: callColor }}>{fmtVal(callVal)}</span>
-                </div>
-                <div className={s.oiTooltipRow}>
-                  <span className={s.oiTooltipRowKey}>Put {modeLabel}</span>
-                  <span className={s.oiTooltipRowVal} style={{ color: putColor }}>{fmtVal(putVal)}</span>
-                </div>
+                {oiMode === 'oi_change' ? (
+                  <>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Call OI</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: callColor }}>
+                        {liveRow ? fmtOiChangeEquation(Math.max(0, liveRow.callOI - liveRow.callRecentOiChg), liveRow.callOI) : '—'}
+                      </span>
+                    </div>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Put OI</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: putColor }}>
+                        {liveRow ? fmtOiChangeEquation(Math.max(0, liveRow.putOI - liveRow.putRecentOiChg), liveRow.putOI) : '—'}
+                      </span>
+                    </div>
+                  </>
+                ) : oiMode === 'volume_change' ? (
+                  <>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Call Vol</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: callColor }}>
+                        {liveRow ? fmtOiChangeEquation(Math.max(0, liveRow.callVol - liveRow.callRecentVolChg), liveRow.callVol) : 'â€”'}
+                      </span>
+                    </div>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Put Vol</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: putColor }}>
+                        {liveRow ? fmtOiChangeEquation(Math.max(0, liveRow.putVol - liveRow.putRecentVolChg), liveRow.putVol) : 'â€”'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Call {modeLabel}</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: callColor }}>{fmtVal(callVal)}</span>
+                    </div>
+                    <div className={s.oiTooltipRow}>
+                      <span className={s.oiTooltipRowKey}>Put {modeLabel}</span>
+                      <span className={s.oiTooltipRowVal} style={{ color: putColor }}>{fmtVal(putVal)}</span>
+                    </div>
+                  </>
+                )}
                 <div className={s.oiTooltipDivider} />
                 <div className={s.oiTooltipRowLast}>
                   <span className={s.oiTooltipRowKey}>{ratioLabel}</span>
@@ -3065,6 +4660,7 @@ export default function CandleChart({ instrument, instruments = [], onSearchOpen
               </div>
             );
           })()}
+
         </div>
 
         {/* Option chain panel — tab button floats on left edge */}

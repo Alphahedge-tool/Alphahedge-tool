@@ -210,6 +210,239 @@
   50%       { opacity: 1;   }
 }
 .oiCanvas { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+.oiLegend {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 64px;
+  z-index: 14;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+.oiLegendGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(10,12,18,0.82);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.38);
+  backdrop-filter: blur(10px);
+}
+.oiLegendGroupAligned {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.oiLegendControl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+.oiLegendTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #E5E7EB;
+  white-space: nowrap;
+}
+.oiLegendKeys {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.oiLegendKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #AEB4C0;
+  white-space: nowrap;
+}
+.oiLegendSelect {
+  pointer-events: auto;
+  appearance: none;
+  min-width: 108px;
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)),
+    rgba(15,18,25,0.96);
+  color: #E8EDF7;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.oiLegendSelect:focus {
+  border-color: rgba(100,181,246,0.72);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.18);
+}
+.oiLegendTimeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+.oiLegendTimeLabels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #8C96A8;
+}
+.oiLegendTimeValue {
+  color: #D7F6FF;
+}
+.oiLegendDualSlider {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+.oiLegendSliderTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(56,212,200,0.22), rgba(129,140,248,0.5), rgba(255,152,0,0.28));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.oiLegendSliderRange {
+  position: absolute;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(68,211,255,0.95), rgba(56,212,200,0.95));
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 0 14px rgba(56,212,200,0.26);
+}
+.oiLegendSlider {
+  pointer-events: auto;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.oiLegendSliderInput {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.oiLegendSlider::-webkit-slider-runnable-track {
+  height: 18px;
+  background: transparent;
+}
+.oiLegendSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 999px;
+  background: #f8fafc;
+  box-shadow: 0 0 0 3px rgba(56,212,200,0.18), 0 2px 10px rgba(0,0,0,0.35);
+}
+.oiLegendSlider::-moz-range-track {
+  height: 18px;
+  background: transparent;
+}
+.oiLegendSlider::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 999px;
+  background: #f8fafc;
+  box-shadow: 0 0 0 3px rgba(56,212,200,0.18), 0 2px 10px rgba(0,0,0,0.35);
+}
+.oiLegendSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
+  flex-shrink: 0;
+}
+.oiMiniWidget {
+  position: absolute;
+  width: 420px;
+  height: 260px;
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  background: rgba(11,17,24,0.96);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+  backdrop-filter: blur(16px);
+}
+.oiMiniWidgetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.oiMiniWidgetTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e5e7eb;
+}
+.oiMiniWidgetSub {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #93a4bc;
+}
+.oiMiniWidgetClose {
+  border: none;
+  background: transparent;
+  color: #aeb4c0;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.oiMiniWidgetBody {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px 10px;
+}
+.oiMiniChartCanvas {
+  width: 100%;
+  height: 100%;
+}
+.oiMiniWidgetState,
+.oiMiniWidgetError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  color: #93a4bc;
+}
+.oiMiniWidgetError {
+  color: #f87171;
+}
 .drawingCanvas  { position: absolute; inset: 0; pointer-events: none; z-index: 11; }
 .drawingOverlay { position: absolute; inset: 0; z-index: 12; }
 
@@ -228,6 +461,52 @@
 .ohlcHigh      { color: #2ebd85; margin-left: 3px; }
 .ohlcLow       { color: #f23645; margin-left: 3px; }
 .ohlcChangePct { opacity: 0.75; }
+.ohlcOiChangeSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(9,13,18,0.74);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  backdrop-filter: blur(8px);
+  font-family: "SF Mono","Fira Code","Cascadia Code",monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ohlcOiChangeTitle {
+  color: #8EA0B8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.ohlcOiChangeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.03);
+}
+.ohlcOiChangeKey {
+  color: #7D8697;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.ohlcOiChangeCall {
+  color: #4CF3A5;
+  font-weight: 700;
+}
+.ohlcOiChangePut {
+  color: #FF5DA7;
+  font-weight: 700;
+}
+.ohlcOiChangePcr {
+  color: #E9EEF7;
+  font-weight: 700;
+}
 
 /* ── OI Tooltip ── */
 .oiTooltip {
@@ -391,12 +670,15 @@
 /* ── OI Settings Modal ── */
 .oiSettingsPanel {
   position: fixed; z-index: 9999; width: 300px;
+  max-height: min(78vh, 620px);
   background: rgba(18,20,28,0.97);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 10px;
   box-shadow: 0 16px 48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07);
   backdrop-filter: blur(20px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .oiSettingsHeader {
   display: flex; align-items: center; justify-content: space-between;
@@ -407,7 +689,32 @@
 .oiSettingsTitle { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #D1D4DC; text-transform: uppercase; }
 .oiSettingsClose { background: none; border: none; cursor: pointer; color: #4A4E5C; padding: 2px; display: flex; align-items: center; }
 .oiSettingsClose:hover { color: #9B9EA8; }
-.oiSettingsBody { padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
+.oiSettingsBody {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110,118,138,0.65) transparent;
+}
+.oiSettingsBody::-webkit-scrollbar {
+  width: 8px;
+}
+.oiSettingsBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+.oiSettingsBody::-webkit-scrollbar-thumb {
+  background: rgba(110,118,138,0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.oiSettingsBody::-webkit-scrollbar-thumb:hover {
+  background: rgba(146,155,178,0.62);
+  background-clip: padding-box;
+}
 
 /* OI section labels */
 .oiSectionLabel { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #787B86; text-transform: uppercase; margin-bottom: 8px; }

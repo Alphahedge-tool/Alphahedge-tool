@@ -1187,6 +1187,136 @@ app.get('/api/market-quote', async (req, reply) => {
 // Fetches instrument refdata from Nubra API using the caller's session token.
 // ─────────────────────────────────────────────────────────────────────────────
 
+app.get('/api/upstox-option-chain', async (req, reply) => {
+  const { instrument_key, expiry_date, token } = req.query as Record<string, string>;
+  if (!instrument_key || !expiry_date) {
+    return reply.status(400).send({ error: 'instrument_key and expiry_date are required' });
+  }
+
+  const accessToken = token || loadCachedToken()?.access_token || '';
+  if (!accessToken) {
+    return reply.status(401).send({ error: 'No Upstox token available' });
+  }
+
+  const url = `https://api.upstox.com/v2/option/chain?instrument_key=${encodeURIComponent(instrument_key)}&expiry_date=${encodeURIComponent(expiry_date)}`;
+  try {
+    const upstream = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      dispatcher: upstoxAgent,
+    } as any);
+
+    const contentType = upstream.headers.get('content-type') ?? 'application/json';
+    const data = await upstream.text();
+    reply.status(upstream.status);
+    reply.header('Content-Type', contentType);
+    return reply.send(data);
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
+// Volume Change endpoint
+// POST /api/nubra-volume-change
+// Body: { queryTemplate: <base query item without time>, fromTime: ISO, toTime: ISO }
+// Returns: same shape as nubra-open-interest but values are (toTime − fromTime) per strike
+app.post('/api/nubra-volume-change', async (req, reply) => {
+  const hdrs = req.headers;
+  const sessionToken = (hdrs['x-session-token'] as string) ?? '';
+  const deviceId     = (hdrs['x-device-id'] as string) ?? 'web';
+  const rawCookieHdr = (hdrs['x-raw-cookie'] as string) ?? '';
+  const rawCookie = rawCookieHdr || `authToken=${sessionToken}; sessionToken=${sessionToken}; deviceId=${deviceId}`;
+
+  const body = req.body as { queryTemplate: Record<string, unknown>; fromTime: string; toTime: string };
+  const { queryTemplate, fromTime, toTime } = body ?? {};
+
+  if (!queryTemplate || !fromTime || !toTime) {
+    return reply.status(400).send({ error: 'queryTemplate, fromTime, toTime are required' });
+  }
+
+  const nubraHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'Authorization': `Bearer ${sessionToken}`,
+    'Origin': 'https://nubra.io',
+    'Referer': 'https://nubra.io/',
+    'Cookie': rawCookie,
+    'x-device-id': deviceId,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-site',
+  };
+
+  const fetchVolumeAt = async (time: string) => {
+    const res = await fetch('https://api.nubra.io/charts/multistrike?chart=Change_in_Volume', {
+      method: 'POST',
+      headers: nubraHeaders,
+      body: JSON.stringify({ query: [{ ...queryTemplate, time }] }),
+      dispatcher: nubraAgent,
+    } as any);
+    if (!res.ok) throw new Error(`upstream ${res.status} for time=${time}`);
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    const [fromJson, toJson] = await Promise.all([fetchVolumeAt(fromTime), fetchVolumeAt(toTime)]);
+
+    const exchange = (queryTemplate.exchange as string) ?? '';
+    const asset    = (queryTemplate.asset as string) ?? '';
+
+    const fromAsset = fromJson?.result?.[exchange]?.[asset] ?? {};
+    const toAsset   = toJson?.result?.[exchange]?.[asset] ?? {};
+
+    const getExpiryMap = (assetData: Record<string, any>): Record<string, Record<string, any>> => {
+      const timeKey = Object.keys(assetData)[0];
+      return timeKey ? (assetData[timeKey] as Record<string, any>) : {};
+    };
+
+    const fromExpiries = getExpiryMap(fromAsset);
+    const toExpiries   = getExpiryMap(toAsset);
+    const allExpiries = new Set([...Object.keys(fromExpiries), ...Object.keys(toExpiries)]);
+
+    const resultExpiries: Record<string, Record<string, any>> = {};
+
+    for (const expiry of allExpiries) {
+      const fromStrikes = fromExpiries[expiry] ?? {};
+      const toStrikes   = toExpiries[expiry] ?? {};
+      const allStrikes  = new Set([...Object.keys(fromStrikes), ...Object.keys(toStrikes)]);
+
+      const strikeResult: Record<string, any> = {};
+      for (const sp of allStrikes) {
+        const fromCe = fromStrikes[sp]?.cumulative_volume?.CE ?? 0;
+        const fromPe = fromStrikes[sp]?.cumulative_volume?.PE ?? 0;
+        const toCe   = toStrikes[sp]?.cumulative_volume?.CE ?? 0;
+        const toPe   = toStrikes[sp]?.cumulative_volume?.PE ?? 0;
+        strikeResult[sp] = {
+          cumulative_volume: {
+            CE: toCe - fromCe,
+            PE: toPe - fromPe,
+          },
+        };
+      }
+      resultExpiries[expiry] = strikeResult;
+    }
+
+    return reply.send({
+      result: {
+        [exchange]: {
+          [asset]: {
+            [toTime]: resultExpiries,
+          },
+        },
+      },
+    });
+  } catch (e: any) {
+    return reply.status(502).send({ error: e.message });
+  }
+});
+
 app.get('/api/nubra-instruments', async (req, reply) => {
   const { session_token, auth_token, device_id } = req.query as Record<string, string>;
   if (!session_token) {
@@ -1404,16 +1534,17 @@ app.post('/api/nubra-historical', async (req, reply) => {
   const rawCookie = rawCookieHdr || rawCookieBody || '';
   const cookiePrimary = buildNubraCookie(rawCookie, sessionToken, body.auth_token || '', deviceId);
 
-  // Nubra expects RFC3339 — pass dates as-is (already ISO from client)
+  // Nubra requires empty startDate/endDate when intraDay=true — sending real dates causes 403.
+  const isIntraDay = intraDay ?? false;
   const queryItem = {
     exchange,
     type,
     values,
     fields,
-    startDate,
-    endDate,
+    startDate: isIntraDay ? '' : (startDate ?? ''),
+    endDate: isIntraDay ? '' : (endDate ?? ''),
     interval: interval ?? '1m',
-    intraDay: intraDay ?? false,
+    intraDay: isIntraDay,
     realTime: realTime ?? false,
   };
 
