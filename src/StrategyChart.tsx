@@ -160,6 +160,48 @@ function getLegExitUnix(leg: StrategyLeg): number {
   return leg.isSquaredOff && (leg.squareOffAt ?? 0) > 0 ? leg.squareOffAt! : 0;
 }
 
+function ChartSkeletonOverlay({ label }: { label: string }) {
+  return (
+    <>
+      <style>{`
+        @keyframes strategySkeletonPulse {
+          0% { background-position: 100% 50%; opacity: 0.72; }
+          50% { background-position: 0% 50%; opacity: 1; }
+          100% { background-position: -100% 50%; opacity: 0.72; }
+        }
+      `}</style>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 6,
+          pointerEvents: 'none',
+          background: 'linear-gradient(180deg, rgba(21,18,15,0.92), rgba(18,15,13,0.86))',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '18px 20px 22px',
+          gap: 14,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ width: 160, height: 16, borderRadius: 6, background: 'linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.1), rgba(255,255,255,0.03))', backgroundSize: '220% 100%', animation: 'strategySkeletonPulse 1.35s ease-in-out infinite' }} />
+          <div style={{ fontSize: 11, color: '#6B7280', letterSpacing: '0.04em' }}>{label}</div>
+        </div>
+        <div style={{ flex: 1, position: 'relative', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden', background: 'rgba(255,255,255,0.015)' }}>
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.32, backgroundImage: 'radial-gradient(circle, rgba(148,163,184,0.28) 1px, transparent 1.1px)', backgroundSize: '12px 12px' }} />
+          <div style={{ position: 'absolute', left: 20, right: 18, top: 28, bottom: 26, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            {new Array(5).fill(null).map((_, idx) => (
+              <div key={idx} style={{ height: 1, background: idx === 2 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)' }} />
+            ))}
+          </div>
+          <div style={{ position: 'absolute', left: 26, right: 18, bottom: 38, height: 2, background: 'linear-gradient(90deg, rgba(96,165,250,0.1), rgba(96,165,250,0.9), rgba(96,165,250,0.18))', borderRadius: 999, transform: 'translateY(-100px) rotate(-7deg)', transformOrigin: 'left center' }} />
+          <div style={{ position: 'absolute', left: 26, right: 18, bottom: 30, height: 2, background: 'linear-gradient(90deg, rgba(38,166,154,0.12), rgba(38,166,154,0.85), rgba(38,166,154,0.16))', borderRadius: 999, transform: 'translateY(-64px) rotate(5deg)', transformOrigin: 'left center' }} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Nubra helpers ─────────────────────────────────────────────────────────────
 
 function nsToTime(ns: number): Time {
@@ -860,34 +902,6 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const atmIvSubRefIds        = useRef<Map<string, Set<number>>>(new Map()); // sym → subscribed ATM ref_ids
   const atmIvLatestIv         = useRef<Map<string, Map<number, number>>>(new Map()); // sym → (refId → IV)
   const atmIvSubscribeFnRef   = useRef<((sym: string, expiry: string, strike: number) => void) | null>(null);
-
-  // ── Vertical split: chart (top) vs MTM panel (bottom) ────────────────────────
-  const [chartHeightPct, setChartHeightPct] = useState(70);
-  const splitDragging = useRef(false);
-  const splitWrapRef  = useRef<HTMLDivElement>(null);
-
-  const onSplitMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    splitDragging.current = true;
-    document.body.style.cursor    = 'row-resize';
-    document.body.style.userSelect = 'none';
-
-    const onMove = (ev: MouseEvent) => {
-      if (!splitDragging.current || !splitWrapRef.current) return;
-      const rect = splitWrapRef.current.getBoundingClientRect();
-      const pct  = ((ev.clientY - rect.top) / rect.height) * 100;
-      setChartHeightPct(Math.min(90, Math.max(20, pct)));
-    };
-    const onUp = () => {
-      splitDragging.current          = false;
-      document.body.style.cursor    = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup',   onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup',   onUp);
-  }, []);
 
   const uniqueLegs = legs.filter((leg, i, arr) =>
     arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
@@ -2521,7 +2535,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const hasContent = (!!ocSymbol || uniqueLegs.length > 0) && uniqueLegs.length > 0;
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#171717', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#15120f', overflow: 'hidden', position: 'relative' }}>
 
       {!hasContent && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#3D4150', pointerEvents: 'none' }}>
@@ -2535,14 +2549,14 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       {hasContent && (
         <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {/* ── Row 1: title + meta + status + refresh ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontFamily: 'var(--font-family-sans)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontFamily: 'var(--font-family-sans)' }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '6px 10px', borderRadius: 8,
+              padding: '4px 8px', borderRadius: 8,
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
-              fontSize: 13, fontWeight: 600, color: '#CBD5E1', letterSpacing: '0.01em',
+              fontSize: 12, fontWeight: 600, color: '#CBD5E1', letterSpacing: '0.01em',
             }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 17l5-6 4 4 6-8 3 3" />
                 <path d="M3 21h18" />
               </svg>
@@ -2550,7 +2564,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
             </span>
             <span style={{ fontSize: 10, color: '#3D4150' }}>·</span>
             {[...new Set(uniqueLegs.map(l => l.symbol))].map((sym, idx) => (
-              <span key={sym} style={{ fontSize: 11, color: UNDERLYING_COLORS[idx % UNDERLYING_COLORS.length], fontWeight: 600 }}>{sym}</span>
+              <span key={sym} style={{ fontSize: 10, color: UNDERLYING_COLORS[idx % UNDERLYING_COLORS.length], fontWeight: 600 }}>{sym}</span>
             ))}
             <span style={{ fontSize: 10, color: '#565A6B' }}>{[...new Set(uniqueLegs.map(l => l.symbol))].length} underlying{[...new Set(uniqueLegs.map(l => l.symbol))].length !== 1 ? 's' : ''}</span>
             <span style={{ fontSize: 10, color: '#565A6B' }}>·</span>
@@ -2581,8 +2595,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           </div>
 
           {/* ── Row 2: toggle toolbar ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'rgba(255,255,255,0.015)', fontFamily: 'var(--font-family-sans)' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#525866', letterSpacing: '0.08em', marginRight: 2 }}>SHOW</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'rgba(255,255,255,0.015)', fontFamily: 'var(--font-family-sans)' }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#525866', letterSpacing: '0.08em', marginRight: 2 }}>SHOW</span>
             {([
               { key: 'spot',    label: 'Spot',    color: UNDERLYING_COLOR,  on: showSpot,    set: setShowSpot },
               { key: 'options', label: 'Options', color: '#2ebd85',         on: showOptions, set: setShowOptions },
@@ -2595,8 +2609,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                 onClick={() => set((v: boolean) => !v)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '7px 14px', borderRadius: 999, cursor: 'pointer',
-                  fontSize: 12, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.03em',
+                  padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
+                  fontSize: 11, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.02em',
                   border: `1px solid ${on ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.08)'}`,
                   background: on ? 'rgba(255,255,255,0.08)' : 'transparent',
                   color: on ? '#E2E8F0' : '#9CA3AF',
@@ -2629,8 +2643,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                     style={{
                       appearance: 'none',
                       display: 'flex', alignItems: 'center',
-                      padding: '7px 28px 7px 10px', borderRadius: 999, cursor: 'pointer',
-                      fontSize: 12, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.03em',
+                      padding: '5px 24px 5px 10px', borderRadius: 999, cursor: 'pointer',
+                      fontSize: 11, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.02em',
                       border: `1px solid ${showMtm ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)'}`,
                       background: showMtm
                         ? 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)'
@@ -2652,8 +2666,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
                   {/* visible label overlay */}
                   <span style={{
                     position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-                    fontSize: 12, fontWeight: 600, color: showMtm ? '#E2E8F0' : '#9CA3AF',
-                    pointerEvents: 'none', letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                    fontSize: 11, fontWeight: 600, color: showMtm ? '#E2E8F0' : '#9CA3AF',
+                    pointerEvents: 'none', letterSpacing: '0.02em', whiteSpace: 'nowrap',
                   }}>
                     <span style={{ color: showMtm ? '#26a69a' : '#525866', fontWeight: 700 }}>MTM</span>
                     {showMtm ? <span style={{ color: '#525866' }}> · </span> : null}
@@ -2672,8 +2686,8 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               onClick={() => setShowPositions(v => !v)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                padding: '7px 14px', borderRadius: 999, cursor: 'pointer',
-                fontSize: 12, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.03em',
+                  padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
+                  fontSize: 11, lineHeight: 1.1, fontWeight: 600, letterSpacing: '0.02em',
                 border: `1px solid ${showPositions ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.08)'}`,
                 background: showPositions ? 'rgba(255,255,255,0.08)' : 'transparent',
                 color: showPositions ? '#E2E8F0' : '#9CA3AF',
@@ -2686,7 +2700,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
               </svg>
               Positions
               <span style={{
-                fontSize: 10, fontWeight: 800,
+                fontSize: 9, fontWeight: 700,
                 background: showPositions ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)',
                 color: showPositions ? '#E2E8F0' : '#9CA3AF',
                 borderRadius: 4, padding: '0 5px', marginLeft: 2,
@@ -2696,141 +2710,15 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         </div>
       )}
 
-      {/* ── Resizable split: chart top / MTM panel bottom ── */}
-      <div ref={splitWrapRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-        {/* Chart area */}
-        <div ref={containerRef} style={{ height: `${chartHeightPct}%`, minHeight: 0, flexShrink: 0 }} />
-
-        {/* Drag handle — matches App.tsx divider pattern */}
-        <div
-          onMouseDown={onSplitMouseDown}
-          onDoubleClick={() => setChartHeightPct(70)}
-          style={{
-            flexShrink: 0, height: 4, cursor: 'row-resize',
-            background: 'transparent',
-            borderTop: '1px solid rgba(255,255,255,0.07)',
-            transition: 'background 0.15s',
-            zIndex: 10,
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.08)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-        />
-
-        {/* MTM panel */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111110', overflow: 'hidden' }}>
-
-          {/* ── Header bar: total P&L ── */}
-          {(() => {
-            const total = uniqueLegs.reduce((sum, leg) => {
-              const ltp = getLegEffectiveLtp(leg);
-              return sum + (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
-            }, 0);
-            const isPos = total >= 0;
-            return (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '7px 16px',
-                borderBottom: '1px solid rgba(255,255,255,0.07)',
-                flexShrink: 0, background: '#151413',
-              }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', letterSpacing: '0.1em', textTransform: 'uppercase' }}>MTM P&amp;L</span>
-                <span style={{ fontSize: 22, fontWeight: 700, color: isPos ? '#26a69a' : '#f23645', fontFamily: 'monospace', letterSpacing: '-0.01em' }}>
-                  {isPos ? '+' : '−'}₹{Math.abs(total).toFixed(2)}
-                </span>
-                <span style={{ fontSize: 12, color: '#4B5563', marginLeft: -4 }}>{uniqueLegs.length} leg{uniqueLegs.length !== 1 ? 's' : ''}</span>
-              </div>
-            );
-          })()}
-
-          {/* ── Column headers ── */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '46px minmax(0,1fr) 88px 88px 100px',
-            padding: '5px 16px',
-            background: '#181715',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            flexShrink: 0,
-          }}>
-            {['', 'Instrument', 'Entry', 'LTP', 'P&L'].map((h, i) => (
-              <span key={i} style={{
-                fontSize: 11, fontWeight: 700, color: '#6B7280',
-                letterSpacing: '0.07em', textTransform: 'uppercase',
-                textAlign: i >= 2 ? 'right' : 'left',
-              }}>{h}</span>
-            ))}
-          </div>
-
-          {/* ── Rows ── */}
-          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-            {uniqueLegs.map((leg, i) => {
-              const ltp   = getLegEffectiveLtp(leg);
-              const pnl   = (leg.action === 'B' ? ltp - leg.price : leg.price - ltp) * leg.lots * (leg.lotSize || 1);
-              const isPos = pnl >= 0;
-              const isBuy = leg.action === 'B';
-              return (
-                <div key={i} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '46px minmax(0,1fr) 88px 88px 100px',
-                  alignItems: 'center',
-                  padding: '8px 16px',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                  background: leg.isSquaredOff ? 'rgba(148,163,184,0.06)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'),
-                  opacity: leg.isSquaredOff ? 0.58 : 1,
-                }}>
-
-                  {/* B/S badge */}
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 38, height: 20, borderRadius: 4, flexShrink: 0,
-                    fontSize: 11, fontWeight: 800, letterSpacing: '0.04em',
-                    color: isBuy ? '#26a69a' : '#f23645',
-                    background: isBuy ? 'rgba(38,166,154,0.15)' : 'rgba(242,54,69,0.15)',
-                    border: `1px solid ${isBuy ? 'rgba(38,166,154,0.35)' : 'rgba(242,54,69,0.35)'}`,
-                  }}>{isBuy ? 'BUY' : 'SELL'}</span>
-
-                  {/* Instrument */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {leg.symbol} {leg.strike}
-                    </span>
-                    <span style={{
-                      fontSize: 12, fontWeight: 700,
-                      color: leg.type === 'CE' ? '#34d399' : '#f87171',
-                      flexShrink: 0,
-                    }}>{leg.type}</span>
-                    <span style={{ fontSize: 12, color: '#6B7280', flexShrink: 0 }}>×{leg.lots}</span>
-                  </div>
-
-                  {/* Entry */}
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#9CA3AF', textAlign: 'right', fontFamily: 'monospace' }}>
-                    ₹{leg.price.toFixed(2)}
-                  </span>
-
-                  {/* LTP */}
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#F3F4F6', textAlign: 'right', fontFamily: 'monospace' }}>
-                    ₹{ltp.toFixed(2)}
-                  </span>
-
-                  {/* P&L */}
-                  <span style={{
-                    fontSize: 14, fontWeight: 700, textAlign: 'right', fontFamily: 'monospace',
-                    color: isPos ? '#26a69a' : '#f23645',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {isPos ? '+' : '−'}₹{Math.abs(pnl).toFixed(2)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        {hasContent && loading && <ChartSkeletonOverlay label="Loading strategy chart" />}
       </div>
 
       {/* ── Positions overlay ─────────────────────────────────────────── */}
       {showPositions && legs.length > 0 && (
         <div style={{
-          position: 'absolute', top: 80, right: 12, zIndex: 20,
+          position: 'absolute', top: 62, right: 12, zIndex: 20,
           background: '#1a1714',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 10,
