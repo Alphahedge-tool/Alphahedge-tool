@@ -24,6 +24,6 @@ Build output is written to `dist/`.
 This repo now includes Cloudflare Pages support:
 
 - `public/_headers` sets cache and basic security headers.
-- `public/_redirects` adds SPA fallback routing.
+- SPA fallback is handled by Wrangler / Cloudflare asset config during deploy.
 
 Step-by-step setup is in [CLOUDFLARE_SETUP.md](/abs/path/c:/Users/optio/Alpahedgesoftware/CLOUDFLARE_SETUP.md).

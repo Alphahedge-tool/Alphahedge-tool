@@ -11,9 +11,6 @@ This project is ready to be hosted on **Cloudflare Pages** as a static frontend.
   - Long cache for hashed assets in `/assets/*`
   - Short cache for HTML so new deployments update quickly
   - Basic security headers
-- `public/_redirects`
-  - Sends all frontend routes to `index.html`
-  - Prevents refresh / direct-link routing issues in a SPA
 
 ## What Cloudflare will improve
 
@@ -25,6 +22,18 @@ Cloudflare will usually improve:
 - Faster repeat visits because JS/CSS bundles stay cached
 
 Cloudflare will **not** automatically speed up slow API responses from your backend unless that backend is also moved behind Cloudflare and configured separately.
+
+## SPA routing note
+
+This project is being deployed with `wrangler deploy`, not classic Pages-only `_redirects` routing.
+
+That means:
+
+- keep `public/_headers`
+- do **not** use `public/_redirects`
+- let Wrangler handle SPA fallback with `assets.not_found_handling = "single-page-application"`
+
+If you keep a catch-all `_redirects` rule like `/* /index.html 200`, Wrangler rejects it with an infinite loop validation error.
 
 ## Step by step in your codebase
 
