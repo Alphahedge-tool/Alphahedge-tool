@@ -1119,7 +1119,7 @@ function ExpiryDropdown({ expiries, selected, onChange }: {
   );
 }
 
-function useOptionChain(instrument: Instrument, instruments: Instrument[], open: boolean, selectedExpiry: number | null) {
+function useOptionChain(instrument: Instrument, instruments: Instrument[], open: boolean, selectedExpiry: number | null, resolvedUnderlying?: string) {
   const [rows, setRows] = useState<StrikeRow[]>([]);
   // mdRef is the source of truth; mdVer triggers re-render
   const mdRef = useRef<Map<string, InstrumentMarketData>>(new Map());
@@ -1129,12 +1129,15 @@ function useOptionChain(instrument: Instrument, instruments: Instrument[], open:
   useEffect(() => {
     if (!open || !instruments.length || !selectedExpiry) { setRows([]); ltpRef.current = new Map(); return; }
 
-    const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+    const underlying = resolvedUnderlying || instrument.underlying_symbol || instrument.trading_symbol;
     if (!underlying) { setRows([]); return; }
 
+    const isMcxInstrument = instrument.exchange === 'MCX' || instrument.exchange === 'MCX_FO';
     const thisExpiry = instruments.filter(i =>
       (i.instrument_type === 'CE' || i.instrument_type === 'PE') &&
-      i.underlying_symbol === underlying &&
+      (isMcxInstrument
+        ? i.underlying_symbol?.toUpperCase() === underlying && (i.exchange === 'MCX' || i.exchange === 'MCX_FO')
+        : i.underlying_symbol === underlying) &&
       i.expiry === selectedExpiry
     );
     if (!thisExpiry.length) { setRows([]); return; }
@@ -1207,17 +1210,37 @@ function OptionChainPanel({
   open: boolean;
   onInstrumentSelect?: (ins: Instrument) => void;
 }) {
-  const underlying = instrument.underlying_symbol || instrument.trading_symbol;
+  const isMcxInstrument = instrument.exchange === 'MCX' || instrument.exchange === 'MCX_FO';
+
+  // For MCX, resolve the canonical underlying symbol (e.g. "CRUDEOIL") the same
+  // way OptionChainMCX does — fuzzy match across trading_symbol / underlying_symbol.
+  const underlying = useMemo(() => {
+    const raw = instrument.underlying_symbol || instrument.trading_symbol || '';
+    if (!isMcxInstrument || !instruments.length) return raw;
+    const key = raw.toUpperCase();
+    const match = instruments.find(i =>
+      (i.exchange === 'MCX' || i.exchange === 'MCX_FO') && (
+        i.trading_symbol?.toUpperCase() === key ||
+        i.underlying_symbol?.toUpperCase() === key ||
+        (i.underlying_symbol && key.startsWith(i.underlying_symbol.toUpperCase())) ||
+        (i.trading_symbol && key.startsWith(i.trading_symbol.toUpperCase()))
+      )
+    );
+    return (match?.underlying_symbol || match?.trading_symbol || raw).toUpperCase();
+  }, [instrument.underlying_symbol, instrument.trading_symbol, isMcxInstrument, instruments]);
 
   const expiries = useMemo(() => {
     if (!underlying || !instruments.length) return [];
     const today = Date.now();
-    return [...new Set(
-      instruments
-        .filter(i => (i.instrument_type === 'CE' || i.instrument_type === 'PE') && i.underlying_symbol === underlying && i.expiry != null && i.expiry >= today - 86400000)
-        .map(i => i.expiry as number)
-    )].sort((a, b) => a - b);
-  }, [underlying, instruments]);
+    const candidates = instruments.filter(i =>
+      (i.instrument_type === 'CE' || i.instrument_type === 'PE') &&
+      (isMcxInstrument
+        ? i.underlying_symbol?.toUpperCase() === underlying && (i.exchange === 'MCX' || i.exchange === 'MCX_FO')
+        : i.underlying_symbol === underlying) &&
+      i.expiry != null && i.expiry >= today - 86400000
+    );
+    return [...new Set(candidates.map(i => i.expiry as number))].sort((a, b) => a - b);
+  }, [underlying, instruments, isMcxInstrument]);
 
   const [selectedExpiry, setSelectedExpiry] = useState<number | null>(null);
   useEffect(() => {
@@ -1226,7 +1249,7 @@ function OptionChainPanel({
     }
   }, [expiries, selectedExpiry]);
 
-  const { rows, mdMap } = useOptionChain(instrument, instruments, open, selectedExpiry);
+  const { rows, mdMap } = useOptionChain(instrument, instruments, open, selectedExpiry, underlying);
 
   const [metric, setMetric] = useState<OcMetric>('ltp');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1261,9 +1284,15 @@ function OptionChainPanel({
   const [spot, setSpot] = useState(() => wsManager.get(spotInstrumentKey)?.ltp ?? 0);
   useEffect(() => {
     setSpot(wsManager.get(spotInstrumentKey)?.ltp ?? 0);
+    // MCX futures must go through ltpc mode; options under the same MCX_FO|
+    // prefix stay in `full` mode so their Greeks keep flowing.
+    const spotIns = instruments.find(i => i.instrument_key === spotInstrumentKey);
+    if (spotIns && (spotIns.exchange === 'MCX' || spotIns.exchange === 'MCX_FO') && spotIns.instrument_type === 'FUT') {
+      wsManager.markLtpcOnly([spotInstrumentKey]);
+    }
     wsManager.requestKeys([spotInstrumentKey]);
     return wsManager.subscribe(spotInstrumentKey, md => { if (md.ltp) setSpot(md.ltp); });
-  }, [spotInstrumentKey]);
+  }, [spotInstrumentKey, instruments]);
 
   const atmStrike = rows.length && spot
     ? rows.reduce((best, r) => Math.abs(r.strike - spot) < Math.abs(best - spot) ? r.strike : best, rows[0].strike)

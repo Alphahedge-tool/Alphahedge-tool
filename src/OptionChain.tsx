@@ -1390,6 +1390,9 @@ function OptionChainMCX({ symbol, instruments, onClose, onAddLeg, lotSize = 1, o
 
   useEffect(() => {
     if (!spotKey) return;
+    // MCX FUT used as the spot — subscribe in ltpc mode so the option keys
+    // (same MCX_FO| prefix) keep their `full` subscription with Greeks intact.
+    wsManager.markLtpcOnly([spotKey]);
     wsManager.requestKeys([spotKey]);
     const snap = wsManager.get(spotKey);
     if (snap?.ltp) {

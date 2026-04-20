@@ -182,6 +182,10 @@ class WebSocketManager {
 
   private requestedKeys: Map<string, number> = new Map(); // key → ref count
   private subscribedKeys: Set<string> = new Set();
+  // Keys that must be subscribed in `ltpc` mode (e.g. MCX futures — full mode
+  // is redundant/noisy for them). Everything not in this set uses `full` mode,
+  // which is required for options to deliver Greeks (delta/gamma/theta/vega/iv).
+  private ltpcOnlyKeys: Set<string> = new Set();
 
   // Batch listener dispatch — accumulate per-tick, flush via setTimeout(0)
   private pendingFeeds: Map<string, any> = new Map();
@@ -209,6 +213,12 @@ class WebSocketManager {
     for (const k of keys) this.requestedKeys.set(k, (this.requestedKeys.get(k) ?? 0) + 1);
     this._syncSubscription();
     return () => {};
+  }
+
+  /** Mark keys that should use `ltpc` mode instead of `full`. Use for MCX futures only —
+   *  options need `full` mode to receive Greeks. Call before requestKeys(). */
+  markLtpcOnly(keys: string[]): void {
+    for (const k of keys) this.ltpcOnlyKeys.add(k);
   }
 
   releaseKeys(keys: string[]): void {
@@ -378,9 +388,10 @@ class WebSocketManager {
 
   private _sendSubscribe(keys: string[]): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || keys.length === 0) return;
-    // MCX_FO (CRUDEOIL futures) use ltpc mode; everything else uses full
-    const ltpcKeys = keys.filter(k => k.startsWith('MCX_FO|'));
-    const fullKeys = keys.filter(k => !k.startsWith('MCX_FO|'));
+    // Only keys explicitly registered via markLtpcOnly() use ltpc mode (MCX futures).
+    // MCX options keep `full` mode so Greeks (delta/gamma/theta/vega/iv) flow through.
+    const ltpcKeys = keys.filter(k => this.ltpcOnlyKeys.has(k));
+    const fullKeys = keys.filter(k => !this.ltpcOnlyKeys.has(k));
     if (fullKeys.length > 0) {
       this.ws.send(Buffer.from(JSON.stringify({
         guid: 'sub_' + Date.now(),

@@ -234,9 +234,20 @@ async function fetchCandlesBatchWithRetry(
   throw lastErr ?? new Error('Failed batch fetch');
 }
 
-async function loadFullDayCandles(instrumentKey: string, interval: IntervalOpt) {
-  const batch = await fetchCandlesBatchWithRetry([instrumentKey], interval);
-  return batch.data[instrumentKey]?.candles ?? [];
+async function loadFullDayCandles(instrumentKey: string) {
+  // Always load the base 1m stream and resample locally.
+  // Upstox higher intervals can drift into the previous session for intraday loads.
+  const latestBatch = await fetchCandlesBatchWithRetry([instrumentKey], INTERVALS[0]);
+  const latest = latestBatch.data[instrumentKey];
+  const latestCandles = latest?.candles ?? [];
+  const prevTimestamp = latest?.meta?.prevTimestamp ?? null;
+  if (!prevTimestamp) return latestCandles;
+
+  const previousBatch = await fetchCandlesBatchWithRetry([instrumentKey], INTERVALS[0], prevTimestamp);
+  const previousCandles = previousBatch.data[instrumentKey]?.candles ?? [];
+  if (!previousCandles.length) return latestCandles;
+
+  return mergeCandlesByTimestamp(previousCandles, latestCandles);
 }
 
 async function fetchNubraAtmIvSeries(
@@ -341,6 +352,18 @@ function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+function mergeCandlesByTimestamp(...groups: number[][][]): number[][] {
+  const merged = new Map<number, number[]>();
+  for (const candles of groups) {
+    for (const candle of candles) {
+      const ts = Number(candle[0]);
+      if (!Number.isFinite(ts)) continue;
+      merged.set(ts, candle);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a[0] - b[0]);
 }
 
 function numOrNull(v: unknown): number | null {
@@ -623,7 +646,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       if (!allStrikes.length) throw new Error('No CE/PE strike pairs found for selected expiry');
 
       setLoadingNote('Loading spot candles...');
-      const spotCandles = await loadFullDayCandles(spotKey, interval);
+      const spotCandles = await loadFullDayCandles(spotKey);
       if (!spotCandles.length) throw new Error('No spot candles found');
 
       const spotResampled = resample(spotCandles, interval.min);
@@ -671,9 +694,37 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       for (let bi = 0; bi < keyBatches.length; bi++) {
         const batchKeys = keyBatches[bi];
         setLoadingNote(`Loading options batch ${bi + 1}/${totalBatches}...`);
-        const { data, errors } = await fetchCandlesBatchWithRetry(batchKeys, interval);
-        for (const key of batchKeys) {
+        const { data, errors } = await fetchCandlesBatchWithRetry(batchKeys, INTERVALS[0]);
+        const mergedData = { ...data };
+        const keysNeedingPrevPage = batchKeys.filter(key => {
           const row = data[key];
+          return Boolean(row?.meta?.prevTimestamp);
+        });
+
+        if (keysNeedingPrevPage.length) {
+          const keysByPrevFrom = new Map<number, string[]>();
+          for (const key of keysNeedingPrevPage) {
+            const prevFrom = data[key]?.meta?.prevTimestamp;
+            if (typeof prevFrom !== 'number' || !Number.isFinite(prevFrom)) continue;
+            const group = keysByPrevFrom.get(prevFrom) ?? [];
+            group.push(key);
+            keysByPrevFrom.set(prevFrom, group);
+          }
+
+          for (const [prevFrom, groupedKeys] of keysByPrevFrom.entries()) {
+            const prevBatch = await fetchCandlesBatchWithRetry(groupedKeys, INTERVALS[0], prevFrom);
+            for (const key of groupedKeys) {
+              const currentCandles = mergedData[key]?.candles ?? [];
+              const previousCandles = prevBatch.data[key]?.candles ?? [];
+              if (!previousCandles.length) continue;
+              mergedData[key] = {
+                candles: mergeCandlesByTimestamp(previousCandles, currentCandles),
+              };
+            }
+          }
+        }
+        for (const key of batchKeys) {
+          const row = mergedData[key];
           if (row?.candles?.length) candlesByKey.set(key, row.candles);
           else failedKeys.push(key);
           if (errors[key]) failedKeys.push(`${key}:${errors[key]}`);
