@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node -e \"const fs=require('fs'); ['public/_redirects','dist/_redirects'].forEach((file)=>{ if (fs.existsSync(file)) fs.rmSync(file, { force: true }); });\" && tsc --noEmit && vite build",
     "build:fast": "vite build",
     "preview": "vite preview",
     "start": "node scripts/start.mjs",
