@@ -7,12 +7,13 @@
     "dev": "vite",
     "build": "node -e \"const fs=require('fs'); const file='dist/_redirects'; if (fs.existsSync(file)) fs.rmSync(file, { force: true });\" && tsc --noEmit && vite build",
     "build:fast": "vite build",
-    "preview": "vite preview",
+    "preview": "npm run build && wrangler dev",
     "start": "node scripts/start.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint",
     "server": "node --experimental-strip-types server/index.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run server\""
+    "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@amcharts/amcharts5": "^5.16.1",
@@ -63,6 +64,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.32.3",
     "@tailwindcss/forms": "^0.5.11",
     "@tailwindcss/postcss": "^4",
     "@types/lodash": "^4.17.24",
@@ -77,6 +79,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^8.0.0",
-    "vite-plugin-node-polyfills": "^0.25.0"
+    "vite-plugin-node-polyfills": "^0.25.0",
+    "wrangler": "^4.83.0"
   }
 }

@@ -45,3 +45,9 @@ next-env.d.ts
 # Server auth cache (sensitive — never commit)
 server/upstox_token.json
 server/nubra_device.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
