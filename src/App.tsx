@@ -46,6 +46,7 @@ import {
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table';
+import { TooltipWrap } from './components/ui/tooltip';
 import './index.css';
 import mtm from './MtmLayout.module.css';
 
@@ -305,11 +306,24 @@ function Btn({
     indigo: 'bg-[rgba(129,140,248,0.08)] border-[rgba(129,140,248,0.35)] text-[#818cf8] hover:bg-[rgba(129,140,248,0.15)]',
     amber: 'bg-[rgba(255,152,0,0.10)] border-[rgba(255,152,0,0.45)] text-[#FF9800] hover:bg-[rgba(255,152,0,0.15)]',
   };
-  return (
-    <button onClick={onClick} disabled={disabled || loading} title={title} className={cx(base, variants[variant])}>
+  const button = (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      aria-label={title}
+      className={cx(base, variants[variant])}
+    >
       {loading && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
       {children}
     </button>
+  );
+
+  if (!title) return button;
+
+  return (
+    <TooltipWrap content={title} side="bottom" align="center" sideOffset={10}>
+      {button}
+    </TooltipWrap>
   );
 }
 
@@ -1292,6 +1306,8 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [cloudList, setCloudList] = useState<any[]>([]);
+  const [cloudSearchQuery, setCloudSearchQuery] = useState('');
+  const deferredCloudSearchQuery = useDeferredValue(cloudSearchQuery);
   const [cloudName, setCloudName] = useState('');
   const [toastOpen, setToastOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1447,6 +1463,20 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
       setCloudLoading(false);
     }
   }, [fetchCloudList]);
+
+  const filteredCloudList = useMemo(() => {
+    const query = deferredCloudSearchQuery.trim().toLowerCase();
+    if (!query) return cloudList;
+    return cloudList.filter((item: any) => {
+      const name = String(item?.name ?? '').toLowerCase();
+      const symbol = String(item?.oc_symbol ?? '').toLowerCase();
+      const exchange = String(item?.oc_exchange ?? '').toLowerCase();
+      const legSymbols = Array.isArray(item?.legs)
+        ? item.legs.map((leg: any) => String(leg?.symbol ?? '').toLowerCase()).join(' ')
+        : '';
+      return [name, symbol, exchange, legSymbols].some(value => value.includes(query));
+    });
+  }, [cloudList, deferredCloudSearchQuery]);
   // Keep strategyLegs in sync with current legs
   useEffect(() => {
     setStrategyLegs(prev => ({ ...prev, [activeStrategy]: legs }));
@@ -2104,6 +2134,23 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
   const mtmDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mtmListRef = useRef<HTMLDivElement>(null);
 
+  const mtmHeaderTotals = useMemo(() => {
+    const checkedLegs = legs.filter(l => l.checked);
+    const total = checkedLegs.reduce((sum, leg) => sum + getLegMtm(leg), 0);
+    const bySymbolMap = new Map<string, number>();
+
+    for (const leg of checkedLegs) {
+      const sym = (leg.symbol || 'Unknown').toUpperCase();
+      bySymbolMap.set(sym, (bySymbolMap.get(sym) ?? 0) + getLegMtm(leg));
+    }
+
+    const bySymbol = [...bySymbolMap.entries()]
+      .map(([symbol, value]) => ({ symbol, value }))
+      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+    return { total, bySymbol };
+  }, [legs]);
+
   const normalizeKey = useCallback((v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, ''), []);
   const normalizeExch = useCallback((v: string) => v.toUpperCase().replace(/_INDEX|_FO/g, ''), []);
   const resolveNubraSymbol = useCallback((ins: Partial<Instrument> & { stock_name?: string; nubra_name?: string; asset?: string }) => {
@@ -2348,22 +2395,45 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
 
           <div className={mtm.headerSpacer} />
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#8FA0B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total P&amp;L</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: mtmHeaderTotals.total >= 0 ? '#26a69a' : '#f23645', fontFamily: 'var(--font-family-sans)' }}>
+                {fmtMtm(mtmHeaderTotals.total)}
+              </span>
+            </div>
+            {mtmHeaderTotals.bySymbol.map(({ symbol, value }) => (
+              <div key={symbol} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#C9D1DC', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{symbol}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: value >= 0 ? '#26a69a' : '#f23645', fontFamily: 'var(--font-family-sans)' }}>
+                  {fmtMtm(value)}
+                </span>
+              </div>
+            ))}
+          </div>
+
           {/* Action buttons */}
           <div className={mtm.headerActions}>
             {/* Option chain */}
-            <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} title={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} className={`${mtm.headerIconBtn} ${ocOpen ? mtm.headerIconBtnActive : ''}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="9 10 20 17.6">
-                <g><path d="M19.3956 10.4C19.3956 10.1791 19.2165 10 18.9956 10C18.7748 10 18.5957 10.1791 18.5957 10.4V27.2002C18.5957 27.4211 18.7748 27.6002 18.9956 27.6002C19.2165 27.6002 19.3956 27.4211 19.3956 27.2002V10.4Z" fill="#9CA3AF"/><path d="M16.1929 11.5977H11.3936C10.9519 11.5977 10.5938 11.9558 10.5938 12.3977C10.5938 12.8395 10.9519 13.1977 11.3936 13.1977H16.1929C16.6347 13.1977 16.9928 12.8395 16.9928 12.3977C16.9928 11.9558 16.6347 11.5977 16.1929 11.5977Z" fill="#9CA3AF"/><path d="M27.401 11.5977H21.8018C21.3601 11.5977 21.002 11.9558 21.002 12.3977C21.002 12.8395 21.3601 13.1977 21.8018 13.1977H27.401C27.8428 13.1977 28.2009 12.8395 28.2009 12.3977C28.2009 11.9558 27.8428 11.5977 27.401 11.5977Z" fill="#9CA3AF"/><path d="M16.1989 19.6016H9.79988C9.35812 19.6016 9 19.9597 9 20.4016C9 20.8434 9.35812 21.2016 9.79988 21.2016H16.1989C16.6407 21.2016 16.9988 20.8434 16.9988 20.4016C16.9988 19.9597 16.6407 19.6016 16.1989 19.6016Z" fill="#9CA3AF"/><path d="M25.0014 19.6016H21.8018C21.3601 19.6016 21.002 19.9597 21.002 20.4016C21.002 20.8434 21.3601 21.2016 21.8018 21.2016H25.0014C25.4431 21.2016 25.8013 20.8434 25.8013 20.4016C25.8013 19.9597 25.4431 19.6016 25.0014 19.6016Z" fill="#9CA3AF"/><path d="M16.1928 15.6016H12.9932C12.5515 15.6016 12.1934 15.9597 12.1934 16.4016C12.1934 16.8434 12.5515 17.2016 12.9932 17.2016H16.1928C16.6345 17.2016 16.9927 16.8434 16.9927 16.4016C16.9927 15.9597 16.6345 15.6016 16.1928 15.6016Z" fill="#9CA3AF"/><path d="M28.2009 15.6016H21.8018C21.3601 15.6016 21.002 15.9597 21.002 16.4016C21.002 16.8434 21.3601 17.2016 21.8018 17.2016H28.2009C28.6427 17.2016 29.0008 16.8434 29.0008 16.4016C29.0008 15.9597 28.6427 15.6016 28.2009 15.6016Z" fill="#9CA3AF"/><path d="M16.1979 23.5996H10.5987C10.1569 23.5996 9.79883 23.9578 9.79883 24.3996C9.79883 24.8414 10.1569 25.1996 10.5987 25.1996H16.1979C16.6397 25.1996 16.9978 24.8414 16.9978 24.3996C16.9978 23.9578 16.6397 23.5996 16.1979 23.5996Z" fill="#9CA3AF"/><path d="M26.6011 23.5996H21.8018C21.3601 23.5996 21.002 23.9578 21.002 24.3996C21.002 24.8414 21.3601 25.1996 21.8018 25.1996H26.6011C27.0429 25.1996 27.401 24.8414 27.401 24.3996C27.401 23.9578 27.0429 23.5996 26.6011 23.5996Z" fill="#9CA3AF"/></g>
-              </svg>
-            </button>
+            <TooltipWrap content={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} side="bottom" align="center" sideOffset={10}>
+              <button onClick={() => { if (ocSymbol) setOcOpen(true); else mtmInputRef.current?.focus(); }} aria-label={ocSymbol ? `Open Option Chain · ${ocSymbol}` : 'Search a symbol first'} className={`${mtm.headerIconBtn} ${ocOpen ? mtm.headerIconBtnActive : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="9 10 20 17.6">
+                  <g><path d="M19.3956 10.4C19.3956 10.1791 19.2165 10 18.9956 10C18.7748 10 18.5957 10.1791 18.5957 10.4V27.2002C18.5957 27.4211 18.7748 27.6002 18.9956 27.6002C19.2165 27.6002 19.3956 27.4211 19.3956 27.2002V10.4Z" fill="#9CA3AF"/><path d="M16.1929 11.5977H11.3936C10.9519 11.5977 10.5938 11.9558 10.5938 12.3977C10.5938 12.8395 10.9519 13.1977 11.3936 13.1977H16.1929C16.6347 13.1977 16.9928 12.8395 16.9928 12.3977C16.9928 11.9558 16.6347 11.5977 16.1929 11.5977Z" fill="#9CA3AF"/><path d="M27.401 11.5977H21.8018C21.3601 11.5977 21.002 11.9558 21.002 12.3977C21.002 12.8395 21.3601 13.1977 21.8018 13.1977H27.401C27.8428 13.1977 28.2009 12.8395 28.2009 12.3977C28.2009 11.9558 27.8428 11.5977 27.401 11.5977Z" fill="#9CA3AF"/><path d="M16.1989 19.6016H9.79988C9.35812 19.6016 9 19.9597 9 20.4016C9 20.8434 9.35812 21.2016 9.79988 21.2016H16.1989C16.6407 21.2016 16.9988 20.8434 16.9988 20.4016C16.9988 19.9597 16.6407 19.6016 16.1989 19.6016Z" fill="#9CA3AF"/><path d="M25.0014 19.6016H21.8018C21.3601 19.6016 21.002 19.9597 21.002 20.4016C21.002 20.8434 21.3601 21.2016 21.8018 21.2016H25.0014C25.4431 21.2016 25.8013 20.8434 25.8013 20.4016C25.8013 19.9597 25.4431 19.6016 25.0014 19.6016Z" fill="#9CA3AF"/><path d="M16.1928 15.6016H12.9932C12.5515 15.6016 12.1934 15.9597 12.1934 16.4016C12.1934 16.8434 12.5515 17.2016 12.9932 17.2016H16.1928C16.6345 17.2016 16.9927 16.8434 16.9927 16.4016C16.9927 15.9597 16.6345 15.6016 16.1928 15.6016Z" fill="#9CA3AF"/><path d="M28.2009 15.6016H21.8018C21.3601 15.6016 21.002 15.9597 21.002 16.4016C21.002 16.8434 21.3601 17.2016 21.8018 17.2016H28.2009C28.6427 17.2016 29.0008 16.8434 29.0008 16.4016C29.0008 15.9597 28.6427 15.6016 28.2009 15.6016Z" fill="#9CA3AF"/><path d="M16.1979 23.5996H10.5987C10.1569 23.5996 9.79883 23.9578 9.79883 24.3996C9.79883 24.8414 10.1569 25.1996 10.5987 25.1996H16.1979C16.6397 25.1996 16.9978 24.8414 16.9978 24.3996C16.9978 23.9578 16.6397 23.5996 16.1979 23.5996Z" fill="#9CA3AF"/><path d="M26.6011 23.5996H21.8018C21.3601 23.5996 21.002 23.9578 21.002 24.3996C21.002 24.8414 21.3601 25.1996 21.8018 25.1996H26.6011C27.0429 25.1996 27.401 24.8414 27.401 24.3996C27.401 23.9578 27.0429 23.5996 26.6011 23.5996Z" fill="#9CA3AF"/></g>
+                </svg>
+              </button>
+            </TooltipWrap>
             {/* Export */}
-            <button onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }} title="Export strategy" className={mtm.headerIconBtn}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 21h14a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2"/></svg>
-            </button>
+            <TooltipWrap content="Export strategy" side="bottom" align="center" sideOffset={10}>
+              <button onClick={() => { setCloudTab('export'); setCloudName(strategyNames[activeStrategy] ?? `Strategy ${activeStrategy}`); setCloudError(''); setCloudOpen(true); }} aria-label="Export strategy" className={mtm.headerIconBtn}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 21h14a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2"/></svg>
+              </button>
+            </TooltipWrap>
             {/* Import */}
-            <button onClick={() => { setCloudTab('import'); setCloudError(''); setCloudOpen(true); fetchCloudList(); }} title="Import strategy" className={mtm.headerIconBtn}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21V9"/><path d="M16 13l-4 4-4-4"/><path d="M5 3h14a2 2 0 0 1 2 2v3"/><path d="M3 8V5a2 2 0 0 1 2-2"/></svg>
-            </button>
+            <TooltipWrap content="Import strategy" side="bottom" align="center" sideOffset={10}>
+              <button onClick={() => { setCloudTab('import'); setCloudError(''); setCloudSearchQuery(''); setCloudOpen(true); fetchCloudList(); }} aria-label="Import strategy" className={mtm.headerIconBtn}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21V9"/><path d="M16 13l-4 4-4-4"/><path d="M5 3h14a2 2 0 0 1 2 2v3"/><path d="M3 8V5a2 2 0 0 1 2-2"/></svg>
+              </button>
+            </TooltipWrap>
           </div>
         </div>
         {cloudOpen && (
@@ -2371,7 +2441,7 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
             <div onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '90vw', background: '#161616', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => { setCloudTab('import'); fetchCloudList(); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', background: cloudTab === 'import' ? 'rgba(255,255,255,0.08)' : 'transparent', color: cloudTab === 'import' ? '#E2E8F0' : '#6B7280', borderColor: cloudTab === 'import' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' }}>Import</button>
+                  <button onClick={() => { setCloudTab('import'); setCloudSearchQuery(''); fetchCloudList(); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', background: cloudTab === 'import' ? 'rgba(255,255,255,0.08)' : 'transparent', color: cloudTab === 'import' ? '#E2E8F0' : '#6B7280', borderColor: cloudTab === 'import' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' }}>Import</button>
                   <button onClick={() => setCloudTab('export')} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', background: cloudTab === 'export' ? 'rgba(255,255,255,0.08)' : 'transparent', color: cloudTab === 'export' ? '#E2E8F0' : '#6B7280', borderColor: cloudTab === 'export' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' }}>Export</button>
                 </div>
                 <button onClick={() => setCloudOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4B5563', display: 'flex', padding: 2 }}>
@@ -2400,12 +2470,34 @@ function MtmLayout({ visible, mtmResultsCbRef, mtmWorkerRef, mtmWorkerReady, ins
                     <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>Saved strategies</span>
                     <button disabled={cloudLoading} onClick={fetchCloudList} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '3px 8px', color: '#9CA3AF', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>Refresh</button>
                   </div>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#6B7280', display: 'flex', pointerEvents: 'none' }}>
+                      <IconSearch />
+                    </span>
+                    <input
+                      value={cloudSearchQuery}
+                      onChange={e => setCloudSearchQuery(e.target.value)}
+                      placeholder="Search saved strategies"
+                      style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 34px 9px 32px', color: '#E2E8F0', fontSize: 12, fontWeight: 600 }}
+                    />
+                    {cloudSearchQuery && (
+                      <button
+                        onClick={() => setCloudSearchQuery('')}
+                        aria-label="Clear strategy search"
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: 999, border: 'none', background: 'transparent', color: '#6B7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <IconClose />
+                      </button>
+                    )}
+                  </div>
                   <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
                     {cloudLoading ? (
                       <div style={{ padding: 14, fontSize: 12, color: '#6B7280' }}>Loading…</div>
                     ) : cloudList.length === 0 ? (
                       <div style={{ padding: 14, fontSize: 12, color: '#6B7280' }}>No saved strategies</div>
-                    ) : cloudList.map((s: any) => (
+                    ) : filteredCloudList.length === 0 ? (
+                      <div style={{ padding: 14, fontSize: 12, color: '#6B7280' }}>No saved strategies match "{deferredCloudSearchQuery}"</div>
+                    ) : filteredCloudList.map((s: any) => (
                       <div key={s.id ?? `${s.name}-${s.created_at}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <button onClick={() => handleImportSelect(s)} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0' }}>{s.name ?? 'Untitled'}</div>
@@ -3179,7 +3271,7 @@ export default function App() {
     setAutoLoginLoading(true);
     setAutoLoginError('');
     // Connect directly to backend — bypasses Vite proxy which triggers HMR reload on SSE close
-    const es = new EventSource('http://localhost:3001/api/upstox-login-stream');
+    const es = new EventSource('/api/upstox-login-stream');
     let done = false;
 
     es.addEventListener('token', (e) => {
