@@ -37,6 +37,7 @@ type TooltipWrapProps = {
   sideOffset?: number
   delayDuration?: number
   disabled?: boolean
+  avoidCollisions?: boolean
 }
 
 function TooltipWrap({
@@ -47,13 +48,14 @@ function TooltipWrap({
   sideOffset = 8,
   delayDuration = 120,
   disabled = false,
+  avoidCollisions = true,
 }: TooltipWrapProps) {
   if (!content || disabled) return <>{children}</>
   return (
     <TooltipProvider delayDuration={delayDuration}>
       <Tooltip>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent side={side} align={align} sideOffset={sideOffset}>
+        <TooltipContent side={side} align={align} sideOffset={sideOffset} avoidCollisions={avoidCollisions}>
           {content}
         </TooltipContent>
       </Tooltip>
