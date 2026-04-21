@@ -21,6 +21,7 @@ interface Props {
 
 type PlotlyLike = {
   newPlot: (root: HTMLElement, data: any[], layout: any, config?: any) => Promise<any> | void;
+  react?: (root: HTMLElement, data: any[], layout: any, config?: any) => Promise<any> | void;
   purge: (root: HTMLElement) => void;
   Plots?: { resize?: (root: HTMLElement) => void };
 };
@@ -223,21 +224,32 @@ async function fetchEvaluate(legs: LegLike[], exchange: string): Promise<Evaluat
 function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string; legs: LegLike[]; fallbackSpot: number }) {
   const plotRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<ResizeObserver | null>(null);
+  const hasRenderedPlotRef = useRef(false);
+  const plotlyRef = useRef<PlotlyLike | null>(null);
+  const latestFetchInputsRef = useRef({ exchange, legs });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [evalData, setEvalData] = useState<EvaluateResponse | null>(null);
   const [showExtremaMarkers, setShowExtremaMarkers] = useState(true);
+  const [liveUpdateSeconds, setLiveUpdateSeconds] = useState<10 | 15>(10);
+  const [nextUpdateIn, setNextUpdateIn] = useState(10);
   const showSkeleton = loading && !evalData && !error;
 
   const requestKey = useMemo(
-    () => legs.map(leg => `${leg.refId}:${leg.action}:${leg.price}:${leg.lots}:${leg.lotSize}:${leg.entrySpot ?? 0}:${leg.exchange ?? 'NSE'}`).join('|'),
+    () => legs.map(leg => `${leg.refId}:${leg.action}:${leg.price}:${leg.lots}:${leg.lotSize}:${leg.exchange ?? 'NSE'}`).join('|'),
     [legs]
   );
+
+  useEffect(() => {
+    latestFetchInputsRef.current = { exchange, legs };
+  }, [exchange, legs]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
+    setNextUpdateIn(liveUpdateSeconds);
+    hasRenderedPlotRef.current = false;
 
     fetchEvaluate(legs, exchange)
       .then((data) => {
@@ -266,7 +278,56 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
     return () => {
       cancelled = true;
     };
-  }, [exchange, legs, requestKey]);
+  }, [exchange, requestKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let refreshTimeout: number | null = null;
+    let countdownInterval: number | null = null;
+    let nextRefreshAt = Date.now() + liveUpdateSeconds * 1000;
+
+    const syncCountdown = () => {
+      setNextUpdateIn(Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000)));
+    };
+
+    const queueRefresh = () => {
+      refreshTimeout = window.setTimeout(async () => {
+        const { exchange: currentExchange, legs: currentLegs } = latestFetchInputsRef.current;
+
+        try {
+          const data = await fetchEvaluate(currentLegs, currentExchange);
+          if (cancelled) return;
+
+          if (!data) {
+            setError(`No evaluate data for ${currentExchange}.`);
+          } else if (data.error) {
+            setError(data.error);
+          } else {
+            setEvalData(data);
+            setError('');
+          }
+        } catch (err: any) {
+          if (cancelled) return;
+          setError(err?.message || `Failed to refresh ${currentExchange} payoff.`);
+        }
+
+        if (cancelled) return;
+        nextRefreshAt = Date.now() + liveUpdateSeconds * 1000;
+        setNextUpdateIn(liveUpdateSeconds);
+        queueRefresh();
+      }, liveUpdateSeconds * 1000);
+    };
+
+    setNextUpdateIn(liveUpdateSeconds);
+    countdownInterval = window.setInterval(syncCountdown, 250);
+    queueRefresh();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
+      if (countdownInterval !== null) window.clearInterval(countdownInterval);
+    };
+  }, [liveUpdateSeconds, requestKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,8 +369,23 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
       const minPoint = findExtremePoint(expiryX, expiryY, 'min');
       const todayAtSpot = nearestPoint(todayX, todayY, chartSpot);
       const expiryAtSpot = nearestPoint(expiryX, expiryY, chartSpot);
+      const yRange = Math.max(1, yMax - yMin);
+      const spotTooltipOverlap =
+        todayAtSpot && expiryAtSpot
+          ? Math.abs(todayAtSpot.y - expiryAtSpot.y) < yRange * 0.12
+          : false;
+      const todaySpotAy = spotTooltipOverlap
+        ? (todayAtSpot && todayAtSpot.y >= 0 ? 48 : -48)
+        : (todayAtSpot && todayAtSpot.y >= 0 ? -36 : 36);
+      const expirySpotAy = spotTooltipOverlap
+        ? (expiryAtSpot && expiryAtSpot.y >= 0 ? -54 : 54)
+        : (expiryAtSpot && expiryAtSpot.y >= 0 ? -52 : 52);
+      const todaySpotAx = spotTooltipOverlap ? -34 : 0;
+      const expirySpotAx = spotTooltipOverlap ? 34 : 0;
 
-      await Plotly.newPlot(
+      plotlyRef.current = Plotly;
+
+      await (hasRenderedPlotRef.current && Plotly.react ? Plotly.react : Plotly.newPlot)(
         root,
         [
           {
@@ -492,8 +568,8 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
               arrowsize: 1,
               arrowwidth: 1,
               arrowcolor: '#60a5fa',
-              ax: 0,
-              ay: todayAtSpot.y >= 0 ? -36 : 36,
+              ax: todaySpotAx,
+              ay: todaySpotAy,
               font: { color: '#dbeafe', size: 10 },
               bgcolor: 'rgba(30,41,59,0.92)',
               bordercolor: 'rgba(96,165,250,0.30)',
@@ -509,8 +585,8 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
               arrowsize: 1,
               arrowwidth: 1,
               arrowcolor: '#f43f5e',
-              ax: 0,
-              ay: expiryAtSpot.y >= 0 ? -52 : 52,
+              ax: expirySpotAx,
+              ay: expirySpotAy,
               font: { color: '#ffe4e6', size: 10 },
               bgcolor: 'rgba(76,5,25,0.88)',
               bordercolor: 'rgba(244,63,94,0.28)',
@@ -549,26 +625,36 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
         }
       );
 
-      if (resizeRef.current) resizeRef.current.disconnect();
-      resizeRef.current = new ResizeObserver(() => {
-        Plotly.Plots?.resize?.(root);
-      });
-      resizeRef.current.observe(root);
+      hasRenderedPlotRef.current = true;
+
+      if (!resizeRef.current) {
+        resizeRef.current = new ResizeObserver(() => {
+          plotlyRef.current?.Plots?.resize?.(root);
+        });
+        resizeRef.current.observe(root);
+      }
     }
 
     renderChart();
 
     return () => {
       cancelled = true;
+    };
+  }, [evalData, exchange, fallbackSpot, legs, showExtremaMarkers]);
+
+  useEffect(() => {
+    return () => {
       if (resizeRef.current) {
         resizeRef.current.disconnect();
         resizeRef.current = null;
       }
-      if (plotRef.current && (window as any).Plotly) {
-        ((window as any).Plotly as PlotlyLike).purge(plotRef.current);
+      if (plotRef.current && plotlyRef.current) {
+        plotlyRef.current.purge(plotRef.current);
       }
+      plotlyRef.current = null;
+      hasRenderedPlotRef.current = false;
     };
-  }, [evalData, exchange, fallbackSpot, legs, showExtremaMarkers]);
+  }, []);
 
   const summary = useMemo(() => {
     const profits = evalData?.profits;
@@ -629,6 +715,31 @@ function ExchangePayoffCard({ exchange, legs, fallbackSpot }: { exchange: string
           <span style={{ fontSize: 10, fontWeight: 700, color: '#E5E7EB', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '6px 10px', borderRadius: 999, background: 'rgba(96,165,250,0.10)', border: '1px solid rgba(96,165,250,0.18)' }}>{exchange}</span>
           <span style={{ fontSize: 13, color: '#C9D1DC', fontWeight: 600 }}>{[...new Set(legs.map(leg => leg.symbol))].join(', ')}</span>
           <span style={{ fontSize: 12, color: '#7A8391' }}>{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
+          <span style={{ fontSize: 10, color: '#7C8799', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {[10, 15].map((seconds) => (
+              <button
+                key={seconds}
+                type="button"
+                onClick={() => setLiveUpdateSeconds(seconds as 10 | 15)}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: liveUpdateSeconds === seconds ? '#E5E7EB' : '#8B95A7',
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: liveUpdateSeconds === seconds ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.02)',
+                  cursor: 'pointer',
+                }}
+              >
+                {seconds}s
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 11, color: '#fcd34d', fontWeight: 600, padding: '5px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.14)' }}>
+            Next update in {nextUpdateIn}s
+          </span>
           {loading && <span style={{ fontSize: 12, color: '#60a5fa' }}>Loading...</span>}
           {error && <span style={{ fontSize: 12, color: '#f87171' }}>{error}</span>}
         </div>
