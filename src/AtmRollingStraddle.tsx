@@ -501,7 +501,19 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       grid: { vertLines: { color: '#24201c' }, horzLines: { color: '#24201c' } },
       rightPriceScale: { borderColor: '#3a332a', visible: true },
       leftPriceScale: { borderColor: '#3a332a', visible: true },
-      timeScale: { borderColor: '#3a332a', timeVisible: true, secondsVisible: false, rightOffset: 8 },
+      timeScale: {
+        borderColor: '#3a332a',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 8,
+        tickMarkFormatter: (ts: number) =>
+          new Date(ts * 1000).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+      },
       localization: {
         timeFormatter: (ts: number) =>
           new Date(ts * 1000).toLocaleString('en-IN', {
