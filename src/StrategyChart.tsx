@@ -86,6 +86,14 @@ interface AccumData {
   ivs:     Map<string, LineData[]>;
 }
 
+type HoverTooltipState = {
+  visible: boolean;
+  x: number;
+  y: number;
+  timeLabel: string;
+  rows: Array<{ label: string; value: string; color: string }>;
+};
+
 function isMarketOpen(): boolean {
   const now = new Date();
   const istMin = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % 1440;
@@ -123,6 +131,62 @@ function lastTradingDay(): string {
   if (day === 0) now.setUTCDate(now.getUTCDate() - 2);
   else if (day === 6) now.setUTCDate(now.getUTCDate() - 1);
   return now.toISOString().slice(0, 10);
+}
+
+function formatTooltipTime(ts: number): string {
+  return new Date(ts * 1000).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function seriesValueAtPoint(point: unknown): number | null {
+  if (!point || typeof point !== 'object') return null;
+  const p = point as Record<string, unknown>;
+  const value = p.value;
+  if (typeof value === 'number') return value;
+  const close = p.close;
+  if (typeof close === 'number') return close;
+  return null;
+}
+
+function fmtTooltipRs(value: number): string {
+  return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtTooltipNum(value: number, digits = 2): string {
+  return value.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function getStrategyStartUnix(legs: StrategyLeg[], symbol?: string): number {
+  let min = Number.POSITIVE_INFINITY;
+  for (const leg of legs) {
+    if (symbol && leg.symbol !== symbol) continue;
+    const t = legEntryUnix(leg);
+    if (t > 0 && t < min) min = t;
+  }
+  return Number.isFinite(min) ? min : 0;
+}
+
+function getSpotBaselineAtStrategyStart(data: LineData[] | undefined, strategyStartUnix: number): number | null {
+  if (!data?.length) return null;
+  if (!strategyStartUnix) {
+    const first = data[0];
+    return typeof first?.value === 'number' ? first.value : null;
+  }
+
+  for (const pt of data) {
+    if ((pt.time as number) >= strategyStartUnix && typeof pt.value === 'number') {
+      return pt.value;
+    }
+  }
+
+  const first = data[0];
+  return typeof first?.value === 'number' ? first.value : null;
 }
 
 function formatDate(d: string): string {
@@ -870,6 +934,13 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
   const [showPositions, setShowPositions] = useState(false);
   const [, setLegendItems] = useState<{ label: string; color: string }[]>([]);
   const [chartReady,  setChartReady]  = useState(false);
+  const [hoverTooltip, setHoverTooltip] = useState<HoverTooltipState>({
+    visible: false,
+    x: 16,
+    y: 16,
+    timeLabel: '',
+    rows: [],
+  });
   // Date range shown in header — updates as user scrolls back
   const [fromDate, setFromDate] = useState<string | null>(null);
   const [toDate,   setToDate]   = useState<string | null>(null);
@@ -1627,6 +1698,121 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     ts.subscribeVisibleLogicalRangeChange(handler);
     return () => ts.unsubscribeVisibleLogicalRangeChange(handler);
   }, [loadMore, chartReady]);
+
+  useEffect(() => {
+    if (!chartReady) return;
+    const chart = chartRef.current;
+    const host = containerRef.current;
+    if (!chart || !host) return;
+
+    const handler = (param: any) => {
+      const point = param?.point;
+      const time = typeof param?.time === 'number' ? param.time : null;
+      if (!point || time == null || point.x < 0 || point.y < 0 || point.x > host.clientWidth || point.y > host.clientHeight) {
+        setHoverTooltip(prev => prev.visible ? { ...prev, visible: false } : prev);
+        return;
+      }
+
+      const ss = seriesRef.current;
+      const acc = accumRef.current;
+      const rows: Array<{ label: string; value: string; color: string }> = [];
+
+      if (showMtm && ss.mtm && (mtmView === 'all' || mtmView === 'total')) {
+        const totalPnl = seriesValueAtPoint(param.seriesData?.get?.(ss.mtm));
+        if (totalPnl != null) {
+          rows.push({ label: 'Total P&L', value: fmtTooltipRs(totalPnl), color: totalPnl >= 0 ? '#26a69a' : '#f23645' });
+        }
+      }
+
+      if (showMtm && ss.mtmPerUnderlying.size > 0) {
+        for (const [sym, series] of ss.mtmPerUnderlying.entries()) {
+          if (!(mtmView === 'all' || mtmView === sym)) continue;
+          const value = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (value != null) {
+            rows.push({ label: `MTM ${sym}`, value: fmtTooltipRs(value), color: value >= 0 ? '#26a69a' : '#f23645' });
+          }
+        }
+      }
+
+      if (showSpot) {
+        for (const [sym, series] of ss.underlyings.entries()) {
+          const spot = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (spot == null) continue;
+          const strategyStartUnix = getStrategyStartUnix(uniqueLegs, sym);
+          const baselineSpot = getSpotBaselineAtStrategyStart(acc.underlyings.get(sym), strategyStartUnix) ?? spot;
+          const move = spot - baselineSpot;
+          rows.push({
+            label: `Spot ${sym}`,
+            value: `${fmtTooltipNum(spot)} (${move >= 0 ? '+' : ''}${fmtTooltipNum(move)})`,
+            color: move >= 0 ? '#26a69a' : '#f23645',
+          });
+        }
+      }
+
+      const legByKey = new Map<string, StrategyLeg>(
+        uniqueLegs.map((leg) => [`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`, leg]),
+      );
+
+      if (showOptions) {
+        for (const [key, series] of ss.options.entries()) {
+          const value = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (value == null) continue;
+          const leg = legByKey.get(key);
+          const label = leg ? `${leg.strike}${leg.type} ${leg.symbol}` : key;
+          rows.push({ label, value: fmtTooltipRs(value), color: leg?.type === 'CE' ? '#facc15' : '#c084fc' });
+        }
+      }
+
+      if (showDelta) {
+        for (const [key, series] of ss.deltas.entries()) {
+          const value = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (value == null) continue;
+          const leg = legByKey.get(key);
+          const label = leg ? `Δ ${leg.strike}${leg.type}` : `Δ ${key}`;
+          rows.push({ label, value: fmtTooltipNum(value, 4), color: '#93c5fd' });
+        }
+      }
+
+      if (showIv) {
+        for (const [key, series] of ss.ivs.entries()) {
+          const value = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (value == null) continue;
+          const leg = legByKey.get(key);
+          const label = leg ? `IV ${leg.strike}${leg.type}` : `IV ${key}`;
+          rows.push({ label, value: `${fmtTooltipNum(value, 2)}%`, color: '#c4b5fd' });
+        }
+      }
+
+      if (showAtmIv) {
+        for (const [sym, series] of atmIvSeriesRef.current.entries()) {
+          const value = seriesValueAtPoint(param.seriesData?.get?.(series));
+          if (value == null) continue;
+          rows.push({ label: `ATM IV ${sym}`, value: `${fmtTooltipNum(value, 2)}%`, color: ATM_IV_COLOR });
+        }
+      }
+
+      if (rows.length === 0) {
+        setHoverTooltip(prev => prev.visible ? { ...prev, visible: false } : prev);
+        return;
+      }
+
+      const boxWidth = 260;
+      const boxHeight = 42 + rows.length * 26;
+      const x = Math.min(Math.max(12, point.x + 14), Math.max(12, host.clientWidth - boxWidth - 12));
+      const y = Math.min(Math.max(12, point.y + 14), Math.max(12, host.clientHeight - boxHeight - 12));
+
+      setHoverTooltip({
+        visible: true,
+        x,
+        y,
+        timeLabel: formatTooltipTime(time),
+        rows,
+      });
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => chart.unsubscribeCrosshairMove(handler);
+  }, [chartReady, showSpot, showOptions, showMtm, mtmView, showDelta, showIv, showAtmIv, uniqueLegs]);
 
   // Mark user interaction (scroll/drag) to throttle WS updates
   useEffect(() => {
@@ -2712,6 +2898,57 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        {hoverTooltip.visible && (
+          <div
+            style={{
+              position: 'absolute',
+              left: hoverTooltip.x,
+              top: hoverTooltip.y,
+              zIndex: 12,
+              minWidth: 220,
+              maxWidth: 260,
+              pointerEvents: 'none',
+              borderRadius: 12,
+              background: 'rgba(16,18,24,0.96)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              boxShadow: '0 14px 36px rgba(0,0,0,0.42)',
+              padding: '10px 12px',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {hoverTooltip.timeLabel}
+            </div>
+            {hoverTooltip.rows.map((row, idx) => (
+              <div
+                key={`${row.label}-${idx}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingTop: idx === 0 ? 0 : 6,
+                  marginTop: idx === 0 ? 0 : 6,
+                  borderTop: idx === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#CBD5E1', letterSpacing: '0.04em' }}>{row.label}</span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: row.color,
+                    fontFamily: 'var(--font-family-sans)',
+                    textAlign: 'right',
+                  }}
+                >
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         {hasContent && loading && <ChartSkeletonOverlay label="Loading strategy chart" />}
       </div>
 
