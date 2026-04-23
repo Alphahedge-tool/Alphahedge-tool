@@ -397,6 +397,15 @@ function formatTooltipTime(t: Time): string {
   return '';
 }
 
+function formatExpiryLabel(expiryMs: number): string {
+  return new Date(expiryMs).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
 export default function AtmRollingStraddle({ instruments }: Props) {
   const [underlying, setUnderlying] = useState('');
   const [expiry, setExpiry] = useState<number | null>(null);
@@ -425,7 +434,8 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const intervalRef = useRef(interval);
   const [splitRatio, setSplitRatio] = useState(0.62);
   const [splitterTop, setSplitterTop] = useState<number>(0);
-  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [showBottomPane, setShowBottomPane] = useState(true);
+  const [hasBottomPaneData, setHasBottomPaneData] = useState(false);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
@@ -474,24 +484,37 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
   useEffect(() => { intervalRef.current = interval; }, [interval]);
 
-  const applyPaneHeights = useCallback((ratio: number) => {
+  const bottomPaneVisible = showBottomPane && hasBottomPaneData;
+
+  const syncBottomPaneLayout = useCallback((ratio: number) => {
     const chart = chartRef.current;
     const host = chartHostRef.current;
-    if (!chart || !host || !splitEnabled) return;
+    if (!chart || !host) return;
+    const bottomSeries = [ceSeriesRef.current, peSeriesRef.current, strikeSeriesRef.current];
+    for (const series of bottomSeries) {
+      if (!series) continue;
+      try { series.applyOptions({ visible: bottomPaneVisible }); } catch { /* ignore */ }
+    }
     const h = host.clientHeight;
     if (h <= 0) return;
-    const minTop = 150;
-    const minBottom = 120;
-    const topPx = Math.max(minTop, Math.min(h - minBottom, Math.floor(h * ratio)));
-    const bottomPx = Math.max(minBottom, h - topPx);
     try {
+      if (!bottomPaneVisible) {
+        chart.panes()[0]?.setHeight(h);
+        chart.panes()[1]?.setHeight(0);
+        setSplitterTop(h);
+        return;
+      }
+      const minTop = 150;
+      const minBottom = 120;
+      const topPx = Math.max(minTop, Math.min(h - minBottom, Math.floor(h * ratio)));
+      const bottomPx = Math.max(minBottom, h - topPx);
       chart.panes()[0]?.setHeight(topPx);
       chart.panes()[1]?.setHeight(bottomPx);
+      setSplitterTop(topPx);
     } catch {
       return;
     }
-    setSplitterTop(topPx);
-  }, [splitEnabled]);
+  }, [bottomPaneVisible]);
 
   useEffect(() => {
     if (!chartHostRef.current) return;
@@ -596,7 +619,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         ref.current = null;
       }
     }
-    setSplitEnabled(false);
+    setHasBottomPaneData(false);
   }, []);
 
   const applyLive = useCallback(() => {
@@ -861,8 +884,8 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       }
 
       // Show dedicated pane split and apply initial heights.
-      setSplitEnabled(true);
-      setTimeout(() => applyPaneHeights(splitRatio), 0);
+      setHasBottomPaneData(true);
+      setTimeout(() => syncBottomPaneLayout(splitRatio), 0);
 
       chart.timeScale().fitContent();
 
@@ -1003,7 +1026,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoadingNote('');
       setLoading(false);
     }
-  }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, underlying]);
+  }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, syncBottomPaneLayout, underlying]);
 
   // Auto-trigger load once underlying + expiry are both set for the first time
   // Must be placed AFTER handleLoad to avoid temporal dead-zone error
@@ -1017,20 +1040,19 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   useEffect(() => () => cleanupLive(), [cleanupLive]);
 
   useEffect(() => {
-    if (!splitEnabled) return;
-    applyPaneHeights(splitRatio);
-  }, [splitRatio, splitEnabled, applyPaneHeights]);
+    syncBottomPaneLayout(splitRatio);
+  }, [splitRatio, syncBottomPaneLayout]);
 
   useEffect(() => {
     const host = chartHostRef.current;
-    if (!host || !splitEnabled) return;
-    const ro = new ResizeObserver(() => applyPaneHeights(splitRatio));
+    if (!host) return;
+    const ro = new ResizeObserver(() => syncBottomPaneLayout(splitRatio));
     ro.observe(host);
     return () => ro.disconnect();
-  }, [splitEnabled, splitRatio, applyPaneHeights]);
+  }, [splitRatio, syncBottomPaneLayout]);
 
   const onSplitterMouseDown = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!splitEnabled) return;
+    if (!bottomPaneVisible) return;
     e.preventDefault();
     const host = chartHostRef.current;
     if (!host) return;
@@ -1050,45 +1072,68 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [splitEnabled]);
+  }, [bottomPaneVisible]);
 
   return (
     <div className={s.root}>
       <div className={s.toolbar}>
-        <div className={s.field}>
-          <span className={s.label}>Underlying</span>
-          <select className={s.select} value={underlying} onChange={e => { setUnderlying(e.target.value); setExpiry(null); }}>
-            <option value="">Select</option>
-            {underlyings.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
+        <div className={s.toolbarControls}>
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>Underlying</span>
+            <select className={s.compactSelect} value={underlying} onChange={e => { setUnderlying(e.target.value); setExpiry(null); }}>
+              <option value="">Select</option>
+              {underlyings.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>Expiry</span>
+            <select className={s.compactSelect} value={expiry ?? ''} onChange={e => setExpiry(e.target.value ? Number(e.target.value) : null)} disabled={!underlying}>
+              <option value="">Select</option>
+              {expiries.map(ex => (
+                <option key={ex} value={ex}>
+                  {formatExpiryLabel(ex)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>Timeframe</span>
+            <select className={s.compactSelect} value={interval.label} onChange={e => setInterval(INTERVALS.find(x => x.label === e.target.value) ?? INTERVALS[1])}>
+              {INTERVALS.map(iv => <option key={iv.label} value={iv.label}>{iv.label}</option>)}
+            </select>
+          </div>
+
+          <label className={s.toggleField}>
+            <span className={s.compactLabel}>Bottom Pane</span>
+            <input
+              className={s.toggleInput}
+              type="checkbox"
+              checked={showBottomPane}
+              onChange={e => setShowBottomPane(e.target.checked)}
+            />
+            <span className={s.toggleTrack}>
+              <span className={s.toggleThumb} />
+            </span>
+          </label>
         </div>
 
-        <div className={s.field}>
-          <span className={s.label}>Expiry</span>
-          <select className={s.select} value={expiry ?? ''} onChange={e => setExpiry(e.target.value ? Number(e.target.value) : null)} disabled={!underlying}>
-            <option value="">Select</option>
-            {expiries.map(ex => (
-              <option key={ex} value={ex}>
-                {new Date(ex).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'Asia/Kolkata' })}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div className={s.toolbarSummary}>
+          <div className={s.liveBlock}>
+            <div className={s.liveMetric}>
+              <span className={s.liveMetricLabel}>ATM</span>
+              <strong>{liveAtmStrike ? liveAtmStrike.toFixed(0) : '--'}</strong>
+            </div>
+            <div className={s.liveMetric}>
+              <span className={s.liveMetricLabel}>Premium</span>
+              <strong>{livePremium > 0 ? livePremium.toFixed(2) : '--'}</strong>
+            </div>
+          </div>
 
-        <div className={s.field}>
-          <span className={s.label}>Interval</span>
-          <select className={s.select} value={interval.label} onChange={e => setInterval(INTERVALS.find(x => x.label === e.target.value) ?? INTERVALS[1])}>
-            {INTERVALS.map(iv => <option key={iv.label} value={iv.label}>{iv.label}</option>)}
-          </select>
-        </div>
-
-        <button className={s.loadBtn} onClick={handleLoad} disabled={loading || !underlying || !expiry}>
-          {loading ? 'Loading...' : 'Load ATM Rolling'}
-        </button>
-
-        <div className={s.liveBlock}>
-          <span>ATM: {liveAtmStrike ? liveAtmStrike.toFixed(0) : '--'}</span>
-          <span>Premium: {livePremium > 0 ? livePremium.toFixed(2) : '--'}</span>
+          <button className={s.loadBtn} onClick={handleLoad} disabled={loading || !underlying || !expiry}>
+            {loading ? 'Loading...' : 'Load'}
+          </button>
         </div>
       </div>
 
@@ -1106,7 +1151,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
             <div className={s.tooltipRow}><span>ATM PE</span><b>{tooltip.pe != null ? tooltip.pe.toFixed(2) : '--'}</b></div>
           </div>
         )}
-        {splitEnabled && (
+        {bottomPaneVisible && (
           <>
             <div className={s.paneLabel} style={{ top: 8 }}>
               Top: Straddle + Spot + IV
@@ -1116,7 +1161,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
             </div>
           </>
         )}
-        {splitEnabled && (
+        {bottomPaneVisible && (
           <div
             className={s.paneSplitter}
             style={{ top: Math.max(0, splitterTop - 2) }}

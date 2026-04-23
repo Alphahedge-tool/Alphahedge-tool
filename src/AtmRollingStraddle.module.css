@@ -9,44 +9,126 @@
 
 .toolbar {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(120, 80, 30, 0.22);
   background: #1a1714;
   flex-wrap: wrap;
 }
 
-.field {
+.toolbarControls {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 140px;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 420px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
-.label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.04em;
+.compactField {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(15, 14, 12, 0.9);
+}
+
+.toggleField {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(15, 14, 12, 0.9);
+  cursor: pointer;
+  user-select: none;
+}
+
+.compactLabel {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.52);
   text-transform: uppercase;
+  font-weight: 700;
 }
 
-.select {
-  height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #0f0e0c;
+.compactSelect {
+  height: 24px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: #d7d9df;
-  border-radius: 6px;
-  padding: 0 8px;
   font-size: 12px;
+  font-weight: 600;
+  padding: 0 22px 0 0;
+  outline: none;
+  color-scheme: dark;
 }
 
-.select:disabled {
+.compactSelect:disabled {
   opacity: 0.45;
 }
 
+.compactSelect option {
+  background: #141210;
+  color: #e5e7eb;
+}
+
+.toggleInput {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggleTrack {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.toggleInput:checked + .toggleTrack {
+  background: rgba(250, 204, 21, 0.22);
+  border-color: rgba(250, 204, 21, 0.46);
+}
+
+.toggleInput:checked + .toggleTrack .toggleThumb {
+  transform: translateX(16px);
+  background: #facc15;
+}
+
+.toolbarSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .loadBtn {
-  height: 30px;
+  height: 28px;
   border: 1px solid rgba(250, 204, 21, 0.45);
   background: rgba(250, 204, 21, 0.12);
   color: #facc15;
@@ -55,6 +137,7 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .loadBtn:disabled {
@@ -63,12 +146,64 @@
 }
 
 .liveBlock {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.72);
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.liveMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
+}
+
+.liveMetricLabel {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.48);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.liveMetric strong {
+  color: #f3f4f6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .toolbarSummary {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .toolbarControls {
+    gap: 6px;
+  }
+
+  .compactField {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .compactSelect {
+    width: 100%;
+    text-align: right;
+  }
 }
 
 .error {
