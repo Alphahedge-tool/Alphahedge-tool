@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useId, useRef, useEffect, useMemo } from 'react';
 import { useInstrumentsCtx } from './AppContext';
 import type { Instrument } from './useInstruments';
+import { TooltipWrap } from './components/ui/tooltip';
 import s from './HomeWorkspace.module.css';
 
 // Lazy imports
@@ -20,9 +21,11 @@ const FiiDii            = React.lazy(() => import('./FiiDii'));
 const AtmRollingStraddle = React.lazy(() => import('./AtmRollingStraddle'));
 const GammaExposure = React.lazy(() => import('./GammaExposure'));
 const TotalOiChart  = React.lazy(() => import('./TotalOiChart'));
+const OiByExpiryChart = React.lazy(() => import('./OiByExpiryChart'));
 const DeltaVolPcr   = React.lazy(() => import('./DeltaVolPcr'));
+const ExpiryOiOverview = React.lazy(() => import('./ExpiryOiOverview'));
 
-type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew' | 'fwd-vol' | 'pcr-chart' | 'max-pain' | 'oi-buildup' | 'iv-rank' | 'oi-heatmap' | 'support-resistance' | 'fii-dii' | 'atm-rolling-straddle' | 'gamma-exposure' | 'total-oi-chart' | 'delta-vol-pcr';
+type PanelContent = 'empty' | 'option-chain' | 'candle-chart' | 'iv-chart' | 'open-interest' | 'vol-skew' | 'fwd-vol' | 'pcr-chart' | 'max-pain' | 'oi-buildup' | 'iv-rank' | 'oi-heatmap' | 'support-resistance' | 'fii-dii' | 'atm-rolling-straddle' | 'gamma-exposure' | 'total-oi-chart' | 'oi-by-expiry' | 'delta-vol-pcr' | 'expiry-oi-overview';
 
 interface Panel {
   id: string;
@@ -117,7 +120,9 @@ const CONTENT_OPTIONS: { type: PanelContent; label: string; icon: React.ReactNod
   { type: 'atm-rolling-straddle', label: 'ATM Rolling Straddle', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20h18"/><path d="M6 16l4-4 3 3 5-7"/><circle cx="10" cy="12" r="1.5"/><circle cx="13" cy="15" r="1.5"/></svg> },
   { type: 'gamma-exposure', label: 'Gamma Exposure', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19h16"/><path d="M7 15V9"/><path d="M12 19V5"/><path d="M17 13v-3"/></svg> },
   { type: 'total-oi-chart', label: 'Total OI Chart', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-4"/></svg> },
+  { type: 'oi-by-expiry', label: 'OI by Expiry', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-4"/><path d="M7 9h10" strokeDasharray="2 2"/></svg> },
   { type: 'delta-vol-pcr', label: 'Delta & Vol PCR', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m6 15 4-4 3 3 5-7"/><path d="M7 8h3"/><path d="M14 17h3"/></svg> },
+  { type: 'expiry-oi-overview', label: 'Expiry OI Overview', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18"/><path d="M3 10h18"/><path d="M3 20h18"/><path d="M7 10v10"/><path d="M12 13v7"/><path d="M17 16v4"/></svg> },
 ];
 
 const MIN_COL_PX = 260;
@@ -413,9 +418,23 @@ const PanelBody = React.memo(function PanelBody({ content, symbol, exchange, exp
           <TotalOiChart nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} />
         </div>
       )}
+      {content === 'oi-by-expiry' && (
+        <div style={{ width: '100%', height: '100%' }}>
+          <OiByExpiryChart nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} />
+        </div>
+      )}
       {content === 'delta-vol-pcr' && (
         <div style={{ width: '100%', height: '100%' }}>
           <DeltaVolPcr nubraInstruments={nubraInstruments} initialSymbol={symbol || 'NIFTY'} />
+        </div>
+      )}
+      {content === 'expiry-oi-overview' && (
+        <div style={{ width: '100%', height: '100%', padding: '10px', boxSizing: 'border-box', overflow: 'auto' }}>
+          <ExpiryOiOverview
+            nubraInstruments={nubraInstruments}
+            initialSymbol={symbol || 'NIFTY'}
+            initialSelectedExpiry={expiries[0]}
+          />
         </div>
       )}
     </React.Suspense>
@@ -473,13 +492,15 @@ const PanelCard = React.memo(function PanelCard({ panel, onClose, onToggleMin, o
         <div className={s.controls}>
           {/* Content menu */}
           <div className={s.menuWrap}>
-            <button className={`${s.ctrlBtn} ${s.addContentBtn}`}
-              onClick={e => { e.stopPropagation(); setShowMenu(v => !v); setShowPanelMenu(false); }} title="Change content">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <line x1="5" y1="1" x2="5" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
+            <TooltipWrap content="Change content" side="bottom" align="center" sideOffset={10}>
+              <button className={`${s.ctrlBtn} ${s.addContentBtn}`}
+                onClick={e => { e.stopPropagation(); setShowMenu(v => !v); setShowPanelMenu(false); }} aria-label="Change content">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <line x1="5" y1="1" x2="5" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </TooltipWrap>
             {showMenu && (
               <div className={s.menu} onMouseDown={e => e.stopPropagation()}>
                 {CONTENT_OPTIONS.map(opt => (
@@ -499,15 +520,17 @@ const PanelCard = React.memo(function PanelCard({ panel, onClose, onToggleMin, o
 
           {/* Panel layout menu */}
           <div className={s.menuWrap}>
-            <button className={`${s.ctrlBtn} ${s.minBtn}`}
-              onClick={e => { e.stopPropagation(); setShowPanelMenu(v => !v); setShowMenu(false); }} title="Add panel">
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                <rect x="0.5" y="0.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="6.5" y="0.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="0.5" y="6.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="6.5" y="6.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-              </svg>
-            </button>
+            <TooltipWrap content="Add panel" side="bottom" align="center" sideOffset={10}>
+              <button className={`${s.ctrlBtn} ${s.minBtn}`}
+                onClick={e => { e.stopPropagation(); setShowPanelMenu(v => !v); setShowMenu(false); }} aria-label="Add panel">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <rect x="0.5" y="0.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="6.5" y="0.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="0.5" y="6.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="6.5" y="6.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+              </button>
+            </TooltipWrap>
             {showPanelMenu && (
               <div className={s.menu} onMouseDown={e => e.stopPropagation()}>
                 <button className={s.menuItem} onClick={() => { onAddSide(panel.id); setShowPanelMenu(false); }}>
@@ -558,9 +581,11 @@ const PanelCard = React.memo(function PanelCard({ panel, onClose, onToggleMin, o
             )}
           </div>
 
-          <button className={`${s.ctrlBtn} ${s.closeBtn}`} onClick={() => onClose(panel.id)} title="Close">
-            <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
+          <TooltipWrap content="Close" side="bottom" align="center" sideOffset={10}>
+            <button className={`${s.ctrlBtn} ${s.closeBtn}`} onClick={() => onClose(panel.id)} aria-label="Close">
+              <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </TooltipWrap>
         </div>
       </div>
 
@@ -819,7 +844,9 @@ const CONTENT_SHORT: Record<PanelContent, string> = {
   'atm-rolling-straddle': 'ATM Roll',
   'gamma-exposure':      'GEX',
   'total-oi-chart':      'Total OI',
+  'oi-by-expiry':        'OI/Expiry',
   'delta-vol-pcr':       'D/V PCR',
+  'expiry-oi-overview':  'Expiry OI',
 };
 
 // ── TemplatePicker ─────────────────────────────────────────────────────────────
@@ -1056,28 +1083,32 @@ function TemplatePicker({ onApply }: { onApply: (tpl: LayoutTemplate) => void })
             <div className={s.templateGrid}>
               {TEMPLATES.map(tpl => (
                 <div key={tpl.id} className={s.templateCardWrap}>
-                  <button
-                    className={s.templateCardApplySave}
-                    title="Apply & save layout"
-                    onClick={(e) => { e.stopPropagation(); quickApplyAndSave(tpl); }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                    </svg>
-                  </button>
+                  <TooltipWrap content="Apply and save layout" side="top" align="center" sideOffset={10}>
+                    <button
+                      className={s.templateCardApplySave}
+                      aria-label="Apply and save layout"
+                      onClick={(e) => { e.stopPropagation(); quickApplyAndSave(tpl); }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                      </svg>
+                    </button>
+                  </TooltipWrap>
                   <button className={s.templateCard} onClick={() => onApply(tpl)}>
                     <div className={s.templatePreview}>{tpl.preview}</div>
                     <div className={s.templateLabel}>{tpl.label}</div>
                   </button>
-                  <button
-                    className={s.templateCardSave}
-                    title="Save this template"
-                    onClick={(e) => { e.stopPropagation(); openTemplateSaveInput(tpl); }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                    </svg>
-                  </button>
+                  <TooltipWrap content="Save this template" side="top" align="center" sideOffset={10}>
+                    <button
+                      className={s.templateCardSave}
+                      aria-label="Save this template"
+                      onClick={(e) => { e.stopPropagation(); openTemplateSaveInput(tpl); }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                      </svg>
+                    </button>
+                  </TooltipWrap>
                 </div>
               ))}
             </div>
@@ -1110,9 +1141,11 @@ function TemplatePicker({ onApply }: { onApply: (tpl: LayoutTemplate) => void })
                       </div>
                       <span className={s.savedCardName}>{t.name}</span>
                     </button>
-                    <button className={s.savedCardDel} onClick={() => deleteSaved(t.id)} title="Delete">
-                      <svg width="9" height="9" viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                    </button>
+                    <TooltipWrap content="Delete saved layout" side="top" align="center" sideOffset={10}>
+                      <button className={s.savedCardDel} onClick={() => deleteSaved(t.id)} aria-label="Delete saved layout">
+                        <svg width="9" height="9" viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                      </button>
+                    </TooltipWrap>
                   </div>
                 ))}
               </div>
@@ -1738,15 +1771,17 @@ export default function HomeWorkspace() {
       {rowArea}
 
       {/* ── Layout switcher button (TradingView-style) ── */}
-      <button
-        className={s.layoutSwitchBtn}
-        title="Switch layout"
-        onClick={() => setShowLayoutPicker(v => !v)}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-        </svg>
-      </button>
+      <TooltipWrap content="Switch layout" side="left" align="center" sideOffset={12}>
+        <button
+          className={s.layoutSwitchBtn}
+          aria-label="Switch layout"
+          onClick={() => setShowLayoutPicker(v => !v)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+      </TooltipWrap>
 
       {/* ── Layout picker overlay ── */}
       {showLayoutPicker && (

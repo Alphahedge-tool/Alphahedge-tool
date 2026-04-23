@@ -1,0 +1,328 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(82, 143, 255, 0.07), transparent 32%),
+    linear-gradient(180deg, rgba(17, 20, 27, 0.96), rgba(10, 13, 18, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.toolbarControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.compactField,
+.expiryDropdownBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(15, 14, 12, 0.9);
+}
+
+.compactLabel {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.52);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.compactSelect {
+  height: 24px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #d7d9df;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 22px 0 0;
+  outline: none;
+  color-scheme: dark;
+}
+
+.compactSelect:disabled {
+  opacity: 0.45;
+}
+
+.compactSelect option {
+  background: #141210;
+  color: #e5e7eb;
+}
+
+.expiryDropdownWrap {
+  position: relative;
+}
+
+.expiryDropdownBtn {
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #d7d9df;
+  cursor: pointer;
+}
+
+.expiryDropdownBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.expiryDropdownValue {
+  font-size: 12px;
+  font-weight: 600;
+  color: #d7d9df;
+}
+
+.expiryDropdownCaret {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.expiryDropdownMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(18, 20, 26, 0.98);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.expiryDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.expiryDropdownItem input {
+  accent-color: #3b82f6;
+}
+
+.expiryDropdownItemActive {
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.topGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.18fr) minmax(0, 0.88fr) minmax(0, 0.84fr);
+  gap: 12px;
+}
+
+.prominentCard {
+  border-radius: 16px;
+  border-color: rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(circle at top right, rgba(88, 138, 255, 0.12), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(31, 224, 175, 0.07), transparent 36%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(10, 13, 19, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 30px rgba(0, 0, 0, 0.22);
+}
+
+.topCardButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topCardButtonActive {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(94, 152, 255, 0.52), 0 0 0 4px rgba(94, 152, 255, 0.12);
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 4px 0 2px;
+}
+
+.sectionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.expirySection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(circle at top right, rgba(82, 143, 255, 0.1), transparent 32%),
+    radial-gradient(circle at bottom left, rgba(22, 215, 170, 0.07), transparent 34%),
+    linear-gradient(180deg, rgba(17, 20, 27, 0.97), rgba(10, 13, 18, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #edf3ff;
+}
+
+.sectionSub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #95a3bc;
+}
+
+.sectionPcr {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(101, 147, 255, 0.22);
+  background: rgba(63, 92, 158, 0.2);
+  color: #dce8ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sectionChartWrap {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.sectionLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detailMetricGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+  gap: 12px;
+}
+
+.detailMetricCard {
+  border-radius: 14px;
+  border-color: rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(180deg, rgba(19, 23, 31, 0.96), rgba(11, 14, 20, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 22px rgba(0, 0, 0, 0.14);
+}
+
+.detailTitle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(121, 157, 255, 0.18);
+  background:
+    radial-gradient(circle at top center, rgba(82, 143, 255, 0.14), transparent 60%),
+    rgba(255, 255, 255, 0.03);
+  font-size: 14px;
+  font-weight: 700;
+  color: #edf3ff;
+  letter-spacing: 0.02em;
+}
+
+.detailSubtitle {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #95a3bc;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.emptyState {
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #aeb8c9;
+  font-size: 13px;
+}
+
+@media (max-width: 1180px) {
+  .topGrid,
+  .detailGrid,
+  .sectionGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .detailMetricGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .toolbarControls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .compactField,
+  .expiryDropdownBtn {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .topGrid,
+  .detailGrid,
+  .sectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionChartWrap,
+  .detailMetricGrid {
+    grid-template-columns: 1fr;
+  }
+}
