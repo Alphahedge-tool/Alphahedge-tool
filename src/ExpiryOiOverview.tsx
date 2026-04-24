@@ -524,6 +524,36 @@ function MetricPie({
   );
 }
 
+function CompactMetricPie({
+  callValue,
+  putValue,
+  size = 72,
+  centerValue,
+  centerLabel,
+}: {
+  callValue: number;
+  putValue: number;
+  size?: number;
+  centerValue?: string;
+  centerLabel?: string;
+}) {
+  const total = Math.max(callValue, 0) + Math.max(putValue, 0);
+  const callPct = total > 0 ? (Math.max(callValue, 0) / total) * 100 : 50;
+  const pieBg = `conic-gradient(#1fe0af 0 ${callPct}%, #ff6f91 ${callPct}% 100%)`;
+
+  return (
+    <div className={styles.metricPieShell} style={{ width: size, height: size }}>
+      <div className={styles.compactMetricPie} style={{ width: size, height: size, background: pieBg }} aria-hidden="true" />
+      {(centerValue || centerLabel) && (
+        <div className={styles.metricPieCenter}>
+          {centerLabel ? <span className={styles.metricPieCenterLabel}>{centerLabel}</span> : null}
+          {centerValue ? <strong className={styles.metricPieCenterValue}>{centerValue}</strong> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExpiryTotalOiCard({
   expiry,
   title,
@@ -622,7 +652,7 @@ function DetailMetricCard({
       </div>
       <div className={styles.detailMetricBody}>
         <div className={styles.detailMetricPieWrap}>
-          <MetricPie callValue={callValue} putValue={putValue} size={72} centerLabel="Total" centerValue={totalValue} />
+          <CompactMetricPie callValue={callValue} putValue={putValue} size={72} centerLabel="Total" centerValue={totalValue} />
         </div>
         <div className={base.summaryCardCompactBody}>
           <div className={base.summaryCompactRow}>
@@ -753,6 +783,8 @@ function ExpiryTrendChart({
   const putSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const initialFitDoneRef = useRef(false);
   const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+  const hoveredTimeRef = useRef<number | null>(null);
+  const hoverRafRef = useRef<number | null>(null);
   const [showChg, setShowChg] = useState(defaultShowChg);
   const [history, setHistory] = useState<SummaryTrendPoint[]>(
     initialHistory && initialHistory.length > 0
@@ -794,6 +826,16 @@ function ExpiryTrendChart({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+
+    const pushHoveredTime = (nextTime: number | null) => {
+      if (hoveredTimeRef.current === nextTime) return;
+      hoveredTimeRef.current = nextTime;
+      if (hoverRafRef.current != null) cancelAnimationFrame(hoverRafRef.current);
+      hoverRafRef.current = requestAnimationFrame(() => {
+        setHoveredTime(nextTime);
+        hoverRafRef.current = null;
+      });
+    };
 
     const chart = createChart(host, {
       width: Math.max(host.clientWidth, 120),
@@ -857,17 +899,17 @@ function ExpiryTrendChart({
     chart.subscribeCrosshairMove(param => {
       const directTime = toSummaryTrendTsSec(param.time);
       if (directTime != null) {
-        setHoveredTime(directTime);
+        pushHoveredTime(directTime);
         return;
       }
       if (param.point) {
         const coordinateTime = toSummaryTrendTsSec(chart.timeScale().coordinateToTime(param.point.x));
         if (coordinateTime != null) {
-          setHoveredTime(coordinateTime);
+          pushHoveredTime(coordinateTime);
           return;
         }
       }
-      setHoveredTime(null);
+      pushHoveredTime(null);
     });
 
     const resizeObserver = new ResizeObserver(entries => {
@@ -878,6 +920,7 @@ function ExpiryTrendChart({
     resizeObserver.observe(host);
 
     return () => {
+      if (hoverRafRef.current != null) cancelAnimationFrame(hoverRafRef.current);
       resizeObserver.disconnect();
       callSeriesRef.current = null;
       putSeriesRef.current = null;
