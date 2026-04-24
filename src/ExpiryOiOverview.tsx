@@ -447,7 +447,19 @@ function aggregateTrendHistories(histories: SummaryTrendPoint[][]): SummaryTrend
   return normalizeSummaryTrendHistory([...bucket.values()].sort((a, b) => a.ts - b.ts));
 }
 
-function MetricPie({ callValue, putValue }: { callValue: number; putValue: number }) {
+function MetricPie({
+  callValue,
+  putValue,
+  size = 96,
+  centerValue,
+  centerLabel,
+}: {
+  callValue: number;
+  putValue: number;
+  size?: number;
+  centerValue?: string;
+  centerLabel?: string;
+}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -499,7 +511,17 @@ function MetricPie({ callValue, putValue }: { callValue: number; putValue: numbe
     return () => root.dispose();
   }, [callValue, putValue]);
 
-  return <div ref={hostRef} className={base.summaryPieHost} aria-hidden="true" />;
+  return (
+    <div className={styles.metricPieShell} style={{ width: size, height: size }}>
+      <div ref={hostRef} className={base.summaryPieHost} style={{ width: size, height: size }} aria-hidden="true" />
+      {(centerValue || centerLabel) && (
+        <div className={styles.metricPieCenter}>
+          {centerLabel ? <span className={styles.metricPieCenterLabel}>{centerLabel}</span> : null}
+          {centerValue ? <strong className={styles.metricPieCenterValue}>{centerValue}</strong> : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ExpiryTotalOiCard({
@@ -598,20 +620,25 @@ function DetailMetricCard({
         </div>
         <span className={base.summaryPcrChipSm}>PCR {fmtRatio(pcr)}</span>
       </div>
-      <div className={base.summaryCardCompactBody}>
-        <div className={base.summaryCompactRow}>
-          <span className={`${base.summaryLegendDot} ${base.summaryLegendDotCall}`} />
-          <span className={base.summaryCompactLabel}>CE</span>
-          <span className={base.summaryCompactValue}>{formatter(callValue)}</span>
+      <div className={styles.detailMetricBody}>
+        <div className={styles.detailMetricPieWrap}>
+          <MetricPie callValue={callValue} putValue={putValue} size={72} centerLabel="Total" centerValue={totalValue} />
         </div>
-        <div className={base.summaryCompactRow}>
-          <span className={`${base.summaryLegendDot} ${base.summaryLegendDotPut}`} />
-          <span className={base.summaryCompactLabel}>PE</span>
-          <span className={base.summaryCompactValue}>{formatter(putValue)}</span>
-        </div>
-        <div className={base.summaryCompactTotal}>
-          <span className={base.summaryCompactTotalLabel}>Total</span>
-          <span className={base.summaryCompactTotalValue}>{totalValue}</span>
+        <div className={base.summaryCardCompactBody}>
+          <div className={base.summaryCompactRow}>
+            <span className={`${base.summaryLegendDot} ${base.summaryLegendDotCall}`} />
+            <span className={base.summaryCompactLabel}>CE</span>
+            <span className={base.summaryCompactValue}>{formatter(callValue)}</span>
+          </div>
+          <div className={base.summaryCompactRow}>
+            <span className={`${base.summaryLegendDot} ${base.summaryLegendDotPut}`} />
+            <span className={base.summaryCompactLabel}>PE</span>
+            <span className={base.summaryCompactValue}>{formatter(putValue)}</span>
+          </div>
+          <div className={base.summaryCompactTotal}>
+            <span className={base.summaryCompactTotalLabel}>Total</span>
+            <span className={base.summaryCompactTotalValue}>{totalValue}</span>
+          </div>
         </div>
       </div>
     </article>

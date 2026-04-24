@@ -254,6 +254,59 @@
     0 10px 22px rgba(0, 0, 0, 0.14);
 }
 
+.detailMetricBody {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.detailMetricPieWrap {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top center, rgba(82, 143, 255, 0.10), transparent 58%),
+    rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.metricPieShell {
+  position: relative;
+}
+
+.metricPieCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.metricPieCenterLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7f8da7;
+}
+
+.metricPieCenterValue {
+  max-width: 50px;
+  font-size: 11px;
+  line-height: 1.05;
+  font-weight: 800;
+  color: #eef4ff;
+  word-break: break-word;
+}
+
 .detailTitle {
   display: inline-flex;
   align-items: center;
@@ -324,5 +377,13 @@
   .sectionChartWrap,
   .detailMetricGrid {
     grid-template-columns: 1fr;
+  }
+
+  .detailMetricBody {
+    grid-template-columns: 1fr;
+  }
+
+  .detailMetricPieWrap {
+    margin: 0 auto;
   }
 }
