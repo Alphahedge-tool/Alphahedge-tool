@@ -334,9 +334,10 @@ function MarketTickerMini({
 }) {
   const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cardBg = 'linear-gradient(180deg, rgba(20,24,31,0.92) 0%, rgba(13,16,22,0.96) 100%)';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, marginRight: 4 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, marginRight: 4, minWidth: 0, overflow: 'hidden' }}>
       {TICKER_SYMBOLS.map(({ label }, idx) => {
         const d = nubraNavIndex.get(label);
         const history = nubraNavHistory.get(label) ?? [];
@@ -345,59 +346,93 @@ function MarketTickerMini({
         const pointChange = d?.pointChange ?? null;
         const up = pointChange == null ? null : pointChange >= 0;
         const chgColor = up == null ? '#6b7280' : up ? '#26a69a' : '#ef5350';
-        const sparkColor = up == null ? '#64748b' : up ? '#26a69a' : '#ef5350';
+        const sparkColor = up == null ? '#64748b' : up ? '#22c55e' : '#f87171';
         const sparkPoints = history.slice(-48);
-        const sparkPath = (() => {
-          if (sparkPoints.length < 2) return '';
+        const spark = (() => {
+          if (sparkPoints.length < 2) return { line: '', area: '', lastX: 68, lastY: 14 };
           const values = sparkPoints
             .map(point => point.value)
             .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-          if (values.length < 2) return '';
+          if (values.length < 2) return { line: '', area: '', lastX: 68, lastY: 14 };
           const min = Math.min(...values);
           const max = Math.max(...values);
           const range = Math.max(max - min, 1e-6);
-          return sparkPoints.map((point, i) => {
-            const x = sparkPoints.length === 1 ? 0 : (i / (sparkPoints.length - 1)) * 68;
-            const y = 24 - (((point.value as number) - min) / range) * 24;
-            return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-          }).join(' ');
+          const coords = sparkPoints.map((point, i) => {
+            const x = sparkPoints.length === 1 ? 0 : (i / (sparkPoints.length - 1)) * 76;
+            const y = 28 - (((point.value as number) - min) / range) * 22 - 3;
+            return { x, y };
+          });
+          const line = coords.map((point, i) => `${i === 0 ? 'M' : 'L'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+          const first = coords[0];
+          const last = coords[coords.length - 1];
+          const area = `${line} L${last.x.toFixed(2)},28 L${first.x.toFixed(2)},28 Z`;
+          return { line, area, lastX: last.x, lastY: last.y };
         })();
+        const toneBorder = up == null ? 'rgba(148,163,184,0.14)' : up ? 'rgba(34,197,94,0.16)' : 'rgba(248,113,113,0.16)';
+        const toneGlow = up == null ? 'rgba(148,163,184,0.10)' : up ? 'rgba(34,197,94,0.10)' : 'rgba(248,113,113,0.10)';
 
         return (
           <React.Fragment key={label}>
             {idx > 0 && (
-              <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 12px', flexShrink: 0 }} />
+              <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 6px', flexShrink: 0 }} />
             )}
             <button
               type="button"
               onClick={() => onOpenChart?.(label)}
               title={`Open ${label} intraday chart`}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, border: 0, background: 'transparent', padding: '6px 8px', margin: '-6px -8px', borderRadius: 10, cursor: 'pointer' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                minWidth: 0,
+                border: `1px solid ${toneBorder}`,
+                background: cardBg,
+                padding: '8px 10px',
+                margin: '-2px 0',
+                borderRadius: 14,
+                cursor: 'pointer',
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px ${toneGlow}`,
+              }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase', textAlign: 'left' }}>
-                  {label}
-                </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: '0.08em', lineHeight: 1, textTransform: 'uppercase', textAlign: 'left' }}>
+                    {label}
+                  </span>
+                  <span style={{ width: 5, height: 5, borderRadius: 999, background: sparkColor, boxShadow: `0 0 10px ${sparkColor}` }} />
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
                     {ltp != null ? fmtPrice(ltp) : '—'}
                   </span>
                   {pointChange != null && up != null && changePct != null && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: chgColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: chgColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1, padding: '3px 6px', borderRadius: 999, background: up ? 'rgba(34,197,94,0.10)' : 'rgba(248,113,113,0.10)', border: `1px solid ${up ? 'rgba(34,197,94,0.18)' : 'rgba(248,113,113,0.18)'}` }}>
                       {up
                         ? <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,1 9,9 1,9" /></svg>
                         : <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,9 9,1 1,1" /></svg>
                       }
-                      {up ? '+' : '-'}{fmtChg(pointChange)} ({up ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%)
+                      {up ? '+' : '-'}{fmtChg(pointChange)}
+                      <span style={{ color: up ? '#86efac' : '#fca5a5' }}>{up ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%</span>
                     </span>
                   )}
                 </div>
               </div>
-              <div style={{ width: 72, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg width="68" height="24" viewBox="0 0 68 24" fill="none" aria-hidden="true">
-                  {sparkPath
-                    ? <path d={sparkPath} stroke={sparkColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    : <path d="M2 12 L66 12" stroke="rgba(148,163,184,0.35)" strokeWidth="1.4" strokeDasharray="3 3" strokeLinecap="round" />}
+              <div style={{ width: 84, height: 34, borderRadius: 10, background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                <svg width="76" height="28" viewBox="0 0 76 28" fill="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id={`ticker-fill-${label}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={sparkColor} stopOpacity="0.28" />
+                      <stop offset="100%" stopColor={sparkColor} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M0 24 H76" stroke="rgba(148,163,184,0.10)" strokeWidth="1" strokeDasharray="3 4" />
+                  {spark.line
+                    ? <>
+                        <path d={spark.area} fill={`url(#ticker-fill-${label})`} />
+                        <path d={spark.line} stroke={sparkColor} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx={spark.lastX} cy={spark.lastY} r="2.3" fill={sparkColor} stroke="rgba(15,23,42,0.9)" strokeWidth="1.1" />
+                      </>
+                    : <path d="M4 14 L72 14" stroke="rgba(148,163,184,0.35)" strokeWidth="1.4" strokeDasharray="3 3" strokeLinecap="round" />}
                 </svg>
               </div>
             </button>
@@ -585,6 +620,7 @@ function TickerIndexChartModal({
         dataRef.current = points;
         lineRef.current?.setData(points);
         chartRef.current?.timeScale().fitContent();
+        chartRef.current?.timeScale().scrollToRealTime();
       })
       .catch(err => {
         if (disposed) return;
@@ -639,6 +675,7 @@ function TickerIndexChartModal({
           : [...prev, nextPoint];
         dataRef.current = merged;
         lineRef.current?.update(nextPoint);
+        chartRef.current?.timeScale().scrollToRealTime();
       } catch {
         // ignore malformed frames
       }
