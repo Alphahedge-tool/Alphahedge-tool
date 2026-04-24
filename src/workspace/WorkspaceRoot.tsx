@@ -10,6 +10,7 @@ import { SplitDivider } from './SplitDivider';
 import { PaneShell } from './PaneShell';
 import { DrawingToolbar } from '../DrawingToolbar';
 import type { DrawingEngineHandle } from '../DrawingToolbar';
+import { TooltipWrap } from '../components/ui/tooltip';
 import s from './WorkspaceRoot.module.css';
 
 // ── Interval definitions (mirrored from CandleChart) ─────────────────────────
@@ -381,24 +382,26 @@ function WorkspaceToolbar({ state, dispatch, activePaneId, onSearchOpen, instrum
     const aBorder = active ? `${activeColor}40` : 'transparent';
     const aColor  = active ? activeColor : '#C9D1DC';
     return (
-      <button
-        ref={extraRef}
-        onClick={onClick}
-        title={title}
-        className={`${s.tbBtn} ${label ? s.tbBtnWithLabel : s.tbBtnIconOnly} ${active ? s.tbBtnActive : s.tbBtnInactive}`}
-        style={{ background: aBg, border: `1px solid ${aBorder}`, color: aColor }}
-        onMouseEnter={e => {
-          const el = e.currentTarget as HTMLButtonElement;
-          if (!active) { el.style.background = 'rgba(255,255,255,0.06)'; el.style.color = '#FFFFFF'; }
-        }}
-        onMouseLeave={e => {
-          const el = e.currentTarget as HTMLButtonElement;
-          if (!active) { el.style.background = 'transparent'; el.style.color = '#C9D1DC'; }
-        }}
-      >
-        <span className={s.iconWrap}>{icon}</span>
-        {label && <span className={s.labelWrap}>{label}</span>}
-      </button>
+      <TooltipWrap content={title} side="bottom" align="center" sideOffset={10}>
+        <button
+          ref={extraRef}
+          onClick={onClick}
+          aria-label={title}
+          className={`${s.tbBtn} ${label ? s.tbBtnWithLabel : s.tbBtnIconOnly} ${active ? s.tbBtnActive : s.tbBtnInactive}`}
+          style={{ background: aBg, border: `1px solid ${aBorder}`, color: aColor }}
+          onMouseEnter={e => {
+            const el = e.currentTarget as HTMLButtonElement;
+            if (!active) { el.style.background = 'rgba(255,255,255,0.06)'; el.style.color = '#FFFFFF'; }
+          }}
+          onMouseLeave={e => {
+            const el = e.currentTarget as HTMLButtonElement;
+            if (!active) { el.style.background = 'transparent'; el.style.color = '#C9D1DC'; }
+          }}
+        >
+          <span className={s.iconWrap}>{icon}</span>
+          {label && <span className={s.labelWrap}>{label}</span>}
+        </button>
+      </TooltipWrap>
     );
   };
 
@@ -408,24 +411,26 @@ function WorkspaceToolbar({ state, dispatch, activePaneId, onSearchOpen, instrum
     <div className={s.toolbar}>
 
       {/* ── Symbol search container ── */}
-      <button
-        onClick={onSearchOpen}
-        title="Search symbol"
-        className={s.symbolSearch}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.18)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 0 2px rgba(255,255,255,0.04)'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.09)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        {activePane.instrument ? (
-          <span className={s.symbolLabel}>
-            {activePane.instrument.name || activePane.instrument.trading_symbol}
-          </span>
-        ) : (
-          <span className={s.symbolPlaceholder}>Search symbol…</span>
-        )}
-      </button>
+      <TooltipWrap content="Search symbol" side="bottom" align="start" sideOffset={10}>
+        <button
+          onClick={onSearchOpen}
+          aria-label="Search symbol"
+          className={s.symbolSearch}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.18)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 0 2px rgba(255,255,255,0.04)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.09)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          {activePane.instrument ? (
+            <span className={s.symbolLabel}>
+              {activePane.instrument.name || activePane.instrument.trading_symbol}
+            </span>
+          ) : (
+            <span className={s.symbolPlaceholder}>Search symbol…</span>
+          )}
+        </button>
+      </TooltipWrap>
 
       {SEP}
 
@@ -445,17 +450,18 @@ function WorkspaceToolbar({ state, dispatch, activePaneId, onSearchOpen, instrum
         {VIEW_OPTIONS.map(opt => {
           const active = opt.value === activePane.viewType;
           return (
-            <button
-              key={opt.value}
-              onClick={() => dispatch({ type: 'SET_VIEW', paneId: activePane.id, viewType: opt.value })}
-              title={opt.label}
-              className={`${s.viewBtn} ${active ? s.viewBtnActive : s.viewBtnInactive}`}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#D1D4DC'; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; }}
-            >
-              <span className={s.iconWrap}>{opt.icon}</span>
-              <span className={s.labelWrap}>{opt.label}</span>
-            </button>
+            <TooltipWrap key={opt.value} content={opt.label} side="bottom" align="center" sideOffset={10}>
+              <button
+                onClick={() => dispatch({ type: 'SET_VIEW', paneId: activePane.id, viewType: opt.value })}
+                aria-label={opt.label}
+                className={`${s.viewBtn} ${active ? s.viewBtnActive : s.viewBtnInactive}`}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#D1D4DC'; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#787B86'; }}
+              >
+                <span className={s.iconWrap}>{opt.icon}</span>
+                <span className={s.labelWrap}>{opt.label}</span>
+              </button>
+            </TooltipWrap>
           );
         })}
       </div>

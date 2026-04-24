@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import s from './sidebar.module.css';
+import { TooltipWrap } from './tooltip';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SIDEBAR_WIDTH = 240; // px expanded
@@ -210,19 +211,32 @@ export const SidebarMenuButton = React.forwardRef<
     isActive?: boolean;
     tooltip?: string;
   }
->(({ isActive, tooltip, className, children, ...props }, ref) => (
-  <div className={s.tooltipWrap}>
-    <button
-      ref={ref}
-      data-active={isActive}
-      className={cn(s.menuBtn, className)}
-      {...props}
+>(({ isActive, tooltip, className, children, ...props }, ref) => {
+  const { open } = useSidebar();
+
+  return (
+    <TooltipWrap
+      content={tooltip}
+      side="right"
+      align="center"
+      sideOffset={14}
+      avoidCollisions={false}
+      disabled={open || !tooltip}
     >
-      {children}
-    </button>
-    {tooltip && <div className={s.tooltip}>{tooltip}</div>}
-  </div>
-));
+      <div className={s.tooltipWrap}>
+        <button
+          ref={ref}
+          data-active={isActive}
+          className={cn(s.menuBtn, className)}
+          aria-label={tooltip}
+          {...props}
+        >
+          {children}
+        </button>
+      </div>
+    </TooltipWrap>
+  );
+});
 SidebarMenuButton.displayName = 'SidebarMenuButton';
 
 // Re-export unused but imported names so App.tsx doesn't break

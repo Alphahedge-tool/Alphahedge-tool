@@ -1,0 +1,4 @@
+# Cloudflare Pages Functions environment variables
+# Set this in the Cloudflare Pages dashboard for Production/Preview.
+# It should point to the public HTTPS origin where your Fastify backend is running.
+BACKEND_ORIGIN=https://your-backend-domain.example.com

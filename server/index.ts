@@ -48,11 +48,20 @@ for (const name of ['.env', '.env.local']) {
 }
 
 const app = Fastify({ logger: false });
+const APP_ORIGIN = process.env.APP_ORIGIN ?? 'http://localhost:8888';
+
+function getPlaywrightLaunchError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Executable doesn't exist")) {
+    return 'Playwright Chromium is not installed. Run: npm run playwright:install';
+  }
+  return message;
+}
 
 // Allow cross-origin requests from Vite dev server (localhost:5173)
 app.addHook('onRequest', async (req, reply) => {
   const origin = req.headers['origin'] ?? '';
-  if (origin === 'http://localhost:5173' || origin === 'http://localhost:8888') {
+  if (origin === 'http://localhost:5173' || origin === 'http://localhost:8888' || origin === APP_ORIGIN) {
     reply.header('Access-Control-Allow-Origin', origin);
   }
   reply.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
@@ -63,7 +72,7 @@ app.addHook('onRequest', async (req, reply) => {
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
-const GOOGLE_REDIRECT_URI  = process.env.GOOGLE_REDIRECT_URI  ?? 'http://localhost:8888/auth/google/callback';
+const GOOGLE_REDIRECT_URI  = process.env.GOOGLE_REDIRECT_URI  ?? `${APP_ORIGIN}/auth/google/callback`;
 
 // Step 1 — redirect to Google consent screen
 app.get('/auth/google', async (_req, reply) => {
@@ -113,9 +122,9 @@ app.get('/auth/google/callback', async (req, reply) => {
       picture: user.picture,
       sub:     user.sub,
     }));
-    return reply.redirect(`http://localhost:8888/?google_user=${userData}`);
+    return reply.redirect(`${APP_ORIGIN}/?google_user=${userData}`);
   } catch (e: any) {
-    return reply.redirect(`http://localhost:8888/?auth_error=${encodeURIComponent(e.message)}`);
+    return reply.redirect(`${APP_ORIGIN}/?auth_error=${encodeURIComponent(e.message)}`);
   }
 });
 
@@ -1872,7 +1881,7 @@ app.post('/api/upstox-login', async (req, reply) => {
   } catch (e: any) {
     browser?.close?.();
     console.error('[upstox-login error]', e);
-    return reply.status(500).send({ error: e.message });
+    return reply.status(500).send({ error: getPlaywrightLaunchError(e) });
   }
 });
 
@@ -1944,7 +1953,7 @@ app.get('/api/upstox-login-debug', async (_req, reply) => {
   } catch (e: any) {
     browser?.close?.();
     console.error('[debug-login error]', e);
-    return reply.status(500).send({ error: e.message });
+    return reply.status(500).send({ error: getPlaywrightLaunchError(e) });
   }
 });
 
@@ -2052,7 +2061,7 @@ app.get('/api/upstox-login-stream', async (req, reply) => {
     reply.raw.end();
   } catch (e: any) {
     browser?.close?.();
-    send('error', JSON.stringify({ error: e.message }));
+    send('error', JSON.stringify({ error: getPlaywrightLaunchError(e) }));
     reply.raw.end();
   }
 });

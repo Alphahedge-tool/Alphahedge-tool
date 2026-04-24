@@ -9,6 +9,7 @@
     "build:fast": "vite build",
     "preview": "vite preview",
     "start": "node scripts/start.mjs",
+    "playwright:install": "playwright install chromium",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint",
     "server": "node --experimental-strip-types server/index.ts",

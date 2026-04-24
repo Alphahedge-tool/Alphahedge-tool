@@ -38,6 +38,7 @@ export interface StrategyLeg {
   isSquaredOff?: boolean;
   squareOffLtp?: number;
   squareOffAt?: number;
+  squareOffReason?: 'manual' | 'sl' | 'tp';
 }
 
 interface StrategyChartProps {
@@ -571,6 +572,30 @@ function computeMtmPerUnderlyingSymbol(
     result.set(sym, data as unknown as LineData[]);
   }
   return result;
+}
+
+function getLegSeriesKey(leg: Pick<StrategyLeg, 'symbol' | 'strike' | 'type' | 'expiry'>): string {
+  return `${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`;
+}
+
+function getLegMarkedLtp(leg: StrategyLeg, optionsMap: Map<string, LineData[]>): number {
+  if (leg.isSquaredOff && (leg.squareOffLtp ?? 0) > 0) return leg.squareOffLtp!;
+  const latest = optionsMap.get(getLegSeriesKey(leg))?.at(-1)?.value;
+  return typeof latest === 'number' && latest > 0 ? latest : getLegEffectiveLtp(leg);
+}
+
+function computeLiveMtmTotal(legs: StrategyLeg[], optionsMap: Map<string, LineData[]>): { total: number; hasAll: boolean } {
+  let total = 0;
+  let hasAll = true;
+  for (const leg of legs) {
+    const latest = getLegMarkedLtp(leg, optionsMap);
+    if (!latest) {
+      hasAll = false;
+      break;
+    }
+    total += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
+  }
+  return { total, hasAll };
 }
 
 // Fetch underlying close for a date (Nubra for NSE/BSE, Upstox for MCX)
@@ -1353,7 +1378,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
     // Compute entry marker timestamps — use entryDate+entryTime, floored to minute
     // Use legsRef.current (always fresh) because flushAccum has [] deps
     // One arrowUp marker per unique timestamp — legs at same time are grouped, count shown as text
-    const entryMarkers: SeriesMarker<Time>[] = [];
+    const mtmMarkers: SeriesMarker<Time>[] = [];
     const timeLegs = new Map<number, typeof legsRef.current>();
     for (const leg of legsRef.current) {
       if (!leg.entryTime || !leg.entryDate) continue;
@@ -1371,7 +1396,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const label = count === 1
         ? `${tLegs[0].action} ${tLegs[0].strike}${tLegs[0].type}`
         : `${count} legs`;
-      entryMarkers.push({
+      mtmMarkers.push({
         time: t as unknown as Time,
         position: 'belowBar',
         color: '#e0a800',
@@ -1380,6 +1405,22 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         size: count > 2 ? 2 : 1,
       });
     }
+    for (const leg of legsRef.current) {
+      if (!leg.isSquaredOff || !leg.squareOffAt) continue;
+      mtmMarkers.push({
+        time: leg.squareOffAt as unknown as Time,
+        position: 'inBar',
+        color: leg.squareOffReason === 'sl' ? '#f23645' : leg.squareOffReason === 'tp' ? '#26a69a' : '#94A3B8',
+        shape: 'circle',
+        text:
+          leg.squareOffReason === 'sl'
+            ? `SL ${leg.strike}${leg.type}`
+            : leg.squareOffReason === 'tp'
+              ? `TP ${leg.strike}${leg.type}`
+              : `EXIT ${leg.strike}${leg.type}`,
+      });
+    }
+    mtmMarkers.sort((a, b) => Number(a.time) - Number(b.time));
 
     requestAnimationFrame(() => {
       for (const [sym, data] of snapUnderlyings) ss.underlyings.get(sym)?.setData(data);
@@ -1390,10 +1431,10 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       for (const [key, data] of snapIvs)     ss.ivs.get(key)?.setData(data);
 
       // Place entry markers on the MTM series — yellow arrowUp per entry time
-      if (entryMarkers.length && ss.mtm) {
+      if (ss.mtm) {
         try {
           markersPluginRef.current?.detach();
-          markersPluginRef.current = createSeriesMarkers(ss.mtm, entryMarkers);
+          markersPluginRef.current = createSeriesMarkers(ss.mtm, mtmMarkers);
         } catch { /**/ }
       }
 
@@ -2131,15 +2172,9 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
         }
       }
 
-      // Recompute MTM from latest accumulated option prices
+      // Recompute MTM from latest prices, freezing squared-off legs at exit LTP
       if (ss.mtm) {
-        let mtmTotal = 0; let hasAll = true;
-        for (const leg of freshLegs) {
-          const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
-          const latest = pts?.length ? pts[pts.length - 1].value : 0;
-          if (!latest) { hasAll = false; break; }
-          mtmTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
-        }
+        const { total: mtmTotal, hasAll } = computeLiveMtmTotal(freshLegs, acc.options);
         if (hasAll) {
           const mtmPt: BaselineData = { time: nowUnix as unknown as Time, value: mtmTotal };
           const last = acc.mtm[acc.mtm.length - 1];
@@ -2152,13 +2187,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           const uniqueSymbols = [...new Set(freshLegs.map(l => l.symbol))];
           for (const sym of uniqueSymbols) {
             const symLegs = freshLegs.filter(l => l.symbol === sym);
-            let symTotal = 0; let symHasAll = true;
-            for (const leg of symLegs) {
-              const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
-              const latest = pts?.length ? pts[pts.length - 1].value : 0;
-              if (!latest) { symHasAll = false; break; }
-              symTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
-            }
+            const { total: symTotal, hasAll: symHasAll } = computeLiveMtmTotal(symLegs, acc.options);
             if (symHasAll) {
               const pt: LineData = { time: nowUnix as unknown as Time, value: symTotal };
               const symPts = acc.mtmPerUnderlying.get(sym) ?? [];
@@ -2320,14 +2349,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
       const freshLegs = legsRef.current.filter((leg, i, arr) =>
         arr.findIndex(l => l.symbol === leg.symbol && l.strike === leg.strike && l.type === leg.type && l.expiry === leg.expiry) === i
       );
-      let mtmTotal = 0;
-      let hasAll = true;
-      for (const leg of freshLegs) {
-        const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
-        const latest = pts?.length ? pts[pts.length - 1].value : 0;
-        if (!latest) { hasAll = false; break; }
-        mtmTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
-      }
+      const { total: mtmTotal, hasAll } = computeLiveMtmTotal(freshLegs, acc.options);
       if (hasAll) {
         const nowUnix = Math.floor(Date.now() / 60000) * 60;
         const mtmPt: BaselineData = { time: nowUnix as unknown as Time, value: mtmTotal };
@@ -2340,13 +2362,7 @@ export default function StrategyChart({ legs, ocSymbol, ocExchange, instruments,
           const uniqueSymbols = [...new Set(freshLegs.map(l => l.symbol))];
           for (const sym of uniqueSymbols) {
             const symLegs = freshLegs.filter(l => l.symbol === sym);
-            let symTotal = 0; let symHasAll = true;
-            for (const leg of symLegs) {
-              const pts = acc.options.get(`${leg.symbol}:${leg.strike}${leg.type}:${leg.expiry}`);
-              const latest = pts?.length ? pts[pts.length - 1].value : 0;
-              if (!latest) { symHasAll = false; break; }
-              symTotal += (leg.action === 'B' ? latest - leg.price : leg.price - latest) * leg.lots * (leg.lotSize || 1);
-            }
+            const { total: symTotal, hasAll: symHasAll } = computeLiveMtmTotal(symLegs, acc.options);
             if (symHasAll) {
               const nowUnix2 = Math.floor(Date.now() / 60000) * 60;
               const pt: LineData = { time: nowUnix2 as unknown as Time, value: symTotal };

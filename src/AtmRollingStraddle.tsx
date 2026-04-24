@@ -35,8 +35,8 @@ const DEFAULT_SERIES_VISIBILITY: SeriesVisibilityState = {
 
 const SERIES_META: Array<{ key: SeriesKey; label: string; color: string; pane: 'top' | 'bottom' }> = [
   { key: 'premium', label: 'ATM Rolling Premium', color: '#facc15', pane: 'top' },
-  { key: 'spot', label: 'Spot', color: '#d1d5db', pane: 'top' },
-  { key: 'iv', label: 'Rolling IV %', color: '#22d3ee', pane: 'top' },
+  { key: 'spot', label: 'Spot', color: '#5b74ff', pane: 'top' },
+  { key: 'iv', label: 'Rolling IV %', color: '#ff4d57', pane: 'top' },
   { key: 'ivMa', label: 'IV MA', color: '#94a3b8', pane: 'top' },
   { key: 'strike', label: 'ATM Strike', color: '#60a5fa', pane: 'bottom' },
   { key: 'ce', label: 'ATM CE', color: '#34d399', pane: 'bottom' },
@@ -525,6 +525,18 @@ function buildMovingAverageSeries(series: LineData[], period = 9): LineData[] {
   return out;
 }
 
+function ensureRenderableLineSeed(series: LineData[], nextPoint: LineData): LineData[] {
+  if (series.length > 0) {
+    return series[series.length - 1]?.time === nextPoint.time
+      ? [...series.slice(0, -1), nextPoint]
+      : [...series, nextPoint];
+  }
+  const timeNum = Number(nextPoint.time);
+  if (!Number.isFinite(timeNum)) return [nextPoint];
+  const seededPrev = { time: (timeNum - 60) as Time, value: nextPoint.value };
+  return [seededPrev, nextPoint];
+}
+
 export default function AtmRollingStraddle({ instruments }: Props) {
   const [underlying, setUnderlying] = useState('');
   const [expiry, setExpiry] = useState<number | null>(null);
@@ -971,9 +983,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       const spotLine: LineData[] = spotResampled.map(c => ({ time: Math.floor(c[0] / 1000) as Time, value: c[4] }));
       const spotSer = chart.addSeries(LineSeries, {
-        color: '#d1d5db',
-        lineWidth: 1,
-        lineStyle: 1,
+        color: '#5b74ff',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
         title: 'Spot',
         priceScaleId: 'left',
       }, 0);
@@ -1022,9 +1034,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       if (ivData.length > 0) {
         const ivSer = chart.addSeries(LineSeries, {
           priceScaleId: 'iv-top-hidden',
-          color: '#22d3ee',
+          color: '#ff4d57',
           lineWidth: 2,
-          lineStyle: 1,
+          lineStyle: LineStyle.Solid,
           title: 'Rolling IV % (Nubra)',
           lastValueVisible: true,
           priceLineVisible: false,
@@ -1171,9 +1183,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
                 try {
                   const ivSer = chartRef.current.addSeries(LineSeries, {
                     priceScaleId: 'iv-top-hidden',
-                    color: '#22d3ee',
+                    color: '#ff4d57',
                     lineWidth: 2,
-                    lineStyle: 1,
+                    lineStyle: LineStyle.Solid,
                     title: 'Rolling IV % (Nubra)',
                     lastValueVisible: true,
                     priceLineVisible: false,
@@ -1205,11 +1217,14 @@ export default function AtmRollingStraddle({ instruments }: Props) {
                 // WS iv is decimal (0.15 = 15%) — multiply by 100 to match historical series
                 const t = snapToBarTime(Date.now(), intervalRef.current.min) as Time;
                 const nextIvPoint = { time: t, value: atmIv * 100 };
-                try { ivSeriesRef.current.update(nextIvPoint); } catch { /* ignore */ }
                 const prev = ivHistoryRef.current;
-                const merged = prev.length > 0 && prev[prev.length - 1]?.time === nextIvPoint.time
-                  ? [...prev.slice(0, -1), nextIvPoint]
-                  : [...prev, nextIvPoint];
+                const merged = ensureRenderableLineSeed(prev, nextIvPoint);
+                try {
+                  if (prev.length === 0) ivSeriesRef.current.setData(merged);
+                  else ivSeriesRef.current.update(nextIvPoint);
+                } catch {
+                  try { ivSeriesRef.current.setData(merged); } catch { /* ignore */ }
+                }
                 updateIvMaSeries(merged);
               }
               setLiveIv(atmIv * 100);

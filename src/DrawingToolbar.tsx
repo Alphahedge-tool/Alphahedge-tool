@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import s from './DrawingToolbar.module.css';
 import { cx } from './lib/utils';
+import { TooltipWrap } from './components/ui/tooltip';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -567,31 +568,33 @@ const SEP = () => <div className={s.sep} />;
 
 function ToolBtn({ tool, isActive, onClick, w = 32, h = 28 }: { tool: typeof TOOLS[0]; isActive: boolean; onClick: () => void; w?: number; h?: number }) {
   return (
-    <button
-      onClick={onClick}
-      title={tool.title}
-      className={cx(s.toolBtn, isActive ? s.toolBtnActive : s.toolBtnInactive)}
-      style={{ width: w, height: h }}
-      onMouseEnter={e => {
-        if (!isActive) {
-          const b = e.currentTarget as HTMLButtonElement;
-          b.style.background = 'rgba(255,255,255,0.08)';
-          b.style.color = '#D1D4DC';
-          b.style.borderColor = 'rgba(255,255,255,0.12)';
-        }
-      }}
-      onMouseLeave={e => {
-        if (!isActive) {
-          const b = e.currentTarget as HTMLButtonElement;
-          b.style.background = 'transparent';
-          b.style.color = '#8A8E9A';
-          b.style.borderColor = 'transparent';
-        }
-      }}
-    >
-      {tool.icon}
-      {isActive && <span className={s.toolBtnDot} />}
-    </button>
+    <TooltipWrap content={tool.title} side="right" align="center" sideOffset={12} avoidCollisions={false}>
+      <button
+        onClick={onClick}
+        aria-label={tool.title}
+        className={cx(s.toolBtn, isActive ? s.toolBtnActive : s.toolBtnInactive)}
+        style={{ width: w, height: h }}
+        onMouseEnter={e => {
+          if (!isActive) {
+            const b = e.currentTarget as HTMLButtonElement;
+            b.style.background = 'rgba(255,255,255,0.08)';
+            b.style.color = '#D1D4DC';
+            b.style.borderColor = 'rgba(255,255,255,0.12)';
+          }
+        }}
+        onMouseLeave={e => {
+          if (!isActive) {
+            const b = e.currentTarget as HTMLButtonElement;
+            b.style.background = 'transparent';
+            b.style.color = '#8A8E9A';
+            b.style.borderColor = 'transparent';
+          }
+        }}
+      >
+        {tool.icon}
+        {isActive && <span className={s.toolBtnDot} />}
+      </button>
+    </TooltipWrap>
   );
 }
 
@@ -639,50 +642,56 @@ export function DrawingToolbar({ activeTool, onToolChange, open, onToggle, drawi
 
           {/* Pinned bottom — undo + clear */}
           <div className={cx(s.bottomActions, compact ? s.bottomActionsCompact : s.bottomActionsNormal)}>
-            <button
-              onClick={onUndo} title="Undo (Ctrl+Z)" disabled={!canUndo}
-              className={s.actionBtn}
-              style={{ width: btnW, height: btnH, color: canUndo ? '#8A8E9A' : '#363840', cursor: canUndo ? 'pointer' : 'default' }}
-              onMouseEnter={e => { if (canUndo) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(255,255,255,0.08)'; b.style.color='#D1D4DC'; b.style.borderColor='rgba(255,255,255,0.12)'; }}}
-              onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=canUndo?'#8A8E9A':'#363840'; b.style.borderColor='transparent'; }}
-            >
-              <svg width={compact?11:13} height={compact?11:13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
-              </svg>
-            </button>
-            <button
-              onClick={onClearAll} title={drawingCount>0?`Clear all (${drawingCount})`:'No drawings'} disabled={drawingCount===0}
-              className={s.actionBtn}
-              style={{ width: btnW, height: btnH, color: drawingCount > 0 ? '#c0404a' : '#363840', cursor: drawingCount > 0 ? 'pointer' : 'default' }}
-              onMouseEnter={e => { if (drawingCount>0) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(242,54,69,0.13)'; b.style.color='#f23645'; b.style.borderColor='rgba(242,54,69,0.28)'; }}}
-              onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=drawingCount>0?'#c0404a':'#363840'; b.style.borderColor='transparent'; }}
-            >
-              <svg width={compact?11:13} height={compact?11:13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-              </svg>
-            </button>
+            <TooltipWrap content="Undo (Ctrl+Z)" side="right" align="center" sideOffset={12} avoidCollisions={false} disabled={!canUndo}>
+              <button
+                onClick={onUndo} aria-label="Undo (Ctrl+Z)" disabled={!canUndo}
+                className={s.actionBtn}
+                style={{ width: btnW, height: btnH, color: canUndo ? '#8A8E9A' : '#363840', cursor: canUndo ? 'pointer' : 'default' }}
+                onMouseEnter={e => { if (canUndo) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(255,255,255,0.08)'; b.style.color='#D1D4DC'; b.style.borderColor='rgba(255,255,255,0.12)'; }}}
+                onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=canUndo?'#8A8E9A':'#363840'; b.style.borderColor='transparent'; }}
+              >
+                <svg width={compact?11:13} height={compact?11:13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                </svg>
+              </button>
+            </TooltipWrap>
+            <TooltipWrap content={drawingCount>0?`Clear all (${drawingCount})`:'No drawings'} side="right" align="center" sideOffset={12} avoidCollisions={false} disabled={drawingCount===0}>
+              <button
+                onClick={onClearAll} aria-label={drawingCount>0?`Clear all (${drawingCount})`:'No drawings'} disabled={drawingCount===0}
+                className={s.actionBtn}
+                style={{ width: btnW, height: btnH, color: drawingCount > 0 ? '#c0404a' : '#363840', cursor: drawingCount > 0 ? 'pointer' : 'default' }}
+                onMouseEnter={e => { if (drawingCount>0) { const b=e.currentTarget as HTMLButtonElement; b.style.background='rgba(242,54,69,0.13)'; b.style.color='#f23645'; b.style.borderColor='rgba(242,54,69,0.28)'; }}}
+                onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background='transparent'; b.style.color=drawingCount>0?'#c0404a':'#363840'; b.style.borderColor='transparent'; }}
+              >
+                <svg width={compact?11:13} height={compact?11:13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </TooltipWrap>
           </div>
         </div>
       )}
 
       {/* Toggle strip — thin full-height chevron */}
-      <button
-        onClick={onToggle}
-        title={open ? 'Hide drawing tools' : 'Drawing tools'}
-        className={s.toggleStrip}
-        style={{
-          width: compact ? 10 : 12,
-          background: open ? 'rgba(255,152,0,0.08)' : '#171717',
-          color: open ? '#FF9800' : '#4A4E5C',
-        }}
-        onMouseEnter={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.16)':'rgba(255,255,255,0.06)'; b.style.color=open?'#FFB74D':'#9B9EA8'; }}
-        onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.08)':'#171717'; b.style.color=open?'#FF9800':'#4A4E5C'; }}
-      >
-        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
-          <path d={open ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'} />
-        </svg>
-      </button>
+      <TooltipWrap content={open ? 'Hide drawing tools' : 'Drawing tools'} side="right" align="center" sideOffset={12} avoidCollisions={false}>
+        <button
+          onClick={onToggle}
+          aria-label={open ? 'Hide drawing tools' : 'Drawing tools'}
+          className={s.toggleStrip}
+          style={{
+            width: compact ? 10 : 12,
+            background: open ? 'rgba(255,152,0,0.08)' : '#171717',
+            color: open ? '#FF9800' : '#4A4E5C',
+          }}
+          onMouseEnter={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.16)':'rgba(255,255,255,0.06)'; b.style.color=open?'#FFB74D':'#9B9EA8'; }}
+          onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.background=open?'rgba(255,152,0,0.08)':'#171717'; b.style.color=open?'#FF9800':'#4A4E5C'; }}
+        >
+          <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
+            <path d={open ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'} />
+          </svg>
+        </button>
+      </TooltipWrap>
     </div>
   );
 }
