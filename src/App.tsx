@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue, startTransition } from 'react';
 import {
   createChart,
+  AreaSeries,
   LineSeries,
   type IChartApi,
   type ISeriesApi,
@@ -540,10 +541,25 @@ function TickerIndexChartModal({
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const lineRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const lineRef = useRef<ISeriesApi<'Area'> | null>(null);
   const dataRef = useRef<LineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const applyTrendColors = useCallback((points: LineData[]) => {
+    const values = points
+      .map(point => point.value)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    if (values.length < 2) return;
+    const bullish = values[values.length - 1] >= values[0];
+    const lineColor = bullish ? '#22c55e' : '#ef4444';
+    lineRef.current?.applyOptions({
+      lineColor,
+      topColor: bullish ? 'rgba(34,197,94,0.28)' : 'rgba(239,68,68,0.28)',
+      bottomColor: bullish ? 'rgba(34,197,94,0.02)' : 'rgba(239,68,68,0.02)',
+      crosshairMarkerBackgroundColor: lineColor,
+    });
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -588,8 +604,10 @@ function TickerIndexChartModal({
         horzLine: { color: 'rgba(255,255,255,0.15)', width: 1, labelVisible: true },
       },
     });
-    const line = chart.addSeries(LineSeries, {
-      color: '#60a5fa',
+    const line = chart.addSeries(AreaSeries, {
+      lineColor: '#22c55e',
+      topColor: 'rgba(34,197,94,0.28)',
+      bottomColor: 'rgba(34,197,94,0.02)',
       lineWidth: 2,
       title: label,
       lastValueVisible: true,
@@ -597,7 +615,7 @@ function TickerIndexChartModal({
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 3,
       crosshairMarkerBorderColor: '#111317',
-      crosshairMarkerBackgroundColor: '#60a5fa',
+      crosshairMarkerBackgroundColor: '#22c55e',
     });
     chartRef.current = chart;
     lineRef.current = line;
@@ -619,6 +637,7 @@ function TickerIndexChartModal({
         if (disposed) return;
         dataRef.current = points;
         lineRef.current?.setData(points);
+        applyTrendColors(points);
         chartRef.current?.timeScale().fitContent();
         chartRef.current?.timeScale().scrollToRealTime();
       })
@@ -675,6 +694,7 @@ function TickerIndexChartModal({
           : [...prev, nextPoint];
         dataRef.current = merged;
         lineRef.current?.update(nextPoint);
+        applyTrendColors(merged);
         chartRef.current?.timeScale().scrollToRealTime();
       } catch {
         // ignore malformed frames
@@ -685,7 +705,7 @@ function TickerIndexChartModal({
       destroyed = true;
       try { ws.close(); } catch { /* ignore */ }
     };
-  }, [exchange, symbol]);
+  }, [applyTrendColors, exchange, symbol]);
 
   const up = (quote?.pointChange ?? 0) >= 0;
 
