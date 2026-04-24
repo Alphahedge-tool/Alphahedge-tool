@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   createChart,
+  LineStyle,
   LineSeries,
   type IChartApi,
   type ISeriesApi,
@@ -18,12 +19,20 @@ interface Props {
 }
 
 type IntervalOpt = { label: string; min: number; upstox: string };
+type IvMaOpt = { label: string; period: number };
 
 const INTERVALS: IntervalOpt[] = [
   { label: '1m', min: 1, upstox: 'I1' },
   { label: '5m', min: 5, upstox: 'I5' },
   { label: '15m', min: 15, upstox: 'I15' },
   { label: '30m', min: 30, upstox: 'I30' },
+];
+
+const IV_MA_OPTIONS: IvMaOpt[] = [
+  { label: '5', period: 5 },
+  { label: '9', period: 9 },
+  { label: '20', period: 20 },
+  { label: '21', period: 21 },
 ];
 
 const IST_OFFSET_SEC = 19800;
@@ -406,15 +415,107 @@ function formatExpiryLabel(expiryMs: number): string {
   });
 }
 
+function getIstMinuteOfDayFromUnixSec(tsSec: number): number {
+  const d = new Date(tsSec * 1000);
+  return (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) % (24 * 60);
+}
+
+function getIstDateKeyFromUnixSec(tsSec: number): string {
+  return new Date(tsSec * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+function buildRollingPremiumSeries(
+  spotBars: number[][],
+  strikeTsMap: Map<number, { ce: Map<number, number>; pe: Map<number, number> }>,
+): { premiumSeries: LineData[]; ceSeries: LineData[]; peSeries: LineData[]; atmStrikeSeries: LineData[] } {
+  const usableStrikes = [...strikeTsMap.keys()].sort((a, b) => a - b);
+  const premiumSeries: LineData[] = [];
+  const ceSeries: LineData[] = [];
+  const peSeries: LineData[] = [];
+  const atmStrikeSeries: LineData[] = [];
+
+  for (const c of spotBars) {
+    const ts = Math.floor(c[0] / 1000);
+    const spot = c[4];
+    const atm = nearestStrike(usableStrikes, spot);
+    if (atm == null) continue;
+    const pair = strikeTsMap.get(atm);
+    if (!pair) continue;
+    const ce = pair.ce.get(ts);
+    const pe = pair.pe.get(ts);
+    if (!ce || !pe) continue;
+    premiumSeries.push({ time: ts as Time, value: ce + pe });
+    ceSeries.push({ time: ts as Time, value: ce });
+    peSeries.push({ time: ts as Time, value: pe });
+    atmStrikeSeries.push({ time: ts as Time, value: atm });
+  }
+
+  return { premiumSeries, ceSeries, peSeries, atmStrikeSeries };
+}
+
+function findNineFifteenBasePremium(series: LineData[]): number | null {
+  const numericPoints = series.filter(
+    (point): point is LineData & { time: number; value: number } =>
+      typeof point.time === 'number' &&
+      typeof point.value === 'number' &&
+      Number.isFinite(point.time) &&
+      Number.isFinite(point.value) &&
+      point.value > 0,
+  );
+  if (!numericPoints.length) return null;
+
+  const latestTs = numericPoints.reduce((best, point) => Math.max(best, point.time), Number.NEGATIVE_INFINITY);
+  const latestDateKey = getIstDateKeyFromUnixSec(latestTs);
+  const openBar = numericPoints.find(point =>
+    getIstDateKeyFromUnixSec(point.time) === latestDateKey &&
+    getIstMinuteOfDayFromUnixSec(point.time) === MARKET_OPEN_MIN,
+  );
+  if (openBar) return openBar.value;
+  return null;
+}
+
+function getLatestSeriesValue(series: LineData[]): number | null {
+  for (let i = series.length - 1; i >= 0; i -= 1) {
+    const point = series[i];
+    if (typeof point.value === 'number' && Number.isFinite(point.value) && point.value > 0) {
+      return point.value;
+    }
+  }
+  return null;
+}
+
+function buildMovingAverageSeries(series: LineData[], period = 9): LineData[] {
+  const out: LineData[] = [];
+  const window: number[] = [];
+  let rollingSum = 0;
+
+  for (const point of series) {
+    if (typeof point.time !== 'number' || typeof point.value !== 'number' || !Number.isFinite(point.value) || point.value <= 0) {
+      continue;
+    }
+    window.push(point.value);
+    rollingSum += point.value;
+    if (window.length > period) rollingSum -= window.shift() ?? 0;
+    if (window.length < period) continue;
+    out.push({ time: point.time, value: rollingSum / window.length });
+  }
+
+  return out;
+}
+
 export default function AtmRollingStraddle({ instruments }: Props) {
   const [underlying, setUnderlying] = useState('');
   const [expiry, setExpiry] = useState<number | null>(null);
   const [interval, setInterval] = useState<IntervalOpt>(INTERVALS[1]);
+  const [ivMaPeriod, setIvMaPeriod] = useState<number>(9);
   const [loading, setLoading] = useState(false);
   const [loadingNote, setLoadingNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [liveAtmStrike, setLiveAtmStrike] = useState<number | null>(null);
   const [livePremium, setLivePremium] = useState<number>(0);
+  const [livePremiumBase, setLivePremiumBase] = useState<number | null>(null);
+  const [liveIv, setLiveIv] = useState<number | null>(null);
+  const [liveIvBase, setLiveIvBase] = useState<number | null>(null);
 
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -424,6 +525,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const peSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const strikeSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const avgIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const unsubsRef = useRef<(() => void)[]>([]);
   const nubraWsRef = useRef<WebSocket | null>(null);
   const activeKeysRef = useRef<string[]>([]);
@@ -613,7 +715,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const clearSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef]) {
+    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef, avgIvSeriesRef]) {
       if (ref.current) {
         try { chart.removeSeries(ref.current); } catch { /* ignore */ }
         ref.current = null;
@@ -655,6 +757,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     setLoadingNote('Preparing instruments...');
     setLiveAtmStrike(null);
     setLivePremium(0);
+    setLivePremiumBase(null);
+    setLiveIv(null);
+    setLiveIvBase(null);
     setLoading(true);
 
     try {
@@ -776,38 +881,27 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       if (failedKeys.length > 0) console.warn('[ATM Rolling] batch failures/skips:', failedKeys.slice(0, 12));
 
       setLoadingNote('Building rolling series...');
+      const strikeTsMap1m = new Map<number, { ce: Map<number, number>; pe: Map<number, number> }>();
       const strikeTsMap = new Map<number, { ce: Map<number, number>; pe: Map<number, number> }>();
       for (const [strike, row] of strikeCandles.entries()) {
+        const ceMap1m = new Map<number, number>();
+        const peMap1m = new Map<number, number>();
         const ceMap = new Map<number, number>();
         const peMap = new Map<number, number>();
+        for (const c of resample(row.ce, INTERVALS[0].min)) ceMap1m.set(Math.floor(c[0] / 1000), c[4]);
+        for (const p of resample(row.pe, INTERVALS[0].min)) peMap1m.set(Math.floor(p[0] / 1000), p[4]);
         for (const c of resample(row.ce, interval.min)) ceMap.set(Math.floor(c[0] / 1000), c[4]);
         for (const p of resample(row.pe, interval.min)) peMap.set(Math.floor(p[0] / 1000), p[4]);
+        if (ceMap1m.size && peMap1m.size) strikeTsMap1m.set(strike, { ce: ceMap1m, pe: peMap1m });
         if (ceMap.size && peMap.size) strikeTsMap.set(strike, { ce: ceMap, pe: peMap });
       }
 
       const usableStrikes = [...strikeTsMap.keys()].sort((a, b) => a - b);
       if (!usableStrikes.length) throw new Error('No usable option candle pairs for rolling series');
 
-      const premiumSeries: LineData[] = [];
-      const ceSeries: LineData[] = [];
-      const peSeries: LineData[] = [];
-      const atmStrikeSeries: LineData[] = [];
-
-      for (const c of spotResampled) {
-        const ts = Math.floor(c[0] / 1000);
-        const spot = c[4];
-        const atm = nearestStrike(usableStrikes, spot);
-        if (atm == null) continue;
-        const pair = strikeTsMap.get(atm);
-        if (!pair) continue;
-        const ce = pair.ce.get(ts);
-        const pe = pair.pe.get(ts);
-        if (!ce || !pe) continue;
-        premiumSeries.push({ time: ts as Time, value: ce + pe });
-        ceSeries.push({ time: ts as Time, value: ce });
-        peSeries.push({ time: ts as Time, value: pe });
-        atmStrikeSeries.push({ time: ts as Time, value: atm });
-      }
+      const { premiumSeries, ceSeries, peSeries, atmStrikeSeries } = buildRollingPremiumSeries(spotResampled, strikeTsMap);
+      const spotBars1m = resample(spotCandles, INTERVALS[0].min);
+      const { premiumSeries: premiumSeries1m } = buildRollingPremiumSeries(spotBars1m, strikeTsMap1m);
 
       if (!premiumSeries.length) throw new Error('No merged bars for ATM rolling premium');
 
@@ -881,6 +975,24 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         ivSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
         ivSer.setData(ivData);
         ivSeriesRef.current = ivSer;
+
+        const avgIvSeriesData = buildMovingAverageSeries(ivData, ivMaPeriod);
+        if (avgIvSeriesData.length > 0) {
+          const avgIvSeries = chart.addSeries(LineSeries, {
+            priceScaleId: 'iv-top-hidden',
+            color: '#94a3b8',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            title: `IV MA (${ivMaPeriod})`,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
+            crosshairMarkerRadius: 0,
+          }, 0);
+          avgIvSeries.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+          avgIvSeries.setData(avgIvSeriesData);
+          avgIvSeriesRef.current = avgIvSeries;
+        }
       }
 
       // Show dedicated pane split and apply initial heights.
@@ -889,8 +1001,13 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       chart.timeScale().fitContent();
 
+      const basePremium = findNineFifteenBasePremium(premiumSeries1m);
+      const baseIv = findNineFifteenBasePremium(ivData);
       setLiveAtmStrike(atmStrikeSeries.at(-1)?.value ?? null);
       setLivePremium(premiumSeries.at(-1)?.value ?? 0);
+      setLivePremiumBase(basePremium);
+      setLiveIv(getLatestSeriesValue(ivData));
+      setLiveIvBase(baseIv);
 
       // Seed and subscribe live data for spot + selected strike universe.
       const reqKeys: string[] = [spotKey];
@@ -1010,6 +1127,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
                 const t = snapToBarTime(Date.now(), intervalRef.current.min) as Time;
                 try { ivSeriesRef.current.update({ time: t, value: atmIv * 100 }); } catch { /* ignore */ }
               }
+              setLiveIv(atmIv * 100);
             }
           } catch {
             // ignore malformed
@@ -1026,7 +1144,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoadingNote('');
       setLoading(false);
     }
-  }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, syncBottomPaneLayout, underlying]);
+  }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, syncBottomPaneLayout, underlying]);
 
   // Auto-trigger load once underlying + expiry are both set for the first time
   // Must be placed AFTER handleLoad to avoid temporal dead-zone error
@@ -1074,6 +1192,35 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     window.addEventListener('mouseup', onUp);
   }, [bottomPaneVisible]);
 
+  const livePremiumChangePct = livePremiumBase && livePremiumBase > 0 && livePremium > 0
+    ? ((livePremium - livePremiumBase) / livePremiumBase) * 100
+    : null;
+  const liveIvChangePct = liveIvBase && liveIvBase > 0 && liveIv != null && liveIv > 0
+    ? ((liveIv - liveIvBase) / liveIvBase) * 100
+    : null;
+
+  const premiumChangeToneClass = livePremiumChangePct == null
+    ? ''
+    : livePremiumChangePct > 0
+      ? s.liveMetricUp
+      : livePremiumChangePct < 0
+        ? s.liveMetricDown
+        : s.liveMetricNeutral;
+  const ivChangeToneClass = liveIvChangePct == null
+    ? ''
+    : liveIvChangePct > 0
+      ? s.liveMetricUp
+      : liveIvChangePct < 0
+        ? s.liveMetricDown
+        : s.liveMetricNeutral;
+
+  const premiumChangeLabel = livePremiumChangePct == null
+    ? '--'
+    : `${livePremiumChangePct > 0 ? '+' : ''}${livePremiumChangePct.toFixed(2)}%`;
+  const ivChangeLabel = liveIvChangePct == null
+    ? '--'
+    : `${liveIvChangePct > 0 ? '+' : ''}${liveIvChangePct.toFixed(2)}%`;
+
   return (
     <div className={s.root}>
       <div className={s.toolbar}>
@@ -1105,6 +1252,13 @@ export default function AtmRollingStraddle({ instruments }: Props) {
             </select>
           </div>
 
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>IV MA</span>
+            <select className={s.compactSelect} value={String(ivMaPeriod)} onChange={e => setIvMaPeriod(Number(e.target.value))}>
+              {IV_MA_OPTIONS.map(option => <option key={option.period} value={option.period}>{option.label}</option>)}
+            </select>
+          </div>
+
           <label className={s.toggleField}>
             <span className={s.compactLabel}>Bottom Pane</span>
             <input
@@ -1125,9 +1279,21 @@ export default function AtmRollingStraddle({ instruments }: Props) {
               <span className={s.liveMetricLabel}>ATM</span>
               <strong>{liveAtmStrike ? liveAtmStrike.toFixed(0) : '--'}</strong>
             </div>
+            <div className={`${s.liveMetric} ${premiumChangeToneClass}`.trim()} title={livePremiumBase ? `Base premium from 9:15 AM: ${livePremiumBase.toFixed(2)}` : 'Base premium unavailable'}>
+              <span className={s.liveMetricLabel}>% Chg</span>
+              <strong>{premiumChangeLabel}</strong>
+            </div>
             <div className={s.liveMetric}>
               <span className={s.liveMetricLabel}>Premium</span>
               <strong>{livePremium > 0 ? livePremium.toFixed(2) : '--'}</strong>
+            </div>
+            <div className={`${s.liveMetric} ${ivChangeToneClass}`.trim()} title={liveIvBase ? `Base IV from 9:15 AM: ${liveIvBase.toFixed(2)}%` : 'Base IV unavailable'}>
+              <span className={s.liveMetricLabel}>IV % Chg</span>
+              <strong>{ivChangeLabel}</strong>
+            </div>
+            <div className={s.liveMetric}>
+              <span className={s.liveMetricLabel}>IV</span>
+              <strong>{liveIv != null && liveIv > 0 ? `${liveIv.toFixed(2)}%` : '--'}</strong>
             </div>
           </div>
 
