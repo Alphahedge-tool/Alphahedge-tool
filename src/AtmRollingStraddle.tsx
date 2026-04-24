@@ -20,6 +20,28 @@ interface Props {
 
 type IntervalOpt = { label: string; min: number; upstox: string };
 type IvMaOpt = { label: string; period: number };
+type SeriesKey = 'premium' | 'spot' | 'iv' | 'ivMa' | 'strike' | 'ce' | 'pe';
+type SeriesVisibilityState = Record<SeriesKey, boolean>;
+
+const DEFAULT_SERIES_VISIBILITY: SeriesVisibilityState = {
+  premium: true,
+  spot: true,
+  iv: true,
+  ivMa: true,
+  strike: true,
+  ce: true,
+  pe: true,
+};
+
+const SERIES_META: Array<{ key: SeriesKey; label: string; color: string; pane: 'top' | 'bottom' }> = [
+  { key: 'premium', label: 'ATM Rolling Premium', color: '#facc15', pane: 'top' },
+  { key: 'spot', label: 'Spot', color: '#d1d5db', pane: 'top' },
+  { key: 'iv', label: 'Rolling IV %', color: '#22d3ee', pane: 'top' },
+  { key: 'ivMa', label: 'IV MA', color: '#94a3b8', pane: 'top' },
+  { key: 'strike', label: 'ATM Strike', color: '#60a5fa', pane: 'bottom' },
+  { key: 'ce', label: 'ATM CE', color: '#34d399', pane: 'bottom' },
+  { key: 'pe', label: 'ATM PE', color: '#f87171', pane: 'bottom' },
+];
 
 const INTERVALS: IntervalOpt[] = [
   { label: '1m', min: 1, upstox: 'I1' },
@@ -526,6 +548,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const strikeSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const avgIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const ivHistoryRef = useRef<LineData[]>([]);
   const unsubsRef = useRef<(() => void)[]>([]);
   const nubraWsRef = useRef<WebSocket | null>(null);
   const activeKeysRef = useRef<string[]>([]);
@@ -538,6 +561,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const [splitterTop, setSplitterTop] = useState<number>(0);
   const [showBottomPane, setShowBottomPane] = useState(true);
   const [hasBottomPaneData, setHasBottomPaneData] = useState(false);
+  const [seriesVisibility, setSeriesVisibility] = useState<SeriesVisibilityState>(DEFAULT_SERIES_VISIBILITY);
+  const [seriesMenuOpen, setSeriesMenuOpen] = useState(false);
+  const seriesMenuRef = useRef<HTMLDivElement | null>(null);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
@@ -586,17 +612,35 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
   useEffect(() => { intervalRef.current = interval; }, [interval]);
 
-  const bottomPaneVisible = showBottomPane && hasBottomPaneData;
+  useEffect(() => {
+    if (!seriesMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!seriesMenuRef.current?.contains(event.target as Node)) {
+        setSeriesMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [seriesMenuOpen]);
+
+  const anyBottomSeriesMounted = seriesVisibility.ce || seriesVisibility.pe || seriesVisibility.strike;
+  const bottomPaneVisible = showBottomPane && hasBottomPaneData && anyBottomSeriesMounted;
+
+  const applySeriesVisibility = useCallback((nextVisibility: SeriesVisibilityState) => {
+    try { premiumSeriesRef.current?.applyOptions({ visible: nextVisibility.premium }); } catch { /* ignore */ }
+    try { spotSeriesRef.current?.applyOptions({ visible: nextVisibility.spot }); } catch { /* ignore */ }
+    try { ivSeriesRef.current?.applyOptions({ visible: nextVisibility.iv }); } catch { /* ignore */ }
+    try { avgIvSeriesRef.current?.applyOptions({ visible: nextVisibility.ivMa }); } catch { /* ignore */ }
+    try { ceSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.ce }); } catch { /* ignore */ }
+    try { peSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.pe }); } catch { /* ignore */ }
+    try { strikeSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.strike }); } catch { /* ignore */ }
+  }, [bottomPaneVisible]);
 
   const syncBottomPaneLayout = useCallback((ratio: number) => {
     const chart = chartRef.current;
     const host = chartHostRef.current;
     if (!chart || !host) return;
-    const bottomSeries = [ceSeriesRef.current, peSeriesRef.current, strikeSeriesRef.current];
-    for (const series of bottomSeries) {
-      if (!series) continue;
-      try { series.applyOptions({ visible: bottomPaneVisible }); } catch { /* ignore */ }
-    }
+    applySeriesVisibility(seriesVisibility);
     const h = host.clientHeight;
     if (h <= 0) return;
     try {
@@ -616,7 +660,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     } catch {
       return;
     }
-  }, [bottomPaneVisible]);
+  }, [applySeriesVisibility, bottomPaneVisible, seriesVisibility]);
 
   useEffect(() => {
     if (!chartHostRef.current) return;
@@ -721,8 +765,16 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         ref.current = null;
       }
     }
+    ivHistoryRef.current = [];
     setHasBottomPaneData(false);
   }, []);
+
+  const updateIvMaSeries = useCallback((seriesData: LineData[]) => {
+    ivHistoryRef.current = seriesData;
+    if (!avgIvSeriesRef.current) return;
+    const maData = buildMovingAverageSeries(seriesData, ivMaPeriod);
+    try { avgIvSeriesRef.current.setData(maData); } catch { /* ignore */ }
+  }, [ivMaPeriod]);
 
   const applyLive = useCallback(() => {
     const spot = liveSpotRef.current;
@@ -914,6 +966,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       }, 0);
       premiumSer.priceScale().applyOptions({ visible: true, scaleMargins: { top: 0.08, bottom: 0.08 } });
       premiumSer.setData(premiumSeries);
+      premiumSer.applyOptions({ visible: seriesVisibility.premium });
       premiumSeriesRef.current = premiumSer;
 
       const spotLine: LineData[] = spotResampled.map(c => ({ time: Math.floor(c[0] / 1000) as Time, value: c[4] }));
@@ -926,6 +979,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       }, 0);
       spotSer.priceScale().applyOptions({ visible: true, scaleMargins: { top: 0.08, bottom: 0.08 } });
       spotSer.setData(spotLine);
+      spotSer.applyOptions({ visible: seriesVisibility.spot });
       spotSeriesRef.current = spotSer;
 
       // Pane 1 (bottom): ATM Strike + CE + PE
@@ -937,6 +991,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         priceScaleId: 'opt-bottom',
       }, 1);
       ceSer.setData(ceSeries);
+      ceSer.applyOptions({ visible: bottomPaneVisible && seriesVisibility.ce });
       ceSeriesRef.current = ceSer;
 
       const peSer = chart.addSeries(LineSeries, {
@@ -947,6 +1002,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         priceScaleId: 'opt-bottom',
       }, 1);
       peSer.setData(peSeries);
+      peSer.applyOptions({ visible: bottomPaneVisible && seriesVisibility.pe });
       peSeriesRef.current = peSer;
 
       const strikeSer = chart.addSeries(LineSeries, {
@@ -958,6 +1014,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       }, 1);
       strikeSer.priceScale().applyOptions({ visible: true, scaleMargins: { top: 0.10, bottom: 0.08 } });
       strikeSer.setData(atmStrikeSeries);
+      strikeSer.applyOptions({ visible: bottomPaneVisible && seriesVisibility.strike });
       strikeSeriesRef.current = strikeSer;
 
       setLoadingNote('Loading Nubra rolling IV...');
@@ -974,7 +1031,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         }, 0);
         ivSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
         ivSer.setData(ivData);
+        ivSer.applyOptions({ visible: seriesVisibility.iv });
         ivSeriesRef.current = ivSer;
+        ivHistoryRef.current = ivData;
 
         const avgIvSeriesData = buildMovingAverageSeries(ivData, ivMaPeriod);
         if (avgIvSeriesData.length > 0) {
@@ -991,6 +1050,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
           }, 0);
           avgIvSeries.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
           avgIvSeries.setData(avgIvSeriesData);
+          avgIvSeries.applyOptions({ visible: seriesVisibility.ivMa });
           avgIvSeriesRef.current = avgIvSeries;
         }
       }
@@ -1119,13 +1179,38 @@ export default function AtmRollingStraddle({ instruments }: Props) {
                     priceLineVisible: false,
                   }, 0);
                   ivSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+                  ivSer.applyOptions({ visible: seriesVisibility.iv });
                   ivSeriesRef.current = ivSer;
+                } catch { /* chart may be disposed */ }
+              }
+              if (!avgIvSeriesRef.current && chartRef.current) {
+                try {
+                  const avgIvSeries = chartRef.current.addSeries(LineSeries, {
+                    priceScaleId: 'iv-top-hidden',
+                    color: '#94a3b8',
+                    lineWidth: 1,
+                    lineStyle: LineStyle.Dashed,
+                    title: `IV MA (${ivMaPeriod})`,
+                    lastValueVisible: false,
+                    priceLineVisible: false,
+                    crosshairMarkerVisible: false,
+                    crosshairMarkerRadius: 0,
+                  }, 0);
+                  avgIvSeries.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+                  avgIvSeries.applyOptions({ visible: seriesVisibility.ivMa });
+                  avgIvSeriesRef.current = avgIvSeries;
                 } catch { /* chart may be disposed */ }
               }
               if (ivSeriesRef.current) {
                 // WS iv is decimal (0.15 = 15%) — multiply by 100 to match historical series
                 const t = snapToBarTime(Date.now(), intervalRef.current.min) as Time;
-                try { ivSeriesRef.current.update({ time: t, value: atmIv * 100 }); } catch { /* ignore */ }
+                const nextIvPoint = { time: t, value: atmIv * 100 };
+                try { ivSeriesRef.current.update(nextIvPoint); } catch { /* ignore */ }
+                const prev = ivHistoryRef.current;
+                const merged = prev.length > 0 && prev[prev.length - 1]?.time === nextIvPoint.time
+                  ? [...prev.slice(0, -1), nextIvPoint]
+                  : [...prev, nextIvPoint];
+                updateIvMaSeries(merged);
               }
               setLiveIv(atmIv * 100);
             }
@@ -1144,7 +1229,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoadingNote('');
       setLoading(false);
     }
-  }, [applyLive, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, syncBottomPaneLayout, underlying]);
+  }, [applyLive, bottomPaneVisible, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, seriesVisibility, syncBottomPaneLayout, underlying, updateIvMaSeries]);
 
   // Auto-trigger load once underlying + expiry are both set for the first time
   // Must be placed AFTER handleLoad to avoid temporal dead-zone error
@@ -1160,6 +1245,10 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   useEffect(() => {
     syncBottomPaneLayout(splitRatio);
   }, [splitRatio, syncBottomPaneLayout]);
+
+  useEffect(() => {
+    applySeriesVisibility(seriesVisibility);
+  }, [applySeriesVisibility, seriesVisibility]);
 
   useEffect(() => {
     const host = chartHostRef.current;
@@ -1220,6 +1309,10 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const ivChangeLabel = liveIvChangePct == null
     ? '--'
     : `${liveIvChangePct > 0 ? '+' : ''}${liveIvChangePct.toFixed(2)}%`;
+  const mountedSeriesCount = Object.values(seriesVisibility).filter(Boolean).length;
+  const mountedLegendSeries = SERIES_META.filter(item =>
+    seriesVisibility[item.key] && (item.pane === 'top' || bottomPaneVisible),
+  );
 
   return (
     <div className={s.root}>
@@ -1271,6 +1364,33 @@ export default function AtmRollingStraddle({ instruments }: Props) {
               <span className={s.toggleThumb} />
             </span>
           </label>
+
+          <div className={s.seriesMenuWrap} ref={seriesMenuRef}>
+            <button
+              type="button"
+              className={s.seriesMenuBtn}
+              onClick={() => setSeriesMenuOpen(open => !open)}
+              aria-expanded={seriesMenuOpen}
+            >
+              <span className={s.compactLabel}>Series</span>
+              <strong>{mountedSeriesCount}</strong>
+            </button>
+            {seriesMenuOpen && (
+              <div className={s.seriesMenu}>
+                {SERIES_META.map(item => (
+                  <label key={item.key} className={s.seriesMenuItem}>
+                    <input
+                      type="checkbox"
+                      checked={seriesVisibility[item.key]}
+                      onChange={e => setSeriesVisibility(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                    />
+                    <span className={s.seriesMenuDot} style={{ background: item.color }} />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className={s.toolbarSummary}>
@@ -1305,6 +1425,16 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       {error && <div className={s.error}>{error}</div>}
       <div className={s.chart} ref={chartHostRef}>
+        {mountedLegendSeries.length > 0 && (
+          <div className={s.seriesLegend}>
+            {mountedLegendSeries.map(item => (
+              <span key={item.key} className={s.seriesLegendItem}>
+                <span className={s.seriesLegendDot} style={{ background: item.color }} />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        )}
         {tooltip.visible && (
           <div className={s.tooltip} style={{ left: tooltip.x, top: tooltip.y }}>
             <div className={s.tooltipTime}>{tooltip.time}</div>

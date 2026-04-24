@@ -1,6 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue, startTransition } from 'react';
+import {
+  createChart,
+  LineSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type LineData,
+  type Time,
+} from 'lightweight-charts';
 import { useInstruments, type Instrument } from './useInstruments';
 import { loadNubraInstruments, clearNubraInstruments, saveNubraInstruments } from './db';
 import type { NubraInstrument } from './useNubraInstruments';
@@ -61,6 +69,20 @@ function isMarketOpen(): boolean {
 
 type Page = 'chart' | 'straddle' | 'oiprofile' | 'nubra' | 'backtest' | 'historical' | 'mtm' | 'home' | 'spread' | 'masterchain' | 'cumoi';
 type Tab = 'ALL' | 'Cash' | 'F&O' | 'Currency' | 'Commodity';
+
+const PAGE_TITLES: Record<Page, string> = {
+  home: 'AlphaHedge Home',
+  chart: 'AlphaHedge Charts',
+  mtm: 'AlphaHedge MTM Analyzer',
+  straddle: 'AlphaHedge Straddle',
+  oiprofile: 'AlphaHedge OI Profile',
+  nubra: 'AlphaHedge Nubra IV',
+  backtest: 'AlphaHedge Backtest',
+  historical: 'AlphaHedge Historical',
+  spread: 'AlphaHedge Spread Analyzer',
+  masterchain: 'AlphaHedge Master Option Chain',
+  cumoi: 'AlphaHedge Cumulative OI Chain',
+};
 
 const TABS: Tab[] = ['ALL', 'Cash', 'F&O', 'Currency', 'Commodity'];
 
@@ -214,6 +236,7 @@ const TICKER_SYMBOLS = [
   { label: 'INDIA VIX' },
   { label: 'SENSEX' },
 ] as const;
+type TickerLabel = typeof TICKER_SYMBOLS[number]['label'];
 
 function LiveMarketBadge() {
   const [live, setLive] = React.useState(isMarketOpen);
@@ -236,7 +259,13 @@ function LiveMarketBadge() {
   );
 }
 
-function MarketTicker({ nubraNavIndex }: { nubraNavIndex: Map<string, { ltp: number; changePct: number; pointChange: number }> }) {
+function MarketTicker({
+  nubraNavIndex,
+  onOpenChart,
+}: {
+  nubraNavIndex: Map<string, { ltp: number; changePct: number; pointChange: number }>;
+  onOpenChart?: (label: TickerLabel) => void;
+}) {
   const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -254,7 +283,12 @@ function MarketTicker({ nubraNavIndex }: { nubraNavIndex: Map<string, { ltp: num
             {idx > 0 && (
               <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 12px', flexShrink: 0 }} />
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => onOpenChart?.(label)}
+              title={`Open ${label} intraday chart`}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, border: 0, background: 'transparent', padding: '6px 8px', margin: '-6px -8px', borderRadius: 10, cursor: 'pointer' }}
+            >
               <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>
                 {label}
               </span>
@@ -272,10 +306,435 @@ function MarketTicker({ nubraNavIndex }: { nubraNavIndex: Map<string, { ltp: num
                   </span>
                 )}
               </div>
-            </div>
+            </button>
           </React.Fragment>
         );
       })}
+    </div>
+  );
+}
+
+function normalizeNubraTsToMs(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  if (raw > 1e18) return Math.round(raw / 1e6);
+  if (raw > 1e15) return Math.round(raw / 1e3);
+  if (raw > 1e12) return Math.round(raw);
+  if (raw > 1e9) return Math.round(raw * 1000);
+  return 0;
+}
+
+function MarketTickerMini({
+  nubraNavIndex,
+  nubraNavHistory,
+  onOpenChart,
+}: {
+  nubraNavIndex: Map<string, { ltp: number; changePct: number; pointChange: number }>;
+  nubraNavHistory: Map<string, LineData[]>;
+  onOpenChart?: (label: TickerLabel) => void;
+}) {
+  const fmtPrice = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtChg = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, marginRight: 4 }}>
+      {TICKER_SYMBOLS.map(({ label }, idx) => {
+        const d = nubraNavIndex.get(label);
+        const history = nubraNavHistory.get(label) ?? [];
+        const ltp = d?.ltp ?? null;
+        const changePct = d?.changePct ?? null;
+        const pointChange = d?.pointChange ?? null;
+        const up = pointChange == null ? null : pointChange >= 0;
+        const chgColor = up == null ? '#6b7280' : up ? '#26a69a' : '#ef5350';
+        const sparkColor = up == null ? '#64748b' : up ? '#26a69a' : '#ef5350';
+        const sparkPoints = history.slice(-48);
+        const sparkPath = (() => {
+          if (sparkPoints.length < 2) return '';
+          const values = sparkPoints
+            .map(point => point.value)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+          if (values.length < 2) return '';
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          const range = Math.max(max - min, 1e-6);
+          return sparkPoints.map((point, i) => {
+            const x = sparkPoints.length === 1 ? 0 : (i / (sparkPoints.length - 1)) * 68;
+            const y = 24 - (((point.value as number) - min) / range) * 24;
+            return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+          }).join(' ');
+        })();
+
+        return (
+          <React.Fragment key={label}>
+            {idx > 0 && (
+              <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.1)', margin: '0 12px', flexShrink: 0 }} />
+            )}
+            <button
+              type="button"
+              onClick={() => onOpenChart?.(label)}
+              title={`Open ${label} intraday chart`}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, border: 0, background: 'transparent', padding: '6px 8px', margin: '-6px -8px', borderRadius: 10, cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase', textAlign: 'left' }}>
+                  {label}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                    {ltp != null ? fmtPrice(ltp) : '—'}
+                  </span>
+                  {pointChange != null && up != null && changePct != null && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: chgColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                      {up
+                        ? <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,1 9,9 1,9" /></svg>
+                        : <svg width="8" height="8" viewBox="0 0 10 10" fill={chgColor}><polygon points="5,9 9,1 1,1" /></svg>
+                      }
+                      {up ? '+' : '-'}{fmtChg(pointChange)} ({up ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div style={{ width: 72, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="68" height="24" viewBox="0 0 68 24" fill="none" aria-hidden="true">
+                  {sparkPath
+                    ? <path d={sparkPath} stroke={sparkColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    : <path d="M2 12 L66 12" stroke="rgba(148,163,184,0.35)" strokeWidth="1.4" strokeDasharray="3 3" strokeLinecap="round" />}
+                </svg>
+              </div>
+            </button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function inferNubraIndexScale(rawValues: number[], expectedLtp?: number): number {
+  const usable = rawValues.filter(value => Number.isFinite(value) && value > 0);
+  if (!usable.length) return 1;
+
+  if (expectedLtp && Number.isFinite(expectedLtp) && expectedLtp > 0) {
+    const sample = usable[Math.floor(usable.length / 2)] ?? usable[0];
+    const ratio = sample / expectedLtp;
+    if (ratio > 80 && ratio < 120) return 100;
+    if (ratio > 8000 && ratio < 12000) return 10000;
+    return 1;
+  }
+
+  const median = [...usable].sort((a, b) => a - b)[Math.floor(usable.length / 2)] ?? usable[0];
+  if (median > 1000) return 100;
+  return 1;
+}
+
+async function fetchNubraIndexIntraday(exchange: string, symbol: string, expectedLtp?: number): Promise<LineData[]> {
+  const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+  const authToken = localStorage.getItem('nubra_auth_token') ?? '';
+  const deviceId = localStorage.getItem('nubra_device_id') ?? '';
+  const rawCookie = localStorage.getItem('nubra_raw_cookie') ?? '';
+  if (!sessionToken || !symbol) return [];
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const startDate = `${today}T03:45:00.000Z`;
+  const endDate = new Date().toISOString();
+  const res = await fetch('/api/nubra-historical', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_token: sessionToken,
+      auth_token: authToken,
+      device_id: deviceId,
+      raw_cookie: rawCookie,
+      exchange,
+      type: 'INDEX',
+      values: [symbol],
+      fields: ['close'],
+      startDate,
+      endDate,
+      interval: '1m',
+      intraDay: true,
+      realTime: false,
+    }),
+  });
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  const valuesArr: any[] = json?.result?.[0]?.values ?? [];
+  let chartObj: any = null;
+  for (const dict of valuesArr) {
+    for (const value of Object.values(dict ?? {})) {
+      chartObj = value;
+      break;
+    }
+    if (chartObj) break;
+  }
+  const series = chartObj?.close ?? [];
+  if (!Array.isArray(series)) return [];
+  const scale = inferNubraIndexScale(
+    series.map((point: any) => Number(point?.v ?? point?.value ?? 0)),
+    expectedLtp,
+  );
+
+  const mapped = series
+    .map((point: any) => {
+      const tsMs = normalizeNubraTsToMs(Number(point?.ts ?? point?.timestamp ?? 0));
+      const rawValue = Number(point?.v ?? point?.value ?? 0);
+      const value = rawValue / scale;
+      return {
+        time: Math.floor(tsMs / 1000) as Time,
+        value,
+      };
+    })
+    .filter((point: LineData) => typeof point.time === 'number' && typeof point.value === 'number' && Number.isFinite(point.value) && point.value > 0);
+
+  const deduped = new Map<number, LineData>();
+  for (const point of mapped) deduped.set(Number(point.time), point);
+  return [...deduped.values()].sort((a, b) => Number(a.time) - Number(b.time));
+}
+
+function TickerIndexChartModal({
+  label,
+  symbol,
+  exchange,
+  quote,
+  onClose,
+}: {
+  label: TickerLabel;
+  symbol: string;
+  exchange: string;
+  quote: { ltp: number; changePct: number; pointChange: number } | undefined;
+  onClose: () => void;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const lineRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const dataRef = useRef<LineData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const chart = createChart(host, {
+      autoSize: true,
+      layout: { background: { color: '#111317' }, textColor: '#a5b4c3', fontSize: 11 },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.05)' },
+        horzLines: { color: 'rgba(255,255,255,0.05)' },
+      },
+      rightPriceScale: {
+        visible: true,
+        borderColor: 'rgba(255,255,255,0.10)',
+        scaleMargins: { top: 0.08, bottom: 0.10 },
+      },
+      leftPriceScale: { visible: false },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.10)',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 6,
+        tickMarkFormatter: (t: Time) =>
+          new Date(Number(t) * 1000).toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+      },
+      localization: {
+        timeFormatter: (t: Time) =>
+          new Date(Number(t) * 1000).toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+      },
+      crosshair: {
+        vertLine: { color: 'rgba(255,255,255,0.22)', width: 1, labelVisible: true },
+        horzLine: { color: 'rgba(255,255,255,0.15)', width: 1, labelVisible: true },
+      },
+    });
+    const line = chart.addSeries(LineSeries, {
+      color: '#60a5fa',
+      lineWidth: 2,
+      title: label,
+      lastValueVisible: true,
+      priceLineVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 3,
+      crosshairMarkerBorderColor: '#111317',
+      crosshairMarkerBackgroundColor: '#60a5fa',
+    });
+    chartRef.current = chart;
+    lineRef.current = line;
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      lineRef.current = null;
+    };
+  }, [label]);
+
+  useEffect(() => {
+    let disposed = false;
+    setLoading(true);
+    setLoadError(null);
+    dataRef.current = [];
+
+    void fetchNubraIndexIntraday(exchange, symbol, quote?.ltp)
+      .then(points => {
+        if (disposed) return;
+        dataRef.current = points;
+        lineRef.current?.setData(points);
+        chartRef.current?.timeScale().fitContent();
+      })
+      .catch(err => {
+        if (disposed) return;
+        setLoadError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!disposed) setLoading(false);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [exchange, symbol]);
+
+  useEffect(() => {
+    const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
+    if (!sessionToken || !symbol || !exchange) return;
+    let destroyed = false;
+    const ws = new WebSocket('ws://localhost:8765');
+
+    const sendSubs = () => {
+      if (destroyed || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        action: 'subscribe',
+        session_token: sessionToken,
+        data_type: 'index',
+        symbols: [symbol],
+        exchange,
+      }));
+    };
+
+    ws.onopen = () => sendSubs();
+    ws.onmessage = event => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'connected') {
+          sendSubs();
+          return;
+        }
+        if (msg.type !== 'index' || !msg.data) return;
+        const incoming = String(msg.data.indexname ?? '').toUpperCase();
+        if (incoming !== symbol.toUpperCase()) return;
+        const raw = Number(msg.data.index_value ?? 0);
+        const value = raw / 100;
+        if (!Number.isFinite(value) || value <= 0) return;
+        const rawTs = Number(msg.data.timestamp ?? 0);
+        const tsMs = normalizeNubraTsToMs(rawTs) || Date.now();
+        const nextPoint = { time: Math.floor(tsMs / 60000) * 60 as Time, value };
+        const prev = dataRef.current;
+        const merged = prev.length > 0 && Number(prev[prev.length - 1].time) === Number(nextPoint.time)
+          ? [...prev.slice(0, -1), nextPoint]
+          : [...prev, nextPoint];
+        dataRef.current = merged;
+        lineRef.current?.update(nextPoint);
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    ws.onerror = () => {};
+    return () => {
+      destroyed = true;
+      try { ws.close(); } catch { /* ignore */ }
+    };
+  }, [exchange, symbol]);
+
+  const up = (quote?.pointChange ?? 0) >= 0;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1200,
+        background: 'rgba(5, 8, 14, 0.62)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        padding: '56px 20px 20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: 'min(860px, 90vw)',
+          height: 'min(520px, 68vh)',
+          background: '#111317',
+          border: '1px solid rgba(148,163,184,0.18)',
+          borderRadius: 16,
+          boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '12px 14px',
+            borderBottom: '1px solid rgba(148,163,184,0.14)',
+            background: 'linear-gradient(180deg, rgba(17,24,39,0.98), rgba(17,24,39,0.90))',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>{label} Intraday</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>Nubra intraday history + live index ticks</div>
+            </div>
+            {quote && (
+              <div style={{ fontSize: 12, fontWeight: 700, color: up ? '#26a69a' : '#ef5350', fontVariantNumeric: 'tabular-nums' }}>
+                {quote.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {up ? '+' : ''}{quote.changePct.toFixed(2)}%
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
+              border: '1px solid rgba(148,163,184,0.18)',
+              background: 'rgba(255,255,255,0.03)',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              fontSize: 18,
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+          <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+          {loading && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 12, background: 'rgba(17,19,23,0.40)' }}>
+              Loading intraday chart…
+            </div>
+          )}
+          {!loading && loadError && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fca5a5', fontSize: 12 }}>
+              {loadError}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2806,6 +3265,7 @@ function NavIndexStrip({ data }: { data: Map<string, { ltp: number; changePct: n
 export default function App() {
   const { googleUser, signOut } = useGoogleAuth();
   const { instruments, status } = useInstruments();
+  const [tickerChartLabel, setTickerChartLabel] = useState<TickerLabel | null>(null);
   // Nubra session token — declared early so index feed effects can depend on it
   const [nubraSession, setNubraSession] = useState(() => localStorage.getItem('nubra_session_token') ?? '');
 
@@ -2878,6 +3338,7 @@ export default function App() {
   // ── Nav index strip (NIFTY / BANKNIFTY / INDIA VIX / SENSEX) ────────────────
   // Shape: label → { ltp, changePct, pointChange }
   const [nubraNavIndex, setNubraNavIndex] = useState<Map<string, { ltp: number; changePct: number; pointChange: number }>>(new Map());
+  const [nubraNavHistory, setNubraNavHistory] = useState<Map<string, LineData[]>>(new Map());
   const nubraNavWsRef = useRef<WebSocket | null>(null);
 
   // Derive the 4 subscription targets from nubraInstruments once loaded
@@ -2903,6 +3364,10 @@ export default function App() {
   }, [nubraInstruments]);
   const nubraNavTargetsRef = useRef(nubraNavTargets);
   nubraNavTargetsRef.current = nubraNavTargets;
+  const tickerChartTarget = useMemo(
+    () => (tickerChartLabel ? nubraNavTargets.find(target => target.label === tickerChartLabel) ?? null : null),
+    [nubraNavTargets, tickerChartLabel],
+  );
 
   // Label map for incoming WS ticks (indexname → our label)
   const NAV_LABEL_MAP: Record<string, string> = {
@@ -2917,6 +3382,27 @@ export default function App() {
   // the closure is always fresh; effect re-runs via nubraNavTargetsKey change.
   const nubraNavTargetsKey = nubraNavTargets.map(t => t.symbol).join(',');
   const nubraNavSessionRef = useRef('');
+
+  useEffect(() => {
+    if (!nubraSession) return;
+    let cancelled = false;
+
+    void Promise.allSettled(
+      nubraNavTargets.map(async ({ label, symbol, exchange }) => {
+        const history = await fetchNubraIndexIntraday(exchange, symbol);
+        if (cancelled || history.length === 0) return;
+        setNubraNavHistory(prev => {
+          const next = new Map(prev);
+          next.set(label, history);
+          return next;
+        });
+      }),
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nubraNavTargets, nubraSession]);
 
   useEffect(() => {
     const sessionToken = nubraSession;
@@ -3014,6 +3500,18 @@ export default function App() {
           const changePct = d.changepercent ?? 0;
           const pointChange = ltp * changePct / (100 + changePct);
           setNubraNavIndex(prev => { const next = new Map(prev); next.set(label, { ltp, changePct, pointChange }); return next; });
+          const rawTs = Number(d.timestamp ?? 0);
+          const tsMs = normalizeNubraTsToMs(rawTs) || Date.now();
+          const nextPoint = { time: Math.floor(tsMs / 60000) * 60 as Time, value: ltp };
+          setNubraNavHistory(prev => {
+            const next = new Map(prev);
+            const series = next.get(label) ?? [];
+            const merged = series.length > 0 && Number(series[series.length - 1].time) === Number(nextPoint.time)
+              ? [...series.slice(0, -1), nextPoint]
+              : [...series, nextPoint];
+            next.set(label, merged.slice(-120));
+            return next;
+          });
         } catch { /* silent */ }
       };
       ws.onerror = () => {
@@ -3058,6 +3556,9 @@ export default function App() {
   // Once a page is visited it is never unmounted (state + WS survive tab switches).
   const [visited, setVisited] = useState<Set<Page>>(() => new Set<Page>(['chart']));
   const navigateTo = useCallback((p: Page) => { setVisited(prev => { const next = new Set(prev); next.add(p); return next; }); setPage(p); }, []);
+  useEffect(() => {
+    document.title = PAGE_TITLES[page];
+  }, [page]);
   // ── Multi-pane workspace ────────────────────────────────────────────────────
   const { state: workspaceState, dispatch: workspaceDispatch } = useWorkspaceState(instruments);
   // Tracks which pane is currently "active" (last clicked) — navbar search routes here
@@ -3692,7 +4193,7 @@ export default function App() {
 
           {/* Center: market ticker — takes all remaining space */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, overflow: 'hidden' }}>
-            <MarketTicker nubraNavIndex={nubraNavIndex} />
+            <MarketTickerMini nubraNavIndex={nubraNavIndex} nubraNavHistory={nubraNavHistory} onOpenChart={setTickerChartLabel} />
           </div>
 
           {/* Right: live indicator + basket + avatar */}
@@ -4153,6 +4654,15 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      {tickerChartLabel && (
+        <TickerIndexChartModal
+          label={tickerChartLabel}
+          symbol={tickerChartTarget?.symbol || tickerChartLabel}
+          exchange={tickerChartTarget?.exchange || (tickerChartLabel === 'SENSEX' ? 'BSE' : 'NSE')}
+          quote={nubraNavIndex.get(tickerChartLabel)}
+          onClose={() => setTickerChartLabel(null)}
+        />
       )}
       {/* ── Watermark ─────────────────────────────────────────────── */}
       <img
