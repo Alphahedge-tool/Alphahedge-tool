@@ -20,13 +20,15 @@ interface Props {
 
 type IntervalOpt = { label: string; min: number; upstox: string };
 type IvMaOpt = { label: string; period: number };
-type SeriesKey = 'premium' | 'spot' | 'iv' | 'ivMa' | 'strike' | 'ce' | 'pe';
+type PrevIvMode = 'overlay-today' | 'actual-date';
+type SeriesKey = 'premium' | 'spot' | 'iv' | 'prevIv' | 'ivMa' | 'strike' | 'ce' | 'pe';
 type SeriesVisibilityState = Record<SeriesKey, boolean>;
 
 const DEFAULT_SERIES_VISIBILITY: SeriesVisibilityState = {
   premium: true,
   spot: true,
   iv: true,
+  prevIv: true,
   ivMa: true,
   strike: true,
   ce: true,
@@ -37,6 +39,7 @@ const SERIES_META: Array<{ key: SeriesKey; label: string; color: string; pane: '
   { key: 'premium', label: 'ATM Rolling Premium', color: '#facc15', pane: 'top' },
   { key: 'spot', label: 'Spot', color: '#5b74ff', pane: 'top' },
   { key: 'iv', label: 'Rolling IV %', color: '#ff4d57', pane: 'top' },
+  { key: 'prevIv', label: 'Prev Day IV %', color: '#22d3ee', pane: 'top' },
   { key: 'ivMa', label: 'IV MA', color: '#94a3b8', pane: 'top' },
   { key: 'strike', label: 'ATM Strike', color: '#60a5fa', pane: 'bottom' },
   { key: 'ce', label: 'ATM CE', color: '#34d399', pane: 'bottom' },
@@ -121,6 +124,15 @@ function lastTradingDay(): string {
   if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && istMin < OPEN) {
     d.setUTCDate(d.getUTCDate() - 1);
   }
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function previousTradingDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
     d.setUTCDate(d.getUTCDate() - 1);
   }
@@ -286,6 +298,7 @@ async function fetchNubraAtmIvSeries(
   exchange: string,
   expiryMs: number,
   nubraType: 'INDEX' | 'STOCK',
+  tradingDate = lastTradingDay(),
 ): Promise<LineData[]> {
   const sessionToken = localStorage.getItem('nubra_session_token') ?? '';
   const deviceId = localStorage.getItem('nubra_device_id') ?? 'web';
@@ -293,7 +306,7 @@ async function fetchNubraAtmIvSeries(
   if (!sessionToken) return [];
 
   const chainValue = toNubraChainValue(underlying, expiryMs);
-  const commonDates = { interval: '1m', ...buildNubraTimeseriesWindow(lastTradingDay()) };
+  const commonDates = { interval: '1m', ...buildNubraTimeseriesWindow(tradingDate) };
   const spotType = nubraType === 'STOCK' ? 'STOCK' : 'INDEX';
   const res = await fetch('/api/nubra-timeseries', {
     method: 'POST',
@@ -323,43 +336,6 @@ async function fetchNubraAtmIvSeries(
       }
     }
     if (pts.length) break;
-  }
-
-  // Fallback: if current trading-day window still empty, try previous trading day once.
-  if (!pts.length) {
-    const d = new Date(lastTradingDay());
-    d.setUTCDate(d.getUTCDate() - 1);
-    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
-    const prevDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-    const prevDates = { interval: '1m', ...buildNubraTimeseriesWindow(prevDate) };
-    const res2 = await fetch('/api/nubra-timeseries', {
-      method: 'POST',
-      headers: {
-        'x-session-token': sessionToken,
-        'x-device-id': deviceId,
-        'x-raw-cookie': rawCookie,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chart: 'ATM_Volatility_vs_Spot',
-        query: [
-          { exchange, type: 'CHAIN', values: [chainValue], fields: ['atm_iv'], ...prevDates },
-          { exchange, type: spotType, values: [underlying], fields: ['value'], ...prevDates },
-        ],
-      }),
-    });
-    if (res2.ok) {
-      const json2 = await res2.json();
-      for (const entry of json2?.result ?? []) {
-        for (const valObj of entry?.values ?? []) {
-          if (valObj?.[chainValue]?.atm_iv?.length) {
-            pts = valObj[chainValue].atm_iv;
-            break;
-          }
-        }
-        if (pts.length) break;
-      }
-    }
   }
 
   const mapped = pts.map(p => {
@@ -525,6 +501,24 @@ function buildMovingAverageSeries(series: LineData[], period = 9): LineData[] {
   return out;
 }
 
+function overlaySeriesOnTradingDate(series: LineData[], targetDate: string): LineData[] {
+  if (!series.length || !targetDate) return series;
+  const targetMidnightUtc = Date.parse(`${targetDate}T00:00:00.000Z`);
+  if (!Number.isFinite(targetMidnightUtc)) return series;
+
+  const shifted = series.map(point => {
+    const sourceSec = Number(point.time);
+    if (!Number.isFinite(sourceSec)) return point;
+    const sourceIst = new Date((sourceSec + IST_OFFSET_SEC) * 1000);
+    const minuteOfDay = sourceIst.getUTCHours() * 60 + sourceIst.getUTCMinutes();
+    const second = sourceIst.getUTCSeconds();
+    const targetSec = Math.floor((targetMidnightUtc + (minuteOfDay * 60 + second - IST_OFFSET_SEC) * 1000) / 1000);
+    return { ...point, time: targetSec as unknown as Time };
+  });
+
+  return shifted.sort((a, b) => Number(a.time) - Number(b.time));
+}
+
 function ensureRenderableLineSeed(series: LineData[], nextPoint: LineData): LineData[] {
   if (series.length > 0) {
     return series[series.length - 1]?.time === nextPoint.time
@@ -542,6 +536,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const [expiry, setExpiry] = useState<number | null>(null);
   const [interval, setInterval] = useState<IntervalOpt>(INTERVALS[1]);
   const [ivMaPeriod, setIvMaPeriod] = useState<number>(9);
+  const [prevIvMode, setPrevIvMode] = useState<PrevIvMode>('overlay-today');
   const [loading, setLoading] = useState(false);
   const [loadingNote, setLoadingNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -559,6 +554,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const peSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const strikeSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const prevIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const avgIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivHistoryRef = useRef<LineData[]>([]);
   const unsubsRef = useRef<(() => void)[]>([]);
@@ -584,6 +580,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     premium: number | null;
     spot: number | null;
     iv: number | null;
+    prevIv: number | null;
     atmStrike: number | null;
     ce: number | null;
     pe: number | null;
@@ -595,6 +592,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     premium: null,
     spot: null,
     iv: null,
+    prevIv: null,
     atmStrike: null,
     ce: null,
     pe: null,
@@ -642,6 +640,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     try { premiumSeriesRef.current?.applyOptions({ visible: nextVisibility.premium }); } catch { /* ignore */ }
     try { spotSeriesRef.current?.applyOptions({ visible: nextVisibility.spot }); } catch { /* ignore */ }
     try { ivSeriesRef.current?.applyOptions({ visible: nextVisibility.iv }); } catch { /* ignore */ }
+    try { prevIvSeriesRef.current?.applyOptions({ visible: nextVisibility.prevIv }); } catch { /* ignore */ }
     try { avgIvSeriesRef.current?.applyOptions({ visible: nextVisibility.ivMa }); } catch { /* ignore */ }
     try { ceSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.ce }); } catch { /* ignore */ }
     try { peSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.pe }); } catch { /* ignore */ }
@@ -723,6 +722,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       const premium = premiumSeriesRef.current ? valueFromSeriesData(param.seriesData.get(premiumSeriesRef.current)) : null;
       const spot = spotSeriesRef.current ? valueFromSeriesData(param.seriesData.get(spotSeriesRef.current)) : null;
       const iv = ivSeriesRef.current ? valueFromSeriesData(param.seriesData.get(ivSeriesRef.current)) : null;
+      const prevIv = prevIvSeriesRef.current ? valueFromSeriesData(param.seriesData.get(prevIvSeriesRef.current)) : null;
       const atmStrike = strikeSeriesRef.current ? valueFromSeriesData(param.seriesData.get(strikeSeriesRef.current)) : null;
       const ce = ceSeriesRef.current ? valueFromSeriesData(param.seriesData.get(ceSeriesRef.current)) : null;
       const pe = peSeriesRef.current ? valueFromSeriesData(param.seriesData.get(peSeriesRef.current)) : null;
@@ -738,6 +738,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         premium: numOrNull(premium),
         spot: numOrNull(spot),
         iv: numOrNull(iv),
+        prevIv: numOrNull(prevIv),
         atmStrike: numOrNull(atmStrike),
         ce: numOrNull(ce),
         pe: numOrNull(pe),
@@ -771,7 +772,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const clearSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef, avgIvSeriesRef]) {
+    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef, prevIvSeriesRef, avgIvSeriesRef]) {
       if (ref.current) {
         try { chart.removeSeries(ref.current); } catch { /* ignore */ }
         ref.current = null;
@@ -832,7 +833,10 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       const nubraExchange = toNubraExchange(instruments, underlying, expiry);
       const spotIns = instruments.find(i => i.instrument_key === spotKey);
       const nubraType: 'INDEX' | 'STOCK' = spotIns?.instrument_type === 'EQ' ? 'STOCK' : 'INDEX';
-      const ivPromise = fetchNubraAtmIvSeries(underlying, nubraExchange, expiry, nubraType).catch(() => [] as LineData[]);
+      const tradingDate = lastTradingDay();
+      const prevTradingDate = previousTradingDay(tradingDate);
+      const ivPromise = fetchNubraAtmIvSeries(underlying, nubraExchange, expiry, nubraType, tradingDate).catch(() => [] as LineData[]);
+      const prevIvPromise = fetchNubraAtmIvSeries(underlying, nubraExchange, expiry, nubraType, prevTradingDate).catch(() => [] as LineData[]);
 
       const pairMap = new Map<number, { ceKey: string | null; peKey: string | null }>();
       for (const ins of instruments) {
@@ -1031,6 +1035,10 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       setLoadingNote('Loading Nubra rolling IV...');
       const ivData = await ivPromise;
+      const rawPrevIvData = await prevIvPromise;
+      const prevIvData = prevIvMode === 'overlay-today'
+        ? overlaySeriesOnTradingDate(rawPrevIvData, tradingDate)
+        : rawPrevIvData;
       if (ivData.length > 0) {
         const ivSer = chart.addSeries(LineSeries, {
           priceScaleId: 'iv-top-hidden',
@@ -1065,6 +1073,22 @@ export default function AtmRollingStraddle({ instruments }: Props) {
           avgIvSeries.applyOptions({ visible: seriesVisibility.ivMa });
           avgIvSeriesRef.current = avgIvSeries;
         }
+      }
+
+      if (prevIvData.length > 0) {
+        const prevIvSer = chart.addSeries(LineSeries, {
+          priceScaleId: 'iv-top-hidden',
+          color: '#22d3ee',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          title: 'Prev Day IV % (Nubra)',
+          lastValueVisible: true,
+          priceLineVisible: false,
+        }, 0);
+        prevIvSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+        prevIvSer.setData(prevIvData);
+        prevIvSer.applyOptions({ visible: seriesVisibility.prevIv });
+        prevIvSeriesRef.current = prevIvSer;
       }
 
       // Show dedicated pane split and apply initial heights.
@@ -1244,7 +1268,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoadingNote('');
       setLoading(false);
     }
-  }, [applyLive, bottomPaneVisible, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, seriesVisibility, syncBottomPaneLayout, underlying, updateIvMaSeries]);
+  }, [applyLive, bottomPaneVisible, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, prevIvMode, seriesVisibility, syncBottomPaneLayout, underlying, updateIvMaSeries]);
 
   // Auto-trigger load once underlying + expiry are both set for the first time
   // Must be placed AFTER handleLoad to avoid temporal dead-zone error
@@ -1367,6 +1391,14 @@ export default function AtmRollingStraddle({ instruments }: Props) {
             </select>
           </div>
 
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>Prev IV</span>
+            <select className={s.compactSelect} value={prevIvMode} onChange={e => setPrevIvMode(e.target.value as PrevIvMode)}>
+              <option value="overlay-today">Overlay Today</option>
+              <option value="actual-date">Actual Date</option>
+            </select>
+          </div>
+
           <label className={s.toggleField}>
             <span className={s.compactLabel}>Bottom Pane</span>
             <input
@@ -1440,22 +1472,13 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       {error && <div className={s.error}>{error}</div>}
       <div className={s.chart} ref={chartHostRef}>
-        {mountedLegendSeries.length > 0 && (
-          <div className={s.seriesLegend}>
-            {mountedLegendSeries.map(item => (
-              <span key={item.key} className={s.seriesLegendItem}>
-                <span className={s.seriesLegendDot} style={{ background: item.color }} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        )}
         {tooltip.visible && (
           <div className={s.tooltip} style={{ left: tooltip.x, top: tooltip.y }}>
             <div className={s.tooltipTime}>{tooltip.time}</div>
             <div className={s.tooltipRow}><span>Straddle</span><b>{tooltip.premium != null ? tooltip.premium.toFixed(2) : '--'}</b></div>
             <div className={s.tooltipRow}><span>Spot</span><b>{tooltip.spot != null ? tooltip.spot.toFixed(2) : '--'}</b></div>
             <div className={s.tooltipRow}><span>IV %</span><b>{tooltip.iv != null ? tooltip.iv.toFixed(2) : '--'}</b></div>
+            <div className={s.tooltipRow}><span>Prev IV %</span><b>{tooltip.prevIv != null ? tooltip.prevIv.toFixed(2) : '--'}</b></div>
             <div className={s.tooltipDivider} />
             <div className={s.tooltipRow}><span>ATM Strike</span><b>{tooltip.atmStrike != null ? tooltip.atmStrike.toFixed(0) : '--'}</b></div>
             <div className={s.tooltipRow}><span>ATM CE</span><b>{tooltip.ce != null ? tooltip.ce.toFixed(2) : '--'}</b></div>
@@ -1488,9 +1511,19 @@ export default function AtmRollingStraddle({ instruments }: Props) {
               <div className={s.loadingSpinner} />
               <span>{loadingNote || 'Loading ATM rolling data...'}</span>
             </div>
-          </div>
-        )}
+        </div>
+      )}
       </div>
+      {mountedLegendSeries.length > 0 && (
+        <div className={s.seriesLegend}>
+          {mountedLegendSeries.map(item => (
+            <span key={item.key} className={s.seriesLegendItem}>
+              <span className={s.seriesLegendDot} style={{ background: item.color }} />
+              {item.label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

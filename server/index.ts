@@ -1544,24 +1544,32 @@ app.post('/api/nubra-historical', async (req, reply) => {
   const cookiePrimary = buildNubraCookie(rawCookie, sessionToken, body.auth_token || '', deviceId);
 
   // Nubra requires empty startDate/endDate when intraDay=true — sending real dates causes 403.
+  // Intraday date handling differs by instrument type; retry once with the alternate mode on 403.
   const isIntraDay = intraDay ?? false;
-  const queryItem = {
-    exchange,
-    type,
-    values,
-    fields,
-    startDate: isIntraDay ? '' : (startDate ?? ''),
-    endDate: isIntraDay ? '' : (endDate ?? ''),
-    interval: interval ?? '1m',
-    intraDay: isIntraDay,
-    realTime: realTime ?? false,
+  const makeReqBody = (blankIntradayDates: boolean) => {
+    const queryItem = {
+      exchange,
+      type,
+      values,
+      fields,
+      startDate: isIntraDay && blankIntradayDates ? '' : (startDate ?? ''),
+      endDate: isIntraDay && blankIntradayDates ? '' : (endDate ?? ''),
+      interval: interval ?? '1m',
+      intraDay: isIntraDay,
+      realTime: realTime ?? false,
+    };
+    return JSON.stringify({ query: [queryItem] });
   };
 
-  const reqBody = JSON.stringify({ query: [queryItem] });
-  console.log(`[nubra-historical] →`, reqBody.slice(0, 300));
+  const primaryBlankDates = isIntraDay && type === 'OPT';
+  let reqBody = makeReqBody(primaryBlankDates);
+  const debugNubraHistorical = process.env.NUBRA_HISTORICAL_DEBUG === '1';
+  if (debugNubraHistorical) {
+    console.log(`[nubra-historical] ->`, reqBody.slice(0, 300));
+  }
 
   try {
-    const callUpstream = async (url: string, cookie: string) => fetch(url, {
+    const callUpstream = async (url: string, cookie: string, bodyText: string) => fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1576,13 +1584,37 @@ app.post('/api/nubra-historical', async (req, reply) => {
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'same-site',
       },
-      body: reqBody,
+      body: bodyText,
       dispatcher: nubraAgent,
     } as any);
 
-    const upstream = await callUpstream(`${NUBRA_API}/charts/timeseries?chart=charts`, cookiePrimary);
-    const data = await upstream.text();
-    console.log(`[nubra-historical] ← ${upstream.status} (${data.length}b) ${data.slice(0, 200)}`);
+    let upstream = await callUpstream(`${NUBRA_API}/charts/timeseries?chart=charts`, cookiePrimary, reqBody);
+    let data = await upstream.text();
+    if (upstream.status === 403 && isIntraDay) {
+      const retryReqBody = makeReqBody(!primaryBlankDates);
+      if (retryReqBody !== reqBody) {
+        if (debugNubraHistorical) {
+          console.log('[nubra-historical] retrying 403 with alternate intraday date mode');
+        }
+        reqBody = retryReqBody;
+        upstream = await callUpstream(`${NUBRA_API}/charts/timeseries?chart=charts`, cookiePrimary, reqBody);
+        data = await upstream.text();
+      }
+    }
+    if (debugNubraHistorical) {
+      console.log(`[nubra-historical] <- ${upstream.status} (${data.length}b) ${data.slice(0, 200)}`);
+    } else if (!upstream.ok && upstream.status !== 403) {
+      console.warn(`[nubra-historical] ${upstream.status} values=${values.length} fields=${fields.join(',')} body=${data.slice(0, 120)}`);
+    }
+    if (upstream.status === 403) {
+      reply.header('Content-Type', 'application/json');
+      reply.header('X-Upstream-Status', '403');
+      return reply.send({
+        result: [{ values: [] }],
+        warning: 'Nubra historical upstream returned 403; returning empty historical data.',
+        upstreamStatus: 403,
+      });
+    }
     reply.status(upstream.status);
     reply.header('Content-Type', upstream.headers.get('content-type') ?? 'application/json');
     return reply.send(data);
