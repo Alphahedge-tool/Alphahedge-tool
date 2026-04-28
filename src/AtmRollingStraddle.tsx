@@ -21,13 +21,14 @@ interface Props {
 type IntervalOpt = { label: string; min: number; upstox: string };
 type IvMaOpt = { label: string; period: number };
 type PrevIvMode = 'overlay-today' | 'actual-date';
-type SeriesKey = 'premium' | 'spot' | 'iv' | 'prevIv' | 'ivMa' | 'strike' | 'ce' | 'pe';
+type SeriesKey = 'premium' | 'spot' | 'iv' | 'compareIv' | 'prevIv' | 'ivMa' | 'strike' | 'ce' | 'pe';
 type SeriesVisibilityState = Record<SeriesKey, boolean>;
 
 const DEFAULT_SERIES_VISIBILITY: SeriesVisibilityState = {
   premium: true,
   spot: true,
   iv: true,
+  compareIv: true,
   prevIv: true,
   ivMa: true,
   strike: true,
@@ -39,7 +40,8 @@ const SERIES_META: Array<{ key: SeriesKey; label: string; color: string; pane: '
   { key: 'premium', label: 'ATM Rolling Premium', color: '#facc15', pane: 'top' },
   { key: 'spot', label: 'Spot', color: '#5b74ff', pane: 'top' },
   { key: 'iv', label: 'Rolling IV %', color: '#ff4d57', pane: 'top' },
-  { key: 'prevIv', label: 'Prev Day IV %', color: '#22d3ee', pane: 'top' },
+  { key: 'compareIv', label: 'Compare Exp IV %', color: '#2dd4bf', pane: 'top' },
+  { key: 'prevIv', label: 'Prev Day IV %', color: '#fb923c', pane: 'top' },
   { key: 'ivMa', label: 'IV MA', color: '#94a3b8', pane: 'top' },
   { key: 'strike', label: 'ATM Strike', color: '#60a5fa', pane: 'bottom' },
   { key: 'ce', label: 'ATM CE', color: '#34d399', pane: 'bottom' },
@@ -534,6 +536,7 @@ function ensureRenderableLineSeed(series: LineData[], nextPoint: LineData): Line
 export default function AtmRollingStraddle({ instruments }: Props) {
   const [underlying, setUnderlying] = useState('');
   const [expiry, setExpiry] = useState<number | null>(null);
+  const [compareExpiry, setCompareExpiry] = useState<number | null>(null);
   const [interval, setInterval] = useState<IntervalOpt>(INTERVALS[1]);
   const [ivMaPeriod, setIvMaPeriod] = useState<number>(9);
   const [prevIvMode, setPrevIvMode] = useState<PrevIvMode>('overlay-today');
@@ -554,6 +557,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const peSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const strikeSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const compareIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const prevIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const avgIvSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ivHistoryRef = useRef<LineData[]>([]);
@@ -620,6 +624,12 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     });
   }, [underlying, expiries]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (compareExpiry != null && (!expiries.includes(compareExpiry) || compareExpiry === expiry)) {
+      setCompareExpiry(null);
+    }
+  }, [compareExpiry, expiries, expiry]);
+
   useEffect(() => { intervalRef.current = interval; }, [interval]);
 
   useEffect(() => {
@@ -640,6 +650,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
     try { premiumSeriesRef.current?.applyOptions({ visible: nextVisibility.premium }); } catch { /* ignore */ }
     try { spotSeriesRef.current?.applyOptions({ visible: nextVisibility.spot }); } catch { /* ignore */ }
     try { ivSeriesRef.current?.applyOptions({ visible: nextVisibility.iv }); } catch { /* ignore */ }
+    try { compareIvSeriesRef.current?.applyOptions({ visible: nextVisibility.compareIv }); } catch { /* ignore */ }
     try { prevIvSeriesRef.current?.applyOptions({ visible: nextVisibility.prevIv }); } catch { /* ignore */ }
     try { avgIvSeriesRef.current?.applyOptions({ visible: nextVisibility.ivMa }); } catch { /* ignore */ }
     try { ceSeriesRef.current?.applyOptions({ visible: bottomPaneVisible && nextVisibility.ce }); } catch { /* ignore */ }
@@ -772,7 +783,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
   const clearSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef, prevIvSeriesRef, avgIvSeriesRef]) {
+    for (const ref of [premiumSeriesRef, spotSeriesRef, ceSeriesRef, peSeriesRef, strikeSeriesRef, ivSeriesRef, compareIvSeriesRef, prevIvSeriesRef, avgIvSeriesRef]) {
       if (ref.current) {
         try { chart.removeSeries(ref.current); } catch { /* ignore */ }
         ref.current = null;
@@ -836,6 +847,9 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       const tradingDate = lastTradingDay();
       const prevTradingDate = previousTradingDay(tradingDate);
       const ivPromise = fetchNubraAtmIvSeries(underlying, nubraExchange, expiry, nubraType, tradingDate).catch(() => [] as LineData[]);
+      const compareIvPromise = compareExpiry && compareExpiry !== expiry
+        ? fetchNubraAtmIvSeries(underlying, toNubraExchange(instruments, underlying, compareExpiry), compareExpiry, nubraType, tradingDate).catch(() => [] as LineData[])
+        : Promise.resolve([] as LineData[]);
       const prevIvPromise = fetchNubraAtmIvSeries(underlying, nubraExchange, expiry, nubraType, prevTradingDate).catch(() => [] as LineData[]);
 
       const pairMap = new Map<number, { ceKey: string | null; peKey: string | null }>();
@@ -1035,6 +1049,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
 
       setLoadingNote('Loading Nubra rolling IV...');
       const ivData = await ivPromise;
+      const compareIvData = await compareIvPromise;
       const rawPrevIvData = await prevIvPromise;
       const prevIvData = prevIvMode === 'overlay-today'
         ? overlaySeriesOnTradingDate(rawPrevIvData, tradingDate)
@@ -1075,10 +1090,26 @@ export default function AtmRollingStraddle({ instruments }: Props) {
         }
       }
 
+      if (compareIvData.length > 0) {
+        const compareIvSer = chart.addSeries(LineSeries, {
+          priceScaleId: 'iv-top-hidden',
+          color: '#2dd4bf',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          title: compareExpiry ? `Compare IV % (${formatExpiryLabel(compareExpiry)})` : 'Compare IV %',
+          lastValueVisible: true,
+          priceLineVisible: false,
+        }, 0);
+        compareIvSer.priceScale().applyOptions({ visible: false, scaleMargins: { top: 0.08, bottom: 0.08 } });
+        compareIvSer.setData(compareIvData);
+        compareIvSer.applyOptions({ visible: seriesVisibility.compareIv });
+        compareIvSeriesRef.current = compareIvSer;
+      }
+
       if (prevIvData.length > 0) {
         const prevIvSer = chart.addSeries(LineSeries, {
           priceScaleId: 'iv-top-hidden',
-          color: '#22d3ee',
+          color: '#fb923c',
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           title: 'Prev Day IV % (Nubra)',
@@ -1268,7 +1299,7 @@ export default function AtmRollingStraddle({ instruments }: Props) {
       setLoadingNote('');
       setLoading(false);
     }
-  }, [applyLive, bottomPaneVisible, cleanupLive, clearSeries, expiry, instruments, interval, ivMaPeriod, prevIvMode, seriesVisibility, syncBottomPaneLayout, underlying, updateIvMaSeries]);
+  }, [applyLive, bottomPaneVisible, cleanupLive, clearSeries, compareExpiry, expiry, instruments, interval, ivMaPeriod, prevIvMode, seriesVisibility, syncBottomPaneLayout, underlying, updateIvMaSeries]);
 
   // Auto-trigger load once underlying + expiry are both set for the first time
   // Must be placed AFTER handleLoad to avoid temporal dead-zone error
@@ -1370,6 +1401,18 @@ export default function AtmRollingStraddle({ instruments }: Props) {
             <select className={s.compactSelect} value={expiry ?? ''} onChange={e => setExpiry(e.target.value ? Number(e.target.value) : null)} disabled={!underlying}>
               <option value="">Select</option>
               {expiries.map(ex => (
+                <option key={ex} value={ex}>
+                  {formatExpiryLabel(ex)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={s.compactField}>
+            <span className={s.compactLabel}>Compare Expiry</span>
+            <select className={s.compactSelect} value={compareExpiry ?? ''} onChange={e => setCompareExpiry(e.target.value ? Number(e.target.value) : null)} disabled={!underlying || !expiry}>
+              <option value="">Off</option>
+              {expiries.filter(ex => ex !== expiry).map(ex => (
                 <option key={ex} value={ex}>
                   {formatExpiryLabel(ex)}
                 </option>
