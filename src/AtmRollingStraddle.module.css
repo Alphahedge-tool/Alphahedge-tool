@@ -9,67 +9,109 @@
 
 .toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 14px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(120, 80, 30, 0.22);
-  background: #1a1714;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 10px 7px;
+  border-bottom: 1px solid rgba(120, 80, 30, 0.22);
+  background: linear-gradient(180deg, #1c1916 0%, #171411 100%);
 }
 
 .toolbarControls {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1 1 420px;
-  min-width: 0;
+  flex: 0 1 auto;
   flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
 }
 
 .compactField {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  flex: 0 0 112px;
+  min-width: 112px;
+  max-width: 168px;
+  height: 38px;
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(15, 14, 12, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 7px;
+  background: rgba(10, 9, 8, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.compactField:nth-child(1) {
+  flex-basis: 124px;
+}
+
+.compactField:nth-child(2) {
+  flex-basis: 116px;
+}
+
+.compactField:nth-child(3),
+.compactField:nth-child(6) {
+  flex-basis: 136px;
+}
+
+.compactField:nth-child(4) {
+  flex-basis: 82px;
+  min-width: 82px;
+}
+
+.compactField:nth-child(5) {
+  flex-basis: 72px;
+  min-width: 72px;
 }
 
 .toggleField {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  flex: 0 0 96px;
   min-width: 0;
+  height: 38px;
+  width: 96px;
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(15, 14, 12, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 7px;
+  background: rgba(10, 9, 8, 0.72);
   cursor: pointer;
   user-select: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .compactLabel {
-  flex-shrink: 0;
-  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1;
   color: rgba(255, 255, 255, 0.52);
   text-transform: uppercase;
   font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .compactSelect {
-  height: 24px;
-  min-width: 0;
+  width: 100%;
+  height: 20px;
+  min-width: 1px;
   border: 0;
   background: transparent;
-  color: #d7d9df;
+  color: #f1f5f9;
   font-size: 12px;
-  font-weight: 600;
-  padding: 0 22px 0 0;
+  line-height: 20px;
+  font-weight: 700;
+  padding: 0 18px 0 0;
   outline: none;
   color-scheme: dark;
+  text-overflow: ellipsis;
 }
 
 .compactSelect:disabled {
@@ -121,21 +163,27 @@
 
 .seriesMenuWrap {
   position: relative;
+  flex: 0 0 64px;
+  min-width: 0;
 }
 
 .seriesMenuBtn {
-  height: 32px;
-  display: inline-flex;
+  height: 38px;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 14, 12, 0.9);
+  justify-content: center;
+  gap: 2px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 9, 8, 0.72);
   color: #d7d9df;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .seriesMenuBtn strong {
@@ -178,16 +226,21 @@
 
 .toolbarSummary {
   display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin-left: auto;
+  justify-content: flex-start;
+  gap: 5px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 1px 0;
+  overflow: visible;
 }
 
 .loadBtn {
-  height: 28px;
+  height: 30px;
   border: 1px solid rgba(250, 204, 21, 0.45);
-  background: rgba(250, 204, 21, 0.12);
+  background: rgba(250, 204, 21, 0.14);
   color: #facc15;
   border-radius: 6px;
   padding: 0 12px;
@@ -205,34 +258,52 @@
 .liveBlock {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex: 0 0 auto;
   flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 5px;
+  min-width: 0;
 }
 
 .liveMetric {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.035);
   color: rgba(255, 255, 255, 0.78);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .liveMetricLabel {
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1;
   color: rgba(255, 255, 255, 0.48);
   text-transform: uppercase;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .liveMetric strong {
   color: #f3f4f6;
   font-size: 12px;
+  line-height: 1.1;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.liveMetric:nth-child(2),
+.liveMetric:nth-child(4) {
+  flex-basis: auto;
+  min-width: 0;
 }
 
 .liveMetricUp {
@@ -251,30 +322,37 @@
 }
 
 @media (max-width: 900px) {
-  .toolbar {
-    align-items: stretch;
-  }
-
   .toolbarSummary {
     width: 100%;
-    justify-content: space-between;
-    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .toolbarControls {
+    flex-basis: 100%;
   }
 }
 
 @media (max-width: 640px) {
-  .toolbarControls {
-    gap: 6px;
-  }
-
   .compactField {
-    width: 100%;
-    justify-content: space-between;
+    flex-basis: 112px;
+    max-width: none;
   }
 
   .compactSelect {
     width: 100%;
-    text-align: right;
+  }
+
+  .toolbarSummary {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .liveBlock {
+    display: flex;
+  }
+
+  .loadBtn {
+    width: auto;
   }
 }
 
@@ -290,6 +368,51 @@
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+.crosshairRay {
+  position: absolute;
+  z-index: 16;
+  height: 1px;
+  pointer-events: none;
+  transform: translateY(-0.5px);
+}
+
+.crosshairRayLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  border-top: 1px solid currentColor;
+  opacity: 0.72;
+}
+
+.crosshairRayLabel {
+  position: absolute;
+  top: 50%;
+  min-width: 44px;
+  height: 20px;
+  padding: 0 6px;
+  transform: translateY(-50%);
+  border-radius: 2px 0 0 2px;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+  line-height: 20px;
+  font-weight: 600;
+  text-align: right;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+.crosshairRayRight .crosshairRayLabel {
+  right: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+.crosshairRayLeft .crosshairRayLabel {
+  left: 0;
+  border-radius: 0 2px 2px 0;
 }
 
 .seriesLegend {
